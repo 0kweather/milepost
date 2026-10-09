@@ -39,6 +39,11 @@ const state = {
   predictions: null,     // live MBTA predictions for the selected station
   estimate: store.get("tt-estimate", false), // "Estimate live location" mode
   showStations: store.get("tt-stations", true),
+  // Trains the viewer is following (saved in the browser):
+  // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
+  tracked: store.get("tt-tracked", []),
+  trackPicker: null,     // train id whose "where are you headed?" picker is open
+  trackPick: null,       // stop key chosen in the picker ("" = no particular stop)
   est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
   rail: null,            // RailIndex, loaded when estimating
   stopPos: new Map(),    // station member key -> { lat, lon }
@@ -172,6 +177,7 @@ function addLayers() {
     type: "line",
     source: "rail",
     minzoom: 6,
+    filter: ["!", ["has", "h"]], // hidden pieces are parallel duplicates kept for routing
     layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": colors.railCasing, "line-width": byZoom((w) => ["+", ["*", ["get", "n"], w], 2]) },
   }, firstSymbol);
@@ -180,7 +186,7 @@ function addLayers() {
       id: `tt-rail-${slot}`,
       type: "line",
       source: "rail",
-      filter: [">", ["get", "n"], slot],
+      filter: ["all", [">", ["get", "n"], slot], ["!", ["has", "h"]]],
       layout: { "line-join": "round", "line-cap": "butt" },
       paint: {
         "line-color": networkColor(prop),
@@ -612,6 +618,7 @@ function mergeTrains() {
   for (const list of Object.values(state.bySource)) for (const t of list) state.trains.set(t.id, t);
   computeEstimates();
   animateTo();
+  checkTracked();
   renderAll();
   if (state.follow && state.selected) {
     const t = state.trains.get(state.selected);
@@ -945,7 +952,9 @@ function renderDetail() {
       ${t.number ? `<div style="color:var(--muted)">Train ${esc(t.number)}</div>` : ""}
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
       ${t.statusText ? `<span class="pill ${statusClass(t)}">${esc(t.statusText)}</span>` : ""}
+      ${trackButton(t)}
     </div>
+    ${state.trackPicker === t.id ? trackPicker(t) : ""}
     ${facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
@@ -1064,7 +1073,174 @@ function renderStation() {
     <p class="estimate-note">Times are live predictions from each railroad. Trains on railroads whose feeds don't list stops appear under “Nearby trains”.</p>`;
 }
 
+// ---------- Tracked trains ----------
+// For people riding a train, or following one someone they know is on.
+
+const MAX_TRACKED = 3;
+const LOST_MS = 30 * 60 * 1000;  // gone from its feed this long: trip finished or cancelled
+const PAGE_OPENED = Date.now(); // trips that ended while the page was closed are dropped quietly
+
+const trainLabel = (rec) => `${AGENCIES[rec.agency]?.short || ""} ${rec.number || ""}`.trim();
+const saveTracked = () => store.set("tt-tracked", state.tracked);
+
+// The live train for a tracked record, if it's reporting. A feed can reuse a
+// vehicle id for a different train, so the number has to match too.
+function trackedTrain(rec) {
+  const t = state.trains.get(rec.id);
+  if (!t || (rec.number && t.number && String(t.number) !== String(rec.number))) return null;
+  return t;
+}
+
+// The stop that ends tracking: the one chosen, else the final destination.
+function endStop(t, rec) {
+  if (!t.stops?.length) return null;
+  return (rec.stopKey && t.stops.find((s) => s.key === rec.stopKey)) || t.stops[t.stops.length - 1];
+}
+
+function hasArrived(t, stop) {
+  if (!stop) return false;
+  if (stop.status === "past" || stop.here) return true;
+  // Some feeds never mark the final stop: near it, after its time, counts.
+  const pos = state.stopPos.get(stop.key), drawn = targetOf(t);
+  return !!pos && Date.parse(stop.time) < Date.now() && meters(pos, drawn) < 400;
+}
+
+function checkTracked() {
+  const now = Date.now();
+  let changed = false;
+  for (const rec of [...state.tracked]) {
+    const src = SOURCES.find((s) => s.agencies.includes(rec.agency));
+    if (!state.sourceStatus[src?.id]?.at) continue; // its feed hasn't loaded yet
+    const t = trackedTrain(rec);
+    if (t) {
+      rec.lastSeen = now;
+      const stop = endStop(t, rec);
+      if (stop) {
+        rec.eta = Date.parse(stop.time) || rec.eta;
+        rec.stopName = stop.name;
+      }
+      if (stop && hasArrived(t, stop)) {
+        untrack(rec.id, `${trainLabel(rec)} arrived at ${stop.name}.`);
+        continue;
+      }
+      changed = true;
+    } else if (rec.eta && rec.eta < now) {
+      // Vanished after its arrival time: it got there and the trip ended.
+      untrack(rec.id, rec.lastSeen < PAGE_OPENED ? null : `${trainLabel(rec)} arrived at ${rec.stopName}.`);
+    } else if (now - (rec.lastSeen || 0) > LOST_MS) {
+      untrack(rec.id, rec.lastSeen < PAGE_OPENED ? null
+        : `Stopped tracking ${trainLabel(rec)}: it hasn't reported for 30 minutes, so its trip may have finished or been cancelled.`);
+    }
+  }
+  if (changed) saveTracked();
+}
+
+function startTracking(t, stopKey) {
+  if (state.tracked.some((r) => r.id === t.id)) return;
+  if (state.tracked.length >= MAX_TRACKED) return toast("You can track up to three trains at once.");
+  const stop = stopKey ? t.stops?.find((s) => s.key === stopKey) : null;
+  state.tracked.push({
+    id: t.id, agency: t.agency, number: t.number, route: t.route,
+    stopKey: stop?.key || null, stopName: stop?.name || null,
+    eta: stop ? Date.parse(stop.time) : null, lastSeen: Date.now(),
+  });
+  saveTracked();
+  state.trackPicker = null;
+  checkTracked();
+  renderAll();
+}
+
+function untrack(id, message) {
+  state.tracked = state.tracked.filter((r) => r.id !== id);
+  saveTracked();
+  if (message) toast(message);
+  renderAll();
+}
+
+function trackButton(t) {
+  const rec = state.tracked.find((r) => r.id === t.id);
+  if (rec) {
+    return `<div class="track-row"><span class="tracking-note">Tracking${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>
+      <button class="btn small" data-untrack="${esc(t.id)}">Stop</button></div>`;
+  }
+  return `<div class="track-row"><button class="btn primary small" data-track="${esc(t.id)}">Track this train</button></div>`;
+}
+
+function trackPicker(t) {
+  const ahead = t.stops.filter((s) => s.status !== "past");
+  const pick = state.trackPick ?? ahead[ahead.length - 1]?.key ?? "";
+  const option = (key, label, sub) => `<label class="tp-option">
+      <input type="radio" name="tp" value="${esc(key)}" ${key === pick ? "checked" : ""}>
+      <span>${label}${sub ? `<span class="sub">${sub}</span>` : ""}</span></label>`;
+  return `<div class="track-picker">
+    <h3>Where are you headed?</h3>
+    <p class="sub">Tracking stops when the train gets there. Optional.</p>
+    <div class="tp-list">
+      ${ahead.map((s) => option(s.key, esc(s.name), fmtTime(s.time, s.tz))).join("")}
+      ${option("", "No particular stop", "follow it to the end of its trip")}
+    </div>
+    <div class="tp-actions">
+      <button class="btn small" data-tp-cancel>Cancel</button>
+      <button class="btn primary small" data-tp-start="${esc(t.id)}">Start tracking</button>
+    </div>
+  </div>`;
+}
+
+function renderTracked() {
+  const el = $("tracked");
+  if (!el) return;
+  el.hidden = !state.tracked.length;
+  el.innerHTML = state.tracked.map((rec) => {
+    const t = trackedTrain(rec);
+    const a = AGENCIES[rec.agency] || { color: "#888", short: "" };
+    let where = "", status = "", warn = "";
+    if (t) {
+      const chosen = rec.stopKey && t.stops?.find((s) => s.key === rec.stopKey);
+      const next = !chosen && (t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future"));
+      const stop = chosen || next;
+      if (stop) {
+        const time = Date.parse(stop.time);
+        where = `${chosen ? "" : "Next: "}<strong>${esc(stop.name)}</strong>${time ? ` · ${fmtTime(stop.time, stop.tz)} · ${time > Date.now() ? `in ${fmtIn(time)}` : "now"}` : ""}`;
+      } else if (t.nextStop) {
+        where = `Next: <strong>${esc(t.nextStop)}</strong>`;
+      } else if (t.destination) {
+        where = `to <strong>${esc(t.destination)}</strong>`;
+      }
+      const late = lateText(t.delayMin);
+      if (late.text) status = `<span class="status ${late.cls}">${late.text}</span>`;
+      if (Date.now() - t.updated > STALE_MS && !t.estimated) warn = `<span class="stale">⚠ Position ${fmtAgo(t.updated)}</span>`;
+    } else {
+      where = rec.stopName ? `to <strong>${esc(rec.stopName)}</strong>` : "";
+      warn = `<span class="stale">Not reporting · last seen ${fmtAgo(rec.lastSeen)}</span>`;
+    }
+    return `<div class="track-card" style="--c:${a.color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
+      <span class="bar"></span>
+      <span class="tc-main">
+        <span class="tc-title"><strong>${esc(trainLabel(rec))}</strong>${rec.route ? ` · ${esc(rec.route)}` : ""}</span>
+        ${where ? `<span class="tc-where">${where}</span>` : ""}
+        ${status || warn ? `<span class="tc-status">${status}${warn}</span>` : ""}
+      </span>
+      <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="Stop tracking ${esc(trainLabel(rec))}" title="Stop tracking">×</button>
+    </div>`;
+  }).join("");
+  // On phones, keep the cards visible when the sheet is collapsed.
+  document.documentElement.style.setProperty("--tracked-h", `${el.hidden ? 0 : el.offsetHeight}px`);
+}
+
+function openTracked(id) {
+  const t = state.trains.get(id);
+  if (!t) return toast("That train isn't reporting right now.");
+  select(id);
+}
+
+setInterval(() => {
+  if (document.hidden) return;
+  checkTracked();
+  renderTracked(); // ETAs count down between feed updates
+}, 30000);
+
 function renderAll() {
+  renderTracked();
   renderLiveCount();
   renderAgencies();
   renderResults();
@@ -1120,7 +1296,7 @@ function select(id, { fly = true } = {}) {
   const t = state.trains.get(id);
   if (t && fly) {
     map.flyTo({
-      center: [t.lon, t.lat],
+      center: [targetOf(t).lon, targetOf(t).lat], // where it's drawn (estimated position if that's on)
       zoom: Math.max(map.getZoom(), 9),
       padding: panelPadding(),
       duration: 900,
@@ -1259,7 +1435,49 @@ map.on("mouseleave", "tt-trains", () => {
 map.on("dragstart", () => state.follow && setFollow(false));
 
 on("back-btn", "click", closeDetail);
+on("tracked", "click", (e) => {
+  const x = e.target.closest("[data-untrack]");
+  if (x) return untrack(x.dataset.untrack);
+  const card = e.target.closest("[data-track-open]");
+  if (card) openTracked(card.dataset.trackOpen);
+});
+on("tracked", "keydown", (e) => {
+  const card = e.target.closest("[data-track-open]");
+  if (card && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    openTracked(card.dataset.trackOpen);
+  }
+});
+
+on("train-detail", "change", (e) => {
+  if (e.target.name === "tp") state.trackPick = e.target.value;
+});
+
 on("train-detail", "click", (e) => {
+  const track = e.target.closest("[data-track]");
+  if (track) {
+    const t = state.trains.get(track.dataset.track);
+    if (!t) return;
+    if (state.tracked.length >= MAX_TRACKED) return toast("You can track up to three trains at once.");
+    // No stop list (most GPS-only railroads): track without a destination.
+    if (!t.stops?.some((s) => s.status !== "past")) return startTracking(t, null);
+    state.trackPicker = t.id;
+    state.trackPick = null;
+    return renderDetail();
+  }
+  if (e.target.closest("[data-tp-cancel]")) {
+    state.trackPicker = null;
+    return renderDetail();
+  }
+  const start = e.target.closest("[data-tp-start]");
+  if (start) {
+    const t = state.trains.get(start.dataset.tpStart);
+    const picked = e.currentTarget.querySelector('input[name="tp"]:checked')?.value || "";
+    if (t) startTracking(t, picked || null);
+    return;
+  }
+  const stop = e.target.closest("[data-untrack]");
+  if (stop) return untrack(stop.dataset.untrack);
   const b = e.target.closest("[data-select]");
   if (b) {
     const from = state.station;
@@ -1427,6 +1645,6 @@ if (wanted) {
 }
 
 // Handy for poking at the live state from the browser console.
-window.traintracker = { state, map };
+window.traintracker = { state, map, checkTracked };
 
 start();

@@ -186,6 +186,99 @@ a { color: var(--accent); }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
+/* ---------- Tracked trains ---------- */
+
+.tracked {
+  flex: none;
+  display: grid;
+  gap: 6px;
+  padding: 12px 12px 4px;
+}
+
+.tracked[hidden] { display: none; }
+
+.track-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 6px 8px 0;
+  border-radius: 10px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.track-card:hover, .track-card:focus-visible { border-color: var(--c); outline: none; }
+.track-card .bar { align-self: stretch; background: var(--c); border-radius: 0 3px 3px 0; }
+.tc-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; }
+.tc-title { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-title strong { color: var(--c); }
+.tc-where { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tc-status .stale { color: var(--warn); font-weight: 600; font-size: 12px; }
+
+.tc-x {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 20px;
+  line-height: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.tc-x:hover { background: var(--hover); color: var(--text); }
+
+.btn {
+  border: 1px solid var(--line);
+  background: var(--panel-solid);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+
+.btn:hover { background: var(--hover); }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+
+.track-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.tracking-note { font-size: 13px; font-weight: 600; color: var(--good); }
+
+.track-picker {
+  flex: none;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  border: 1px solid var(--line);
+}
+
+.track-picker h3 { margin: 0; font-size: 15px; }
+.track-picker > .sub { margin: 2px 0 8px; font-size: 12.5px; color: var(--muted); }
+.tp-list { max-height: 220px; overflow-y: auto; display: grid; gap: 2px; margin: 0 -4px; }
+
+.tp-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+
+.tp-option:hover { background: var(--hover); }
+.tp-option input { margin-top: 3px; accent-color: var(--accent); }
+.tp-option .sub { display: block; font-size: 12px; color: var(--muted); }
+.tp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
 /* ---------- Settings menu ---------- */
 
 .menu {
@@ -652,7 +745,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
     transition: height 0.25s ease;
   }
 
-  .panel.collapsed { height: 132px; }
+  .panel.collapsed { height: calc(132px + var(--tracked-h, 0px)); }
   .panel.expanded { height: 86vh; }
 
   .sheet-handle {
@@ -680,7 +773,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 
   .brand { padding: 2px 16px 8px; }
   .maplibregl-ctrl-bottom-right { bottom: calc(46vh + 4px); transition: bottom 0.25s ease; }
-  body.sheet-collapsed .maplibregl-ctrl-bottom-right { bottom: 136px; }
+  body.sheet-collapsed .maplibregl-ctrl-bottom-right { bottom: calc(136px + var(--tracked-h, 0px)); }
   body.sheet-expanded .maplibregl-ctrl-bottom-right { bottom: calc(86vh + 4px); }
   .toast { bottom: calc(46vh + 16px); }
 }

@@ -104,7 +104,9 @@ export class RailIndex {
         for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + dist(coords[i - 1], coords[i]));
         const p = f.properties || {};
         const nets = [p.a, p.b, p.c].filter(Boolean);
-        const li = this.lines.push({ coords, cum, nets }) - 1;
+        // Hidden pieces (parallel duplicates) carry routes but aren't drawn,
+        // so nothing snaps to them.
+        const li = this.lines.push({ coords, cum, nets, hidden: !!p.h }) - 1;
         for (let i = 0; i < coords.length - 1; i++) {
           const [x0, y0] = coords[i], [x1, y1] = coords[i + 1];
           for (let gx = Math.floor(Math.min(x0, x1) / CELL); gx <= Math.floor(Math.max(x0, x1) / CELL); gx++) {
@@ -233,6 +235,7 @@ export class RailIndex {
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (const [li, i] of this.grid.get(`${gx + dx}:${gy + dy}`) || []) {
+          if (this.lines[li].hidden) continue;
           const { coords, cum } = this.lines[li];
           const a = coords[i], b = coords[i + 1];
           // Project in a local flat frame.

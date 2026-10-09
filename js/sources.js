@@ -113,6 +113,7 @@ function parseAmtraker(json) {
           time: s.status === "Departed" ? s.dep || s.arr : s.arr || s.dep,
           scheduled: s.schArr || s.schDep,
           status: s.status === "Departed" ? "past" : s === next ? "next" : "future",
+          here: s.status === "Station", // standing at this station right now
         })),
       }));
     }
@@ -200,8 +201,9 @@ function tripProgress(stops, now, lookup) {
   return { at: s, lat: p[1], lon: p[2], prev: s, next: s, list, dwelling: true };
 }
 
-function mtaStops(agency, list, lookup, now, nextStop) {
+function mtaStops(agency, list, lookup, now, nextStop, dwellingAt) {
   return list.map((s) => ({
+    here: s === dwellingAt,
     key: `${agency}:${s.stopId}`,
     name: lookup[s.stopId][0],
     tz: "America/New_York",
@@ -224,6 +226,10 @@ function parseMta(agency, buf, meta) {
     if (!prog) continue;
     const vp = tu.entityVehicle || vpByTrip.get(tripId);
     const fresh = vp?.position && valid(vp.position.lat, vp.position.lon) && now - (vp.timestamp || 0) < STALE_SECONDS;
+    // Metro-North lists bus substitutions as letter-prefixed trips ("EB1973",
+    // "LB1973"); they're buses on roads, not trains.
+    const label = vp?.vehicle?.label || tu.vehicle?.label || "";
+    if (agency === "mnr" && /^[A-Z]+\d/.test(label)) continue;
     const route = routes[tu.trip.routeId];
     const last = prog.list[prog.list.length - 1];
     const nextStop = prog.dwelling ? prog.at : prog.next;
@@ -250,7 +256,7 @@ function parseMta(agency, buf, meta) {
       updated: fresh ? vp.timestamp * 1000 : (feed.timestamp || now) * 1000,
       estimated: !fresh,
       leg: fresh ? null : prog.leg || null,
-      stops: mtaStops(agency, prog.list, lookup, now, nextStop),
+      stops: mtaStops(agency, prog.list, lookup, now, nextStop, prog.dwelling ? prog.at : null),
       // Kept so estimated positions can be advanced between refreshes.
       _progress: fresh ? null : { stops: tu.stops, lookup },
     }));

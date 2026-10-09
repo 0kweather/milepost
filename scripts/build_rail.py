@@ -181,12 +181,14 @@ class Coverage:
                 for gy in range(int(min(a[1], b[1]) // self.CELL), int(max(a[1], b[1]) // self.CELL) + 1):
                     self.grid.setdefault((gx, gy), []).append((k, i))
 
-    def nearest(self, p, max_m):
+    def nearest(self, p, max_m, exclude=None):
         best = None
         gx, gy = int(p[0] // self.CELL), int(p[1] // self.CELL)
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 for k, i in self.grid.get((gx + dx, gy + dy), ()):
+                    if k == exclude:
+                        continue
                     c = self.segs[k][1]
                     a, b = c[i], c[i + 1]
                     kx = math.cos(math.radians(p[1]))
@@ -201,10 +203,10 @@ class Coverage:
         return best
 
 
-def densify(pts):
+def densify(pts, step=STEP_M):
     out = [pts[0]]
     for a, b in zip(pts, pts[1:]):
-        n = int(meters(a, b) // STEP_M)
+        n = int(meters(a, b) // step)
         out += [(a[0] + (b[0] - a[0]) * j / (n + 1), a[1] + (b[1] - a[1]) * j / (n + 1)) for j in range(1, n + 1)]
         out.append(b)
     return out
@@ -291,6 +293,105 @@ print("filling gaps from OpenStreetMap")
 fill_gaps(segments)
 
 
+# ---------- Heal near-miss dead ends ----------
+# Track pieces whose end stops a few meters short of another line (common
+# where OSM station tracks meet NTAD, and in places within NTAD) would leave
+# the routing graph disconnected. Join each dead end to the nearest other
+# line within HEAL_M.
+HEAL_M = 60
+
+
+def heal_dead_ends(segs):
+    key = lambda pt: (round(pt[0], 4), round(pt[1], 4))  # same node rounding as the merge step
+    degree = defaultdict(int)
+    for _n, c in segs:
+        degree[key(c[0])] += 1
+        degree[key(c[-1])] += 1
+    cov = Coverage(segs)
+    cuts, healed = [], 0
+    for k in range(len(segs)):
+        nets, c = segs[k]
+        for end in (0, -1):
+            if degree[key(c[end])] != 1:
+                continue
+            hit = cov.nearest(tuple(c[end]), HEAL_M, exclude=k)
+            if hit and hit[0] > 0.5:
+                _d, k2, i, t, q = hit
+                c[end] = list(q)
+                degree[key(q)] += 2
+                cuts.append((k2, i, t, q))
+                healed += 1
+    split_segments(segs, cuts)
+    print(f"joined {healed} dead ends to nearby track")
+
+
+heal_dead_ends(segments)
+
+
+# ---------- Collapse parallel tracks ----------
+# NTAD (and OSM) sometimes map a corridor's two main tracks as separate lines a
+# few dozen meters apart (Providence, many stations), which draws the route
+# twice. Walking from the longest track down, any stretch that runs mostly
+# alongside track already drawn is marked hidden: it isn't drawn and trains
+# don't snap to it, but it stays in the data so the routing graph keeps every
+# connection. Its railroads are folded into the drawn line's colors.
+PARALLEL_M = 120
+MIN_PARALLEL_LEN_M = 150
+
+
+def order(nets):
+    return tuple(sorted(set(nets), key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n)))[:3]
+
+
+def collapse_parallel(segs):
+    """Returns the set of segment indexes to hide; folds their networks into
+    the drawn segments they run alongside."""
+    lengths = [sum(meters(a, b) for a, b in zip(c, c[1:])) for _n, c in segs]
+    drawn = []          # (nets, line) of drawn segments, in Coverage order
+    drawn_idx = []      # their indexes in segs
+    cum_cache = {}
+    cov = Coverage(drawn)
+    hidden = set()
+
+    def along(k, i, t):
+        if k not in cum_cache:
+            c = drawn[k][1]
+            cum = [0.0]
+            for p, q in zip(c, c[1:]):
+                cum.append(cum[-1] + meters(p, q))
+            cum_cache[k] = cum
+        cum = cum_cache[k]
+        return cum[i] + (cum[i + 1] - cum[i]) * t
+
+    for idx in sorted(range(len(segs)), key=lambda i: -lengths[i]):
+        nets, line = segs[idx]
+        if lengths[idx] >= MIN_PARALLEL_LEN_M:
+            pts = densify([tuple(p) for p in line], step=25)
+            hits = [cov.nearest(p, PARALLEL_M) for p in pts]
+            if all(hits):
+                # A true duplicate runs alongside one drawn line for (nearly)
+                # its whole length. A link between the ends of two different
+                # lines is also "near" track everywhere, but hiding it would
+                # leave a hole.
+                owners = defaultdict(list)
+                for h in hits:
+                    owners[h[1]].append(along(h[1], h[2], h[3]))
+                k, spots = max(owners.items(), key=lambda kv: len(kv[1]))
+                if len(spots) >= 0.95 * len(hits) and max(spots) - min(spots) >= 0.7 * lengths[idx]:
+                    drawn[k] = (order(drawn[k][0] + tuple(nets)), drawn[k][1])
+                    segs[drawn_idx[k]] = drawn[k]
+                    hidden.add(idx)
+                    continue
+        drawn.append((nets, line))
+        drawn_idx.append(idx)
+        cov.add(len(drawn) - 1)
+    print(f"hid {len(hidden)} parallel stretches")
+    return hidden
+
+
+hidden = collapse_parallel(segments)
+
+
 # Chain segments that meet end to end (at nodes where exactly two segments
 # with the same networks meet) into long lines, so the map's simplification
 # at low zoom doesn't break the network into dashes.
@@ -298,7 +399,11 @@ def key(pt):
     return (round(pt[0], 4), round(pt[1], 4))
 
 
-def merge(lines):
+def merge(lines, degree):
+    # Only chain through a node where exactly two pieces of track meet across
+    # the whole network; anywhere more meet is a junction (say, where a
+    # Metro-North-only branch leaves the shared main line), and the line must
+    # break there so the routing graph connects the two.
     ends = defaultdict(list)
     for i, p in enumerate(lines):
         ends[key(p[0])].append(i)
@@ -309,7 +414,7 @@ def merge(lines):
         while True:
             tail = key(chain[-1])
             nxt = [j for j in ends[tail] if not used[j]]
-            if len(ends[tail]) != 2 or not nxt:
+            if degree[tail] != 2 or len(ends[tail]) != 2 or not nxt:
                 return chain
             j = nxt[0]
             used[j] = True
@@ -333,13 +438,20 @@ def oriented(chain):
 
 
 by_nets = defaultdict(list)
-for nets, line in segments:
-    by_nets[nets].append(line)
+for i, (nets, line) in enumerate(segments):
+    by_nets[(nets, i in hidden)].append(line)
+
+degree = defaultdict(int)
+for _nets, line in segments:
+    degree[key(line[0])] += 1
+    degree[key(line[-1])] += 1
 
 features = []
-for nets, lines in by_nets.items():
-    for chain in merge(lines):
+for (nets, is_hidden), lines in by_nets.items():
+    for chain in merge(lines, degree):
         props = {"n": len(nets)}
+        if is_hidden:
+            props["h"] = 1  # routing only, not drawn
         props.update({k: v for k, v in zip("abc", nets)})
         features.append({"type": "Feature", "properties": props,
                          "geometry": {"type": "LineString", "coordinates": oriented(chain)}})
