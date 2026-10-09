@@ -127,6 +127,13 @@ OSM_OPERATORS = {
     "caltrain": "Caltrain", "smart": "SMART|Sonoma.Marin", "via": "VIA Rail|Via Rail",
     "go": "GO Transit|Metrolinx", "exo": "^exo$|Réseau de transport métropolitain",
 }
+# (name, network to tag, Overpass relation filter, bbox south,west,north,east)
+TARGETED_FILLS = [
+    # Amtrak's approach into New Orleans Union Passenger Terminal.
+    ("new-orleans", "amtrak", '["operator"="Amtrak"]', "29.88,-90.2,30.03,-89.95"),
+    # The CapeFLYER (run by the Cape Cod Regional Transit Authority) to Hyannis.
+    ("capeflyer", "mbta", '["ref"~"CapeFlyer",i]', "41.6,-71.0,41.95,-70.2"),
+]
 COVERED_M = 50      # OSM track within this distance of existing track is already drawn
 MIN_RUN_M = 400     # ignore shorter uncovered bits (station tracks, crossovers)
 STEP_M = 100        # densify OSM ways so gaps between far-apart nodes are noticed
@@ -235,6 +242,44 @@ def split_segments(segs, cuts):
         segs.extend((nets, p) for p in pieces[1:] if len(p) >= 2)
 
 
+def add_uncovered(segs, net, elements):
+    """Add the stretches of these OSM ways that existing track doesn't cover."""
+    cov = Coverage(segs)
+    cuts, added_m = [], 0
+    for way in elements:
+        line = densify([(round(g["lon"], 5), round(g["lat"], 5)) for g in way.get("geometry", [])])
+        if len(line) < 2:
+            continue
+        near = [cov.nearest(p, COVERED_M) for p in line]
+        i = 0
+        while i < len(line):
+            if near[i]:
+                i += 1
+                continue
+            j = i
+            while j < len(line) and not near[j]:
+                j += 1
+            run = line[max(0, i - 1):min(len(line), j + 1)]
+            length = sum(meters(a, b) for a, b in zip(run, run[1:]))
+            if length >= MIN_RUN_M:
+                run = [list(p) for p in run]
+                # Join each end to the track it touches.
+                for end, idx in ((0, i - 1), (-1, j)):
+                    hit = near[idx] if 0 <= idx < len(line) else None
+                    if hit:
+                        _d, k, si, t, q = hit
+                        run[end] = list(q)
+                        cuts.append((k, si, t, q))
+                segs.append(((net,), run))
+                cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
+                added_m += length
+                # Later ways may now be covered by this run.
+                near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
+            i = j
+    split_segments(segs, cuts)
+    return added_m
+
+
 def fill_gaps(segs):
     for net, operators in OSM_OPERATORS.items():
         pts = [(lon, lat) for _id, _n, lat, lon, *_ in stations.get(net, [])]
@@ -252,40 +297,20 @@ out geom;""", f"routes-{net}")
         if elements is None:
             print(f"  {net}: skipped, OpenStreetMap unavailable (rerun later to fill its gaps)")
             continue
-        cov = Coverage(segs)
-        cuts, added_m = [], 0
-        for way in elements:
-            line = densify([(round(g["lon"], 5), round(g["lat"], 5)) for g in way.get("geometry", [])])
-            if len(line) < 2:
-                continue
-            near = [cov.nearest(p, COVERED_M) for p in line]
-            i = 0
-            while i < len(line):
-                if near[i]:
-                    i += 1
-                    continue
-                j = i
-                while j < len(line) and not near[j]:
-                    j += 1
-                run = line[max(0, i - 1):min(len(line), j + 1)]
-                length = sum(meters(a, b) for a, b in zip(run, run[1:]))
-                if length >= MIN_RUN_M:
-                    run = [list(p) for p in run]
-                    # Join each end to the track it touches.
-                    for end, idx in ((0, i - 1), (-1, j)):
-                        hit = near[idx] if 0 <= idx < len(line) else None
-                        if hit:
-                            _d, k, si, t, q = hit
-                            run[end] = list(q)
-                            cuts.append((k, si, t, q))
-                    segs.append(((net,), run))
-                    cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
-                    added_m += length
-                    # Later ways may now be covered by this run.
-                    near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
-                i = j
-        split_segments(segs, cuts)
-        print(f"  {net}: +{added_m / 1000:.1f} km from OpenStreetMap")
+        print(f"  {net}: +{add_uncovered(segs, net, elements) / 1000:.1f} km from OpenStreetMap")
+        time.sleep(2)
+
+    # Targeted fills: specific places the broad search misses, limited to track
+    # inside the area (the routes themselves run much farther).
+    for name, net, routes, bbox in TARGETED_FILLS:
+        elements = overpass(f"""[out:json][timeout:240];
+relation["route"="train"]{routes}({bbox});
+way(r)["railway"="rail"]({bbox});
+out geom;""", f"targeted-{name}")
+        if elements is None:
+            print(f"  {name}: skipped, OpenStreetMap unavailable")
+            continue
+        print(f"  {name}: +{add_uncovered(segs, net, elements) / 1000:.1f} km from OpenStreetMap")
         time.sleep(2)
 
 
