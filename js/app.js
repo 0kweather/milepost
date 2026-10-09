@@ -45,7 +45,8 @@ const state = {
   trackPicker: null,     // train id whose "where are you headed?" picker is open
   trackPick: null,       // stop key chosen in the picker ("" = no particular stop)
   est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
-  rail: null,            // RailIndex, loaded when estimating
+  rail: null,            // RailIndex (routing and snapping; uses every track)
+  railGeo: null,         // rail.geojson as loaded; drawn filtered by railCollection()
   stopPos: new Map(),    // station member key -> { lat, lon }
   follow: false,
   query: "",
@@ -175,7 +176,7 @@ function addLayers() {
   // Passenger rail network (USDOT NTAD), colored by the railroads that run on
   // each stretch. Track shared by several railroads (up to three) is drawn as
   // parallel strands, one color each, centered on the real alignment.
-  map.addSource("rail", { type: "geojson", data: "data/rail.geojson?v=dev", tolerance: 0.6 });
+  map.addSource("rail", { type: "geojson", data: railCollection(), tolerance: 0.6 });
   const STRAND = [[3, 1], [6, 1.6], [9, 2.4], [12, 3.4], [15, 5]]; // [zoom, strand width px]
   const byZoom = (f) => ["interpolate", ["linear"], ["zoom"], ...STRAND.flatMap(([z, w]) => [z, f(w)])];
   map.addLayer({
@@ -498,6 +499,36 @@ function footprintCollection() {
   return { type: "FeatureCollection", features };
 }
 
+// Rail lines drawn for the railroads currently shown. Hiding a railroad in the
+// list (or filtering to intercity/commuter) removes its strands; shared track
+// redraws with the railroads that remain, side by side.
+function networkShown(net) {
+  const a = AGENCIES[net];
+  if (a) return !state.hidden.has(net) && (state.kind === "all" || a.kind === state.kind);
+  // Railroads drawn but not tracked live (MARC, VRE, ...): commuter, except Alaska.
+  const kind = net === "alaska" ? "intercity" : "commuter";
+  return state.kind === "all" || state.kind === kind;
+}
+
+function railCollection() {
+  const src = state.railGeo;
+  if (!src) return { type: "FeatureCollection", features: [] };
+  const features = [];
+  for (const f of src.features) {
+    const p = f.properties;
+    const nets = [p.a, p.b, p.c].filter((n) => n && networkShown(n));
+    if (!nets.length) continue;
+    const props = { n: nets.length, a: nets[0], b: nets[1], c: nets[2] };
+    if (p.h) props.h = 1;
+    features.push({ type: "Feature", geometry: f.geometry, properties: props });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function redrawRail() {
+  map.getSource("rail")?.setData(railCollection());
+}
+
 function redrawStations() {
   map.getSource("stations")?.setData(stationCollection());
   map.getSource("footprints")?.setData(footprintCollection());
@@ -536,6 +567,8 @@ function loadRail() {
   railLoading ??= fetch("data/rail.geojson?v=dev")
     .then((r) => r.json())
     .then((geojson) => {
+      state.railGeo = geojson;
+      redrawRail();
       state.rail = new RailIndex(geojson);
       snapCache.clear();
       snapStations();
@@ -815,16 +848,6 @@ function renderAgencies() {
       : "");
 }
 
-function renderLiveCount() {
-  const n = [...state.trains.values()].filter(visible).length;
-  const times = Object.values(state.sourceStatus).map((s) => s.at).filter(Boolean);
-  if (!times.length) {
-    $("live-count").textContent = "Loading trains…";
-    return;
-  }
-  const ago = Math.round((Date.now() - Math.max(...times)) / 1000);
-  $("live-count").textContent = `Tracking ${n.toLocaleString()} trains · updated ${ago < 5 ? "just now" : ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}`;
-}
 
 function renderCredits() {
   const seen = new Map();
@@ -1247,14 +1270,12 @@ setInterval(() => {
 
 function renderAll() {
   renderTracked();
-  renderLiveCount();
   renderAgencies();
   renderResults();
   renderCredits();
   if (state.selected || state.station) renderDetail();
 }
 
-setInterval(renderLiveCount, 5000);
 
 // ---------- Selection ----------
 
@@ -1530,6 +1551,7 @@ on("agencies", "click", (e) => {
     store.set("tt-hidden", [...state.hidden]);
     redraw();
     redrawStations();
+    redrawRail();
     renderAll();
   } else if (zoom) {
     const id = zoom.dataset.zoom;
@@ -1539,6 +1561,8 @@ on("agencies", "click", (e) => {
       state.hidden.delete(id);
       store.set("tt-hidden", [...state.hidden]);
       redraw();
+      redrawStations();
+      redrawRail();
       renderAll();
     }
     const b = new maplibregl.LngLatBounds();
@@ -1555,6 +1579,7 @@ on("kind-filter", "click", (e) => {
   for (const x of $("kind-filter").children) x.setAttribute("aria-selected", String(x === b));
   redraw();
   redrawStations();
+  redrawRail();
   renderAll();
 });
 
