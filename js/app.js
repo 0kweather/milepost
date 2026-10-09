@@ -127,21 +127,39 @@ function addImages() {
 function themeColors() {
   return theme === "dark"
     ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
-        stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85, footprintOpacity: 0.18 }
+        stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85, footprintOpacity: 0.18, stateBorder: "rgba(160,170,185,0.35)" }
     : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)",
-        stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1 };
+        stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1, stateBorder: "rgba(90,100,115,0.35)" };
 }
 
 function addLayers() {
   addImages();
   const colors = themeColors();
   const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
-  // Keep the basemap quiet: no place, road or water labels (station names are
-  // the only text), and none of its rail layers (ours replace them; its own
-  // draw every yard and siding up close).
+  // Keep the basemap quiet: of its labels only country and state names stay
+  // (station names are the rest of the text); none of its rail layers (ours
+  // replace them; its own draw every yard and siding up close); and its
+  // sub-national borders give way to our state borders below (the light
+  // style mixes in county lines and only starts at zoom 8).
   for (const l of map.getStyle().layers) {
-    if (l.type === "symbol" || /^railway/.test(l.id)) map.setLayoutProperty(l.id, "visibility", "none");
+    const keepLabel = l.type === "symbol" && /^(label|place)_(country|state)/.test(l.id);
+    if ((l.type === "symbol" && !keepLabel) || /^railway/.test(l.id) || /^boundary_(3|state)$/.test(l.id)) {
+      map.setLayoutProperty(l.id, "visibility", "none");
+    }
   }
+  map.addLayer({
+    id: "tt-state-borders",
+    type: "line",
+    source: "openmaptiles",
+    "source-layer": "boundary",
+    filter: ["all", ["==", ["get", "admin_level"], 4], ["!=", ["get", "maritime"], 1]],
+    layout: { "line-join": "round" },
+    paint: {
+      "line-color": colors.stateBorder,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.6, 8, 1.1, 12, 1.6],
+      "line-dasharray": [3, 2],
+    },
+  }, firstSymbol);
 
   // Passenger rail network (USDOT NTAD), colored by the railroads that run on
   // each stretch. Track shared by several railroads (up to three) is drawn as
