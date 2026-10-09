@@ -21,7 +21,6 @@ export const AGENCIES = {
   njt:        { name: "NJ Transit Rail",     short: "NJT",      region: "New Jersey",          color: "#f47b20", kind: "commuter" },
   septa:      { name: "SEPTA Regional Rail", short: "SEPTA",    region: "Philadelphia",        color: "#5b6e7f", kind: "commuter" },
   metra:      { name: "Metra",               short: "Metra",    region: "Chicago",             color: "#0096d6", kind: "commuter" },
-  northstar:  { name: "Northstar",           short: "Northstar", region: "Minneapolis",        color: "#5a3e99", kind: "commuter" },
   rtd:        { name: "RTD Commuter Rail",   short: "RTD",      region: "Denver",              color: "#2e9bd6", kind: "commuter" },
   frontrunner:{ name: "UTA FrontRunner",     short: "FrontRunner", region: "Salt Lake City",   color: "#8e44ad", kind: "commuter" },
   capmetro:   { name: "CapMetro Rail",       short: "CapMetro", region: "Austin",              color: "#e0218a", kind: "commuter" },
@@ -324,24 +323,6 @@ function parseSepta(json) {
     }));
 }
 
-// ---------- Northstar (Metro Transit NexTrip) ----------
-
-function parseNorthstar(json) {
-  return json
-    .filter((v) => valid(v.latitude, v.longitude) && nowSec() - v.location_time < STALE_SECONDS)
-    .map((v) => train({
-      id: `northstar:${v.trip_id}`,
-      agency: "northstar",
-      number: null,
-      route: "Northstar Line",
-      lat: v.latitude, lon: v.longitude,
-      bearing: v.bearing,
-      speedMph: v.speed,
-      destination: v.direction === "NB" ? "Big Lake" : "Target Field",
-      updated: v.location_time * 1000,
-    }));
-}
-
 // ---------- Source table ----------
 
 const RTD_LINES = { A: "A Line", "113B": "B Line", "113G": "G Line", "117N": "N Line" };
@@ -370,12 +351,6 @@ export const SOURCES = [
     url: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/mnr%2Fgtfs-mnr",
     credit: { label: "MTA", href: "https://api.mta.info" },
     parse: async (buf) => parseMta("mnr", buf, (await loadMtaStatic()).mnr),
-  },
-  {
-    id: "northstar", agencies: ["northstar"], format: "json", interval: 30,
-    url: "https://svc.metrotransit.org/nextrip/vehicles/888",
-    credit: { label: "Metro Transit", href: "https://svc.metrotransit.org" },
-    parse: parseNorthstar,
   },
   // ----- through the relay (no CORS headers upstream) -----
   {

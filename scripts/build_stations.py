@@ -1,6 +1,10 @@
 """Build data/stations.json: every station the map's railroads stop at.
 
-Output: {agency: [[id, name, lat, lon, [lines...], place], ...]}
+Output: {agency: [[id, name, lat, lon, [lines...], place, code, busy], ...]}
+  code: the station's official short code where the railroad publishes one
+        (Amtrak/VIA/Brightline, LIRR, NJ Transit, Metra); otherwise empty.
+  busy: how busy the station is (scheduled stops per week of service, or
+        tracked Amtrak trains), used to decide which labels win for space.
   - Amtrak rail stations (bus-only Thruway stops removed) via USDOT NTAD,
     plus Brightline and VIA stops from Amtraker. id = station code.
   - Commuter railroads from their GTFS schedules: stations served by rail
@@ -9,7 +13,7 @@ Output: {agency: [[id, name, lat, lon, [lines...], place], ...]}
 
     python3 scripts/build_stations.py
 """
-import csv, io, json, pathlib, urllib.parse, urllib.request, zipfile
+import csv, io, json, pathlib, re, urllib.parse, urllib.request, zipfile
 from collections import defaultdict
 
 MDB = "https://files.mobilitydatabase.org/{}/latest.zip"
@@ -30,8 +34,7 @@ GTFS = {
             lambda r: (r.get("route_short_name") or r["route_id"][-1]) + " Line"),
     "frontrunner": (MDB.format("mdb-170"), rail, lambda r: "FrontRunner"),
     "capmetro": (MDB.format("mdb-150"), lambda r: r["route_id"] == "550", lambda r: "Red Line"),
-    "trirail": (MDB.format("mdb-333"), lambda r: True, lambda r: "Tri-Rail"),
-    "northstar": ("https://svc.metrotransit.org/mtgtfs/gtfs.zip", lambda r: r["route_id"] == "888", lambda r: "Northstar Line"),
+    "trirail": (MDB.format("mdb-333"), rail, lambda r: "Tri-Rail"),  # not the airport shuttle stops
     "caltrain": ("https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip", rail, lambda r: "Caltrain"),
     "smart": ("https://data.trilliumtransit.com/gtfs/smart-ca-us/smart-ca-us.zip", rail, lambda r: "SMART"),
     "metrolink": (MDB.format("mdb-96"), lambda r: True, long_name),
@@ -51,18 +54,27 @@ def rows(zf, name):
             yield {k.strip(): (v or "").strip() for k, v in row.items() if k}
 
 
+def official_code(stop):
+    for value in (stop.get("stop_code"), stop.get("stop_id")):
+        if value and re.fullmatch(r"[A-Za-z]{2,4}", value):
+            return value.upper()
+    return ""
+
+
 def gtfs_stations(url, keep, line_name):
     zf = zipfile.ZipFile(io.BytesIO(get(url)))
     routes = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
     trip_line = {t["trip_id"]: routes[t["route_id"]] for t in rows(zf, "trips.txt") if t["route_id"] in routes}
     stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
-    lines = defaultdict(set)
+    lines, visits = defaultdict(set), defaultdict(int)
     for st in rows(zf, "stop_times.txt"):
         line = trip_line.get(st["trip_id"])
         if line:
             s = stops.get(st["stop_id"])
             if s:
-                lines[s.get("parent_station") or s["stop_id"]].add(line)
+                key = s.get("parent_station") or s["stop_id"]
+                lines[key].add(line)
+                visits[key] += 1
     out = []
     for sid, ls in lines.items():
         s = stops.get(sid)
@@ -72,7 +84,7 @@ def gtfs_stations(url, keep, line_name):
         if name.isupper():  # NJ Transit publishes names in capitals
             name = name.title()
         out.append([sid, name, round(float(s["stop_lat"]), 5), round(float(s["stop_lon"]), 5),
-                    sorted(l for l in ls if l), ""])
+                    sorted(l for l in ls if l), "", official_code(s), visits[sid]])
     return out
 
 
@@ -90,12 +102,15 @@ def intercity_stations():
             if types[code] != "TRAIN":
                 continue  # Thruway bus stop
             agency = "amtrak"
+        elif 24 < s["lat"] < 31 and -88 < s["lon"] < -79.5:
+            agency = "brightline"  # Brightline's Florida stations aren't in NTAD
         elif len(code) == 4:
             agency = "via"
         else:
-            agency = "brightline"
+            continue  # announced but unserved stops (e.g., Iowa) aren't stations yet
         place = ", ".join(x for x in (s.get("city"), s.get("state")) if x and x.strip())
-        out[agency].append([code, s["name"].strip(), round(s["lat"], 5), round(s["lon"], 5), [], place])
+        out[agency].append([code, s["name"].strip(), round(s["lat"], 5), round(s["lon"], 5), [], place,
+                            code, len(s.get("trains") or [])])
     # Amtraker also gives VIA codes to a few US stations Amtrak already covers
     # (e.g., New York Penn for the Adirondack); drop those duplicates.
     near = lambda a, b: abs(a[2] - b[2]) < 0.02 and abs(a[3] - b[3]) < 0.025

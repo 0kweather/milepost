@@ -127,17 +127,21 @@ function addImages() {
 function themeColors() {
   return theme === "dark"
     ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
-        stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85 }
+        stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85, footprintOpacity: 0.18 }
     : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)",
-        stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8 };
+        stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1 };
 }
 
 function addLayers() {
   addImages();
   const colors = themeColors();
   const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
-  // The basemap's own rail layers draw every yard and siding up close; ours replace them.
-  for (const l of map.getStyle().layers) if (/^railway/.test(l.id)) map.setLayoutProperty(l.id, "visibility", "none");
+  // Keep the basemap quiet: no place, road or water labels (station names are
+  // the only text), and none of its rail layers (ours replace them; its own
+  // draw every yard and siding up close).
+  for (const l of map.getStyle().layers) {
+    if (l.type === "symbol" || /^railway/.test(l.id)) map.setLayoutProperty(l.id, "visibility", "none");
+  }
 
   // Passenger rail network (USDOT NTAD), colored by the railroads that run on
   // each stretch. Track shared by several railroads (up to three) is drawn as
@@ -181,6 +185,29 @@ function addLayers() {
     paint: { "line-color": colors.railCommuter, "line-opacity": 0.45, "line-width": 1 },
   }, "tt-rail-casing");
 
+  // Outlines of major terminals (platforms and building), from city zoom.
+  map.addSource("footprints", { type: "geojson", data: footprintCollection() });
+  map.addLayer({
+    id: "tt-footprint-fill",
+    type: "fill",
+    source: "footprints",
+    minzoom: 11.5,
+    layout: { visibility: state.showStations ? "visible" : "none" },
+    paint: { "fill-color": ["get", "color"], "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 12.5, colors.footprintOpacity] },
+  }, "tt-rail-casing");
+  map.addLayer({
+    id: "tt-footprint-line",
+    type: "line",
+    source: "footprints",
+    minzoom: 11.5,
+    layout: { visibility: state.showStations ? "visible" : "none", "line-join": "round" },
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 16, 2],
+      "line-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 12.5, 0.75],
+    },
+  }, firstSymbol);
+
   // Stations sit under the trains. Intercity stops appear from regional zoom,
   // commuter stops once you're looking at a metro area.
   map.addSource("stations", { type: "geojson", data: stationCollection() });
@@ -220,23 +247,32 @@ function addLayers() {
       "circle-stroke-width": 3,
     },
   });
+  // Station names only (the basemap's place names are hidden): the busiest
+  // stations when zoomed out, every station once zoomed in. Labels that would
+  // collide are dropped, busiest stations first in line.
   map.addLayer({
     id: "tt-station-labels",
     type: "symbol",
     source: "stations",
-    minzoom: 8,
+    minzoom: 4.5,
     layout: {
-      // Big stations are named a little earlier than small ones.
-      "text-field": ["step", ["zoom"], ["case", ["get", "major"], ["get", "name"], ""], 11, ["get", "name"]],
-      "text-font": ["Noto Sans Regular"],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10.5, 14, 13],
+      "text-field": ["step", ["zoom"],
+        ["case", ["get", "top"], ["get", "name"], ""], // busiest stations
+        11, ["get", "name"]],                                          // every station
+      "text-font": ["case", ["get", "top"], ["literal", ["Noto Sans Bold"]], ["literal", ["Noto Sans Regular"]]],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 4.5, 10, 8, 11, 11, 11.5, 15, 13],
+      "text-max-width": 8,
       "text-variable-anchor": ["top", "bottom", "right", "left"],
-      "text-radial-offset": 0.8,
-      "text-padding": 4,
-      "symbol-sort-key": ["case", ["get", "major"], 0, 1],
+      "text-radial-offset": ["interpolate", ["linear"], ["zoom"], 4.5, 0.6, 12, 0.9],
+      "text-padding": 3,
+      "symbol-sort-key": ["-", ["get", "rank"]],
       visibility: state.showStations ? "visible" : "none",
     },
-    paint: { "text-color": colors.stationText, "text-halo-color": colors.halo, "text-halo-width": 1.4 },
+    paint: {
+      "text-color": ["case", ["get", "major"], colors.text, colors.stationText],
+      "text-halo-color": colors.halo,
+      "text-halo-width": 1.5,
+    },
   });
 
   map.addSource("trains", { type: "geojson", data: featureCollection() });
@@ -278,12 +314,10 @@ function addLayers() {
 
   // Labels only appear once there's room for them, and collide with each
   // other instead of piling up — intercity trains win ties.
-  const labelText = ["step", ["zoom"],
-    ["get", "label"],
-    8.5, ["format",
-      ["get", "label"], {},
-      ["case", [">", ["length", ["get", "subtitle"]], 0], ["concat", "\n", ["get", "subtitle"]], ""],
-      { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }]];
+  const labelText = ["format",
+    ["get", "label"], {},
+    ["case", [">", ["length", ["get", "subtitle"]], 0], ["concat", "\n", ["get", "subtitle"]], ""],
+    { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }];
   const labelLayout = {
     "text-field": labelText,
     "text-font": ["Noto Sans Bold"],
@@ -300,7 +334,7 @@ function addLayers() {
     id: "tt-labels",
     type: "symbol",
     source: "trains",
-    minzoom: 5.5,
+    minzoom: 11, // trains are unlabeled dots until zoomed in tight
     filter: ["!=", ["get", "id"], ""],
     layout: labelLayout,
     paint: labelPaint,
@@ -409,7 +443,24 @@ function stationCollection() {
         name: st.name,
         major: st.major && shown.some((a) => AGENCIES[a].kind === "intercity"),
         color: AGENCIES[shown[0]].color,
+        rank: st.rank,
+        top: !!st.top,
       },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function footprintCollection() {
+  const features = [];
+  for (const st of state.stations.values()) {
+    if (!st.footprint) continue;
+    const shown = st.agencies.filter(agencyShown);
+    if (!shown.length) continue;
+    features.push({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [st.footprint] },
+      properties: { id: st.id, color: AGENCIES[shown[0]].color },
     });
   }
   return { type: "FeatureCollection", features };
@@ -417,6 +468,7 @@ function stationCollection() {
 
 function redrawStations() {
   map.getSource("stations")?.setData(stationCollection());
+  map.getSource("footprints")?.setData(footprintCollection());
 }
 
 // Where to draw a train: on the nearest track, and in live-estimate mode
@@ -586,6 +638,14 @@ async function start() {
   loadStations()
     .then((stations) => {
       state.stations = stations;
+      // Optional: outlines for major terminals (scripts/build_footprints.py).
+      fetch("data/footprints.json?v=dev")
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((outlines) => {
+          for (const st of stations.values()) st.footprint = st.members.map((m) => outlines[m.key]).find(Boolean) || null;
+          redrawStations();
+        })
+        .catch(() => {});
       for (const st of stations.values()) for (const m of st.members) state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
       snapStations();
       computeEstimates();
@@ -1128,7 +1188,7 @@ map.on("mousemove", (e) => {
   popup._railHover = true;
 });
 
-const STATION_LAYERS = ["tt-stations-major", "tt-stations-minor", "tt-station-labels"];
+const STATION_LAYERS = ["tt-stations-major", "tt-stations-minor", "tt-station-labels", "tt-footprint-fill"];
 
 // One click handler so a train sitting on a station wins over the station.
 map.on("click", (e) => {
@@ -1280,7 +1340,7 @@ function setShowStations(on) {
   state.showStations = on;
   store.set("tt-stations", on);
   setChecked("stations-toggle", on);
-  for (const id of ["tt-stations-minor", "tt-stations-major", "tt-station-labels"]) {
+  for (const id of ["tt-stations-minor", "tt-stations-major", "tt-station-labels", "tt-footprint-fill", "tt-footprint-line"]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
   }
 }

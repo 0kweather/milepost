@@ -8,6 +8,7 @@
 import { AGENCIES } from "./sources.js?v=dev";
 
 const MERGE_METERS = 450;
+const TOP_INTERCITY = 55; // busiest intercity stations named at every zoom
 const INTERCITY = new Set(["amtrak", "via", "brightline"]);
 // Order members (and pick the station's color) intercity first.
 const PRIORITY = Object.keys(AGENCIES);
@@ -30,8 +31,11 @@ export async function loadStations() {
   const members = [];
   for (const [agency, list] of Object.entries(raw)) {
     if (!AGENCIES[agency]) continue;
-    for (const [id, name, lat, lon, lines, place] of list) {
-      members.push({ agency, id, key: stopKey(agency, id), name, lat, lon, lines, place, norm: norm(name) });
+    // Busyness is counted differently per railroad; compare within each one.
+    const maxBusy = Math.max(1, ...list.map((r) => r[7] || 0));
+    for (const [id, name, lat, lon, lines, place, code, busy] of list) {
+      members.push({ agency, id, key: stopKey(agency, id), name, lat, lon, lines, place, norm: norm(name),
+                     code: code || "", busy: (busy || 0) / maxBusy, trips: busy || 0 });
     }
   }
   members.sort((a, b) => PRIORITY.indexOf(a.agency) - PRIORITY.indexOf(b.agency));
@@ -70,6 +74,29 @@ export async function loadStations() {
     s.agencies = [...new Set(s.members.map((m) => m.agency))];
     s.major = s.agencies.some((a) => INTERCITY.has(a));
     s.names = new Set(s.members.map((m) => m.norm));
+    // Label priority: how busy its busiest railroad says it is, nudged up
+    // for intercity service and for hubs shared by several railroads.
+    s.rank = Math.max(...s.members.map((m) => m.busy)) + (s.major ? 0.3 : 0) + 0.25 * (s.agencies.length - 1);
+  }
+  // Named even when zoomed out: the intercity stations with the most trains
+  // (Amtrak, VIA and Brightline count trains the same way, so they compare
+  // fairly), plus each commuter railroad's busiest station.
+  const icTrains = (s) => Math.max(0, ...s.members.filter((m) => INTERCITY.has(m.agency)).map((m) => m.trips));
+  [...stations].filter((s) => s.major).sort((a, b) => icTrains(b) - icTrains(a))
+    .slice(0, TOP_INTERCITY).forEach((s) => (s.top = true));
+  const busiest = new Map(); // commuter railroad -> its busiest station
+  for (const s of stations) {
+    for (const m of s.members) {
+      if (INTERCITY.has(m.agency)) continue;
+      if (!busiest.has(m.agency) || m.trips > busiest.get(m.agency)[1]) busiest.set(m.agency, [s, m.trips]);
+    }
+  }
+  // Only when it really stands out (on a single line, every stop sees the same trains).
+  const typical = new Map();
+  for (const m of members) if (!INTERCITY.has(m.agency)) (typical.get(m.agency) || typical.set(m.agency, []).get(m.agency)).push(m.trips);
+  for (const [agency, [s, trips]] of busiest) {
+    const t = typical.get(agency).sort((a, b) => a - b);
+    if (trips >= 1.5 * t[Math.floor(t.length / 2)]) s.top = true;
   }
   return new Map(stations.map((s) => [s.id, s]));
 }

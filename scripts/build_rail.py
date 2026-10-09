@@ -15,7 +15,7 @@ Run after scripts/build_stations.py (it uses data/stations.json):
 
     python3 scripts/build_rail.py
 """
-import json, math, pathlib, urllib.parse, urllib.request
+import json, math, pathlib, time, urllib.parse, urllib.request
 from collections import defaultdict
 
 URL = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/"
@@ -29,13 +29,13 @@ CODES = {
     "UTF": "frontrunner", "SEPA": "septa", "MARC": "marc", "NIRC": "metra", "VREX": "vre",
     "SLE": "shoreline", "NICD": "southshore", "JPBX": "caltrain", "SDRX": "sounder", "ACEX": "ace",
     "SFRC": "trirail", "TRCX": "trirail", "CFCR": "sunrail", "NCTD": "coaster", "SMRT": "smart",
-    "MNRX": "northstar", "DRTD": "rtd", "RTDC": "rtd", "CMRX": "capmetro", "TRE": "tre", "DART": "tre",
+    "DRTD": "rtd", "RTDC": "rtd", "CMRX": "capmetro", "TRE": "tre", "DART": "tre",
     "NMRX": "railrunner", "WES": "wes", "TEXR": "texrail",
     # Canada
     "GO": "go", "AMT": "exo", "EXO": "exo", "WCE": "wce", "WCXR": "wce",
 }
 ORDER = ["amtrak", "via", "brightline"]  # intercity first, then commuter networks alphabetically
-COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "northstar", "rtd", "frontrunner",
+COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "rtd", "frontrunner",
                      "capmetro", "trirail", "caltrain", "smart", "metrolink"}
 NEAREST_KM = 4
 
@@ -109,6 +109,186 @@ for f in query("RROWNER1 = 'FEC' AND NET = 'M'", ["RROWNER1"]):
     for line in parts(f["geometry"]):
         if len(line) >= 2 and line[0][1] < 28.45:
             segments.append((("brightline",), line))
+
+
+# ---------- Gap filling from OpenStreetMap ----------
+# NTAD lags new construction (Brightline to Orlando, LIRR into Grand Central
+# Madison, Tri-Rail to Miami Central, Metrolink's Arrow, SMART to Windsor...)
+# and has holes (Metro-North's Waterbury Branch). For each railroad, fetch its
+# OpenStreetMap train routes and add any stretch the network doesn't already
+# cover, joined to the existing track so trains can be routed across it.
+
+OSM_OPERATORS = {
+    "brightline": "Brightline", "lirr": "Long Island Rail Road|LIRR", "mnr": "Metro-North",
+    "mbta": "MBTA|Massachusetts Bay|CapeFLYER|Keolis", "njt": "NJ Transit|New Jersey Transit",
+    "septa": "SEPTA", "metra": "Metra", "metrolink": "Metrolink|Southern California Regional|SBCTA|Arrow",
+    "rtd": "Regional Transportation District|RTD|Denver Transit", "frontrunner": "Utah Transit|UTA",
+    "capmetro": "Capital Metro|CapMetro", "trirail": "Tri-Rail|South Florida Regional",
+    "caltrain": "Caltrain", "smart": "SMART|Sonoma.Marin", "via": "VIA Rail|Via Rail",
+    "go": "GO Transit|Metrolinx", "exo": "^exo$|Réseau de transport métropolitain",
+}
+COVERED_M = 50      # OSM track within this distance of existing track is already drawn
+MIN_RUN_M = 400     # ignore shorter uncovered bits (station tracks, crossovers)
+STEP_M = 100        # densify OSM ways so gaps between far-apart nodes are noticed
+
+
+OSM_CACHE = ROOT / "scripts" / ".osm-cache"
+MIRRORS = ("https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+           "https://maps.mail.ru/osm/tools/overpass/api/interpreter")
+
+
+def overpass(query, name):
+    """Run an Overpass query, caching the answer so reruns don't hammer the
+    (often busy) public servers. Delete scripts/.osm-cache to refresh."""
+    cached = OSM_CACHE / f"{name}.json"
+    if cached.exists():
+        return json.loads(cached.read_text())
+    for attempt in range(9):
+        url = MIRRORS[attempt % len(MIRRORS)]
+        try:
+            req = urllib.request.Request(url, data=urllib.parse.urlencode({"data": query}).encode(),
+                                         headers={"User-Agent": "traintracker-build"})
+            with urllib.request.urlopen(req, timeout=300) as r:
+                elements = json.load(r)["elements"]
+            OSM_CACHE.mkdir(exist_ok=True)
+            cached.write_text(json.dumps(elements))
+            return elements
+        except Exception as err:
+            print(f"  overpass retry {attempt + 1} ({err})")
+            time.sleep(min(90, 15 * (attempt + 1)))
+    return None
+
+
+def meters(a, b):
+    return math.hypot((b[0] - a[0]) * 111320 * math.cos(math.radians(a[1])), (b[1] - a[1]) * 110540)
+
+
+class Coverage:
+    """Grid index over segment pieces: nearest point on existing track."""
+    CELL = 0.01
+
+    def __init__(self, segs):
+        self.segs = segs
+        self.grid = {}
+        for k in range(len(segs)):
+            self.add(k)
+
+    def add(self, k):
+        c = self.segs[k][1]
+        for i in range(len(c) - 1):
+            a, b = c[i], c[i + 1]
+            for gx in range(int(min(a[0], b[0]) // self.CELL), int(max(a[0], b[0]) // self.CELL) + 1):
+                for gy in range(int(min(a[1], b[1]) // self.CELL), int(max(a[1], b[1]) // self.CELL) + 1):
+                    self.grid.setdefault((gx, gy), []).append((k, i))
+
+    def nearest(self, p, max_m):
+        best = None
+        gx, gy = int(p[0] // self.CELL), int(p[1] // self.CELL)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for k, i in self.grid.get((gx + dx, gy + dy), ()):
+                    c = self.segs[k][1]
+                    a, b = c[i], c[i + 1]
+                    kx = math.cos(math.radians(p[1]))
+                    ax, ay = (b[0] - a[0]) * kx, b[1] - a[1]
+                    px, py = (p[0] - a[0]) * kx, p[1] - a[1]
+                    L = ax * ax + ay * ay
+                    t = max(0.0, min(1.0, (px * ax + py * ay) / L)) if L else 0.0
+                    q = (round(a[0] + (b[0] - a[0]) * t, 5), round(a[1] + (b[1] - a[1]) * t, 5))
+                    d = meters(p, q)
+                    if d <= max_m and (best is None or d < best[0]):
+                        best = (d, k, i, t, q)
+        return best
+
+
+def densify(pts):
+    out = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        n = int(meters(a, b) // STEP_M)
+        out += [(a[0] + (b[0] - a[0]) * j / (n + 1), a[1] + (b[1] - a[1]) * j / (n + 1)) for j in range(1, n + 1)]
+        out.append(b)
+    return out
+
+
+def split_segments(segs, cuts):
+    """Insert nodes into existing segments where new track joins them."""
+    by_seg = defaultdict(list)
+    for k, i, t, q in cuts:
+        by_seg[k].append((i, t, q))
+    for k, cs in by_seg.items():
+        nets, c = segs[k]
+        pieces, cur, last_i = [], [c[0]], 0
+        cs.sort()
+        for i, t, q in cs:
+            cur += c[last_i + 1:i + 1]
+            last_i = i
+            if tuple(cur[-1]) == q:
+                continue
+            cur.append(list(q))
+            pieces.append(cur)
+            cur = [list(q)]
+        cur += c[last_i + 1:]
+        pieces.append(cur)
+        segs[k] = (nets, pieces[0])
+        segs.extend((nets, p) for p in pieces[1:] if len(p) >= 2)
+
+
+def fill_gaps(segs):
+    for net, operators in OSM_OPERATORS.items():
+        pts = [(lon, lat) for _id, _n, lat, lon, *_ in stations.get(net, [])]
+        if net in ("go", "exo"):
+            pts = [(-79.4, 43.65), (-73.57, 45.5)]  # no stations of ours; search around Toronto/Montreal
+        if not pts:
+            continue
+        lons, lats = [p[0] for p in pts], [p[1] for p in pts]
+        bbox = f"{min(lats) - 0.5},{min(lons) - 0.5},{max(lats) + 0.5},{max(lons) + 0.5}"
+        elements = overpass(f"""[out:json][timeout:240];
+(relation["route"="train"]["operator"~"{operators}",i]({bbox});
+ relation["route"="train"]["network"~"{operators}",i]({bbox}););
+way(r)["railway"="rail"];
+out geom;""", f"routes-{net}")
+        if elements is None:
+            print(f"  {net}: skipped, OpenStreetMap unavailable (rerun later to fill its gaps)")
+            continue
+        cov = Coverage(segs)
+        cuts, added_m = [], 0
+        for way in elements:
+            line = densify([(round(g["lon"], 5), round(g["lat"], 5)) for g in way.get("geometry", [])])
+            if len(line) < 2:
+                continue
+            near = [cov.nearest(p, COVERED_M) for p in line]
+            i = 0
+            while i < len(line):
+                if near[i]:
+                    i += 1
+                    continue
+                j = i
+                while j < len(line) and not near[j]:
+                    j += 1
+                run = line[max(0, i - 1):min(len(line), j + 1)]
+                length = sum(meters(a, b) for a, b in zip(run, run[1:]))
+                if length >= MIN_RUN_M:
+                    run = [list(p) for p in run]
+                    # Join each end to the track it touches.
+                    for end, idx in ((0, i - 1), (-1, j)):
+                        hit = near[idx] if 0 <= idx < len(line) else None
+                        if hit:
+                            _d, k, si, t, q = hit
+                            run[end] = list(q)
+                            cuts.append((k, si, t, q))
+                    segs.append(((net,), run))
+                    cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
+                    added_m += length
+                    # Later ways may now be covered by this run.
+                    near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
+                i = j
+        split_segments(segs, cuts)
+        print(f"  {net}: +{added_m / 1000:.1f} km from OpenStreetMap")
+        time.sleep(2)
+
+
+print("filling gaps from OpenStreetMap")
+fill_gaps(segments)
 
 
 # Chain segments that meet end to end (at nodes where exactly two segments

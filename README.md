@@ -12,7 +12,6 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | MBTA Commuter Rail | Boston | MBTA V3 API | — |
 | Long Island Rail Road | New York | MTA GTFS-realtime | — |
 | Metro-North | New York | MTA GTFS-realtime (positions estimated from predicted times) | — |
-| Northstar | Minneapolis | Metro Transit NexTrip | — |
 | SEPTA Regional Rail | Philadelphia | SEPTA TrainView | relay |
 | RTD commuter rail (A, B, G, N) | Denver | RTD GTFS-realtime | relay |
 | FrontRunner | Salt Lake City | UTA GTFS-realtime | relay |
@@ -23,9 +22,9 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | Caltrain, SMART | Bay Area | 511 SF Bay | relay + free key |
 | Metrolink | Los Angeles | Metrolink GTFS-realtime | relay + free key |
 
-"Relay" feeds don't send the CORS headers a browser needs, and keyed feeds can't put their key in a public web page, so both go through a tiny Cloudflare Worker (below). Without it, the site still shows everything in the first five rows.
+"Relay" feeds don't send the CORS headers a browser needs, and keyed feeds can't put their key in a public web page, so both go through a tiny Cloudflare Worker (below). Without it, the site still shows everything in the first four rows.
 
-Not yet covered, because they don't publish public vehicle positions: MARC, VRE, Coaster, SunRail, South Shore Line, Rail Runner, and others. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Hartford Line Amtrak trips) do show up.
+Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't shown. Not yet covered, because they don't publish public vehicle positions: MARC, VRE, Coaster, SunRail, South Shore Line, Rail Runner, and others. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Hartford Line Amtrak trips) do show up.
 
 ## Using it
 
