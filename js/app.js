@@ -1,4 +1,6 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js";
+import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js";
+import { RailIndex, estimatePosition } from "./estimate.js";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -26,7 +28,14 @@ const state = {
   display: new Map(),    // id -> { lat, lon } currently drawn
   hidden: new Set(store.get("tt-hidden", [])),
   kind: "all",
-  selected: null,
+  selected: null,        // selected train id
+  stations: new Map(),   // merged station id -> station
+  station: null,         // selected station id
+  predictions: null,     // live MBTA predictions for the selected station
+  estimate: store.get("tt-estimate", false), // "Estimate live location" mode
+  est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
+  rail: null,            // RailIndex, loaded when estimating
+  stopPos: new Map(),    // station member key -> { lat, lon }
   follow: false,
   query: "",
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
@@ -108,8 +117,10 @@ function addImages() {
 
 function themeColors() {
   return theme === "dark"
-    ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)" }
-    : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)" };
+    ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
+        stationFill: "#1c1f24", stationText: "#b9bfc8" }
+    : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)",
+        stationFill: "#ffffff", stationText: "#4a505a" };
 }
 
 function addLayers() {
@@ -152,6 +163,61 @@ function addLayers() {
     filter: ["==", ["get", "class"], "rail"],
     paint: { "line-color": colors.railCommuter, "line-opacity": 0.45, "line-width": 1 },
   }, "tt-rail-casing");
+
+  // Stations sit under the trains. Intercity stops appear from regional zoom,
+  // commuter stops once you're looking at a metro area.
+  map.addSource("stations", { type: "geojson", data: stationCollection() });
+  const stationPaint = (r) => ({
+    "circle-radius": r,
+    "circle-color": colors.stationFill,
+    "circle-stroke-color": ["get", "color"],
+    "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 5, 1.3, 12, 2.2],
+  });
+  map.addLayer({
+    id: "tt-stations-minor",
+    type: "circle",
+    source: "stations",
+    minzoom: 8,
+    filter: ["!", ["get", "major"]],
+    paint: stationPaint(["interpolate", ["linear"], ["zoom"], 8, 2.2, 12, 5, 15, 7]),
+  });
+  map.addLayer({
+    id: "tt-stations-major",
+    type: "circle",
+    source: "stations",
+    minzoom: 4.5,
+    filter: ["get", "major"],
+    paint: stationPaint(["interpolate", ["linear"], ["zoom"], 4.5, 1.8, 8, 3.6, 12, 6, 15, 8]),
+  });
+  map.addLayer({
+    id: "tt-station-selected",
+    type: "circle",
+    source: "stations",
+    filter: ["==", ["get", "id"], ""],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 7, 12, 12],
+      "circle-color": "transparent",
+      "circle-stroke-color": ["get", "color"],
+      "circle-stroke-width": 3,
+    },
+  });
+  map.addLayer({
+    id: "tt-station-labels",
+    type: "symbol",
+    source: "stations",
+    minzoom: 8,
+    layout: {
+      // Big stations are named a little earlier than small ones.
+      "text-field": ["step", ["zoom"], ["case", ["get", "major"], ["get", "name"], ""], 11, ["get", "name"]],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10.5, 14, 13],
+      "text-variable-anchor": ["top", "bottom", "right", "left"],
+      "text-radial-offset": 0.8,
+      "text-padding": 4,
+      "symbol-sort-key": ["case", ["get", "major"], 0, 1],
+    },
+    paint: { "text-color": colors.stationText, "text-halo-color": colors.halo, "text-halo-width": 1.4 },
+  });
 
   map.addSource("trains", { type: "geojson", data: featureCollection() });
 
@@ -254,7 +320,7 @@ function featureCollection() {
   const features = [];
   for (const t of state.trains.values()) {
     if (!visible(t)) continue;
-    const pos = state.display.get(t.id) || t;
+    const pos = state.display.get(t.id) || targetOf(t);
     const intercity = AGENCIES[t.agency].kind === "intercity";
     features.push({
       type: "Feature",
@@ -266,8 +332,8 @@ function featureCollection() {
         label: labelFor(t),
         // Second label line, shown when zoomed in; skipped if the label already names the line.
         subtitle: t.number && t.route ? t.route : "",
-        bearing: t.bearing ?? 0,
-        hasBearing: t.bearing != null,
+        bearing: targetOf(t).bearing ?? 0,
+        hasBearing: targetOf(t).bearing != null,
         intercity,
         stale: Date.now() - t.updated > STALE_MS && !t.estimated,
         drawOrder: intercity ? 1 : 0,
@@ -282,27 +348,74 @@ function redraw() {
   map.getSource("trains")?.setData(featureCollection());
 }
 
-// Slides markers from where they're drawn to where the feed says they are.
+function agencyShown(agency) {
+  if (state.hidden.has(agency)) return false;
+  if (state.kind !== "all" && AGENCIES[agency].kind !== state.kind) return false;
+  const src = SOURCES.find((s) => s.agencies.includes(agency));
+  return src && sourceAvailability(src).ok;
+}
+
+function stationCollection() {
+  const features = [];
+  for (const st of state.stations.values()) {
+    const shown = st.agencies.filter(agencyShown);
+    if (!shown.length) continue;
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [st.lon, st.lat] },
+      properties: {
+        id: st.id,
+        name: st.name,
+        major: st.major && shown.some((a) => AGENCIES[a].kind === "intercity"),
+        color: AGENCIES[shown[0]].color,
+      },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function redrawStations() {
+  map.getSource("stations")?.setData(stationCollection());
+}
+
+// Where to draw a train: its estimated position in live-estimate mode,
+// otherwise exactly what the feed reported.
+function targetOf(t) {
+  return (state.estimate && state.est.get(t.id)) || t;
+}
+
+function computeEstimates() {
+  state.est.clear();
+  if (!state.estimate) return;
+  const stationAt = (key) => state.stopPos.get(key);
+  const now = Date.now();
+  for (const t of state.trains.values()) {
+    const e = estimatePosition(t, state.rail, stationAt, now);
+    if (e) state.est.set(t.id, e);
+  }
+}
+
+// Slides markers from where they're drawn to where they should be.
 let anim = null;
-function animateTo() {
+function animateTo(duration = ANIM_MS, linear = false) {
   const from = new Map(state.display);
   const start = performance.now();
-  const targets = new Map([...state.trains.values()].map((t) => [t.id, t]));
+  const targets = new Map([...state.trains.values()].map((t) => [t.id, targetOf(t)]));
   for (const id of [...state.display.keys()]) if (!targets.has(id)) state.display.delete(id);
   cancelAnimationFrame(anim);
   if (document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    for (const t of targets.values()) state.display.set(t.id, { lat: t.lat, lon: t.lon });
+    for (const [id, p] of targets) state.display.set(id, { lat: p.lat, lon: p.lon });
     redraw();
     return;
   }
   const step = (now) => {
-    const k = Math.min(1, (now - start) / ANIM_MS);
-    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-    for (const t of targets.values()) {
-      const f = from.get(t.id);
+    const k = Math.min(1, (now - start) / duration);
+    const e = linear ? k : k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+    for (const [id, p] of targets) {
+      const f = from.get(id);
       // Teleport if new or the jump is huge (e.g., a feed glitch).
-      if (!f || Math.abs(f.lat - t.lat) + Math.abs(f.lon - t.lon) > 1) state.display.set(t.id, { lat: t.lat, lon: t.lon });
-      else state.display.set(t.id, { lat: f.lat + (t.lat - f.lat) * e, lon: f.lon + (t.lon - f.lon) * e });
+      if (!f || Math.abs(f.lat - p.lat) + Math.abs(f.lon - p.lon) > 1) state.display.set(id, { lat: p.lat, lon: p.lon });
+      else state.display.set(id, { lat: f.lat + (p.lat - f.lat) * e, lon: f.lon + (p.lon - f.lon) * e });
     }
     redraw();
     if (k < 1) anim = requestAnimationFrame(step);
@@ -313,11 +426,12 @@ function animateTo() {
 function mergeTrains() {
   state.trains = new Map();
   for (const list of Object.values(state.bySource)) for (const t of list) state.trains.set(t.id, t);
+  computeEstimates();
   animateTo();
   renderAll();
   if (state.follow && state.selected) {
     const t = state.trains.get(state.selected);
-    if (t) map.easeTo({ center: [t.lon, t.lat], duration: ANIM_MS });
+    if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: ANIM_MS });
   }
 }
 
@@ -355,10 +469,22 @@ async function poll(src, attempt = 0) {
 }
 
 async function start() {
+  if (state.estimate) setEstimate(true);
+  loadStations()
+    .then((stations) => {
+      state.stations = stations;
+      for (const st of stations.values()) for (const m of st.members) state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
+      computeEstimates();
+      redrawStations();
+      if (wantedStation) selectStation(wantedStation);
+      renderResults();
+    })
+    .catch((err) => console.warn("stations", err));
   if (RELAY) {
     try {
       const res = await fetch(`${RELAY.replace(/\/$/, "")}/status`);
       state.relayFeeds = (await res.json()).feeds;
+      redrawStations();
     } catch {
       state.relayFeeds = {};
       toast("Couldn't reach the relay — showing directly available railroads only.");
@@ -384,13 +510,44 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// Trains placed by timetable keep moving between refreshes.
+// Trains placed by timetable keep moving between refreshes; in live-estimate
+// mode every train does, re-estimated every couple of seconds.
+let ticks = 0;
 setInterval(() => {
   if (document.hidden) return;
+  ticks++;
   let moved = false;
-  for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
-  if (moved) animateTo();
-}, 5000);
+  if (ticks % 3 === 0) for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
+  if (state.estimate) {
+    computeEstimates();
+    animateTo(2000, true);
+    if (state.follow && state.selected) {
+      const t = state.trains.get(state.selected);
+      if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: 2000, easing: (x) => x });
+    }
+    if (state.selected && ticks % 5 === 0) renderDetail();
+  } else if (moved) {
+    animateTo();
+  }
+}, 2000);
+
+async function setEstimate(on) {
+  state.estimate = on;
+  store.set("tt-estimate", on);
+  $("estimate-toggle").checked = on;
+  if (on && !state.rail) {
+    try {
+      state.rail = new RailIndex(await (await fetch("data/rail.geojson")).json());
+    } catch (err) {
+      console.warn("rail index", err); // still estimates, just in straight lines
+    }
+  }
+  computeEstimates();
+  animateTo();
+  renderAll();
+}
+
+$("estimate-toggle").addEventListener("change", (e) => setEstimate(e.target.checked));
 
 // ---------- Rendering: list ----------
 
@@ -496,11 +653,28 @@ function renderResults() {
     matches.push({ t, score: (exact ? 0 : 1) + (a.kind === "intercity" ? 0 : 0.5) });
   }
   matches.sort((x, y) => x.score - y.score || String(x.t.number).localeCompare(String(y.t.number), undefined, { numeric: true }));
-  if (!matches.length) {
-    el.innerHTML = `<div class="empty">No moving trains match “${esc(state.query)}”.</div>`;
+  const stationHits = [];
+  for (const st of state.stations.values()) {
+    if (!st.agencies.some(agencyShown)) continue;
+    const hay = `${st.name} ${st.place} ${st.members.map((m) => `${m.name} ${m.lines.join(" ")} ${AGENCIES[m.agency].short}`).join(" ")}`.toLowerCase();
+    if (terms.every((w) => hay.includes(w))) stationHits.push(st);
+  }
+  stationHits.sort((a, b) => (b.major - a.major) || (b.members.length - a.members.length) || a.name.localeCompare(b.name));
+  const stationHtml = stationHits.slice(0, 6).map((st) => `<button class="result" data-station="${esc(st.id)}">
+      <span class="station-icon" style="--c:${AGENCIES[st.agencies[0]].color}"></span>
+      <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, st.agencies.map((a) => AGENCIES[a].short).join(", ")].filter(Boolean).join(" · "))}</span></span>
+      <span></span>
+    </button>`).join("");
+  const stationBlock = stationHtml ? `<div class="group-title">Stations</div>${stationHtml}` : "";
+  if (!matches.length && stationBlock) {
+    el.innerHTML = stationBlock;
     return;
   }
-  el.innerHTML = matches.slice(0, 60).map(({ t }) => {
+  if (!matches.length) {
+    el.innerHTML = `<div class="empty">No trains or stations match “${esc(state.query)}”.</div>`;
+    return;
+  }
+  el.innerHTML = stationBlock + (stationBlock ? '<div class="group-title">Trains</div>' : "") + matches.slice(0, 60).map(({ t }) => {
     const a = AGENCIES[t.agency];
     const sub = [t.destination && `to ${t.destination}`, t.nextStop && !t.destination && `next ${t.nextStop}`, t.departedOn && `left ${t.departedOn}`]
       .filter(Boolean).join(" · ") || a.region;
@@ -535,6 +709,7 @@ function fmtAgo(ms) {
 const HEADINGS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
 
 function renderDetail() {
+  if (state.station) return renderStation();
   const t = state.trains.get(state.selected);
   const el = $("train-detail");
   if (!t) {
@@ -548,7 +723,10 @@ function renderDetail() {
     ["Speed", t.speedMph != null && !t.estimated ? `${Math.round(t.speedMph)} mph` : null],
     ["Heading", t.bearing != null ? HEADINGS[Math.round(t.bearing / 45) % 8] : null],
     ["Departed", t.departedOn],
-    ["Position", `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`],
+    ["Position", state.est.get(t.id)
+      ? `Estimated now (${state.est.get(t.id).basis})`
+      : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`],
+    ["Last report", state.est.get(t.id) ? fmtAgo(t.updated) : null],
     ["Equipment", t.detail],
   ].filter(([, v]) => v);
   const stops = t.stops?.length
@@ -580,12 +758,118 @@ function renderDetail() {
   list?.addEventListener("scroll", () => (el.dataset.scrollTop = list.scrollTop));
 }
 
+function fmtIn(ms) {
+  const min = Math.round((ms - Date.now()) / 60000);
+  if (min <= 0) return "now";
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function lateText(min) {
+  if (min == null) return { text: "", cls: "neutral" };
+  if (min <= 1) return { text: "On time", cls: "good" };
+  return { text: `${Math.round(min)} min late`, cls: min <= 20 ? "warn" : "bad" };
+}
+
+function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls }) {
+  const when = time
+    ? `<span class="when"><strong>${fmtTime(new Date(time).toISOString(), tz)}</strong><span>${fmtIn(time)}</span></span>`
+    : '<span class="when"><strong>Next</strong><span>stop</span></span>';
+  const inner = `${when}
+    <span class="badge" style="background:${color}">${esc(badge)}</span>
+    <span class="what"><span class="title">${esc(title)}</span><span class="sub">${esc(sub || "")}</span></span>
+    ${status ? `<span class="status ${statusCls}">${esc(status)}</span>` : "<span></span>"}`;
+  return id
+    ? `<button class="dep" data-select="${esc(id)}">${inner}</button>`
+    : `<div class="dep">${inner}</div>`;
+}
+
+function renderStation() {
+  const st = state.stations.get(state.station);
+  const el = $("train-detail");
+  if (!st) return;
+  const trains = [...state.trains.values()].filter(visible);
+
+  // Live departures: MBTA predictions where available, then trains on the map
+  // that are due here.
+  const rows = [];
+  const listed = new Set();
+  for (const p of state.predictions || []) {
+    const t = p.trainId && state.trains.get(p.trainId);
+    if (t) listed.add(t.id);
+    rows.push({
+      sort: p.time,
+      html: departureRow({
+        id: t?.id, color: AGENCIES.mbta.color, badge: p.number || "MBTA", title: p.headsign ? `to ${p.headsign}` : p.route,
+        sub: p.route, time: p.time, tz: p.tz, status: p.status || "", statusCls: "neutral",
+      }),
+    });
+  }
+  for (const d of trainsDue(st, trains)) {
+    if (listed.has(d.train.id) || (state.predictions && d.train.agency === "mbta")) continue;
+    listed.add(d.train.id);
+    const t = d.train, a = AGENCIES[t.agency];
+    const late = d.here ? { text: "At station", cls: "good" } : lateText(d.lateMin);
+    rows.push({
+      sort: d.time ?? Date.now(),
+      html: departureRow({
+        id: t.id, color: a.color, badge: t.number || a.short,
+        title: d.terminates && t.origin ? `from ${t.origin}` : t.destination ? `to ${t.destination}` : trainTitle(t),
+        sub: [d.terminates && "Arriving", a.short, t.route].filter(Boolean).join(" · "),
+        time: d.time, tz: d.tz, status: late.text, statusCls: late.cls,
+      }),
+    });
+  }
+  rows.sort((x, y) => x.sort - y.sort);
+
+  // Other trains close by, for railroads whose feeds don't say where trains stop.
+  const nearby = trains
+    .filter((t) => !listed.has(t.id) && st.agencies.includes(t.agency))
+    .map((t) => ({ t, d: meters(st, targetOf(t)) }))
+    .filter((x) => x.d < 25000)
+    .sort((x, y) => x.d - y.d)
+    .slice(0, 6);
+
+  const loading = st.agencies.includes("mbta") && state.predictions === null;
+  const lines = st.members.map((m) => {
+    const a = AGENCIES[m.agency];
+    // "City Terminal Zone" is an LIRR scheduling zone, not a line riders know.
+    const named = (m.lines || []).filter((l) => l !== "City Terminal Zone");
+    const ls = named.length ? named.join(", ") : a.kind === "intercity" ? "Intercity trains" : "";
+    return `<li><span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${ls ? `<br><span class="sub">${esc(ls)}</span>` : ""}</span></li>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="hero">
+      <div class="agency-name" style="color:var(--muted)">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2c4 0 8 .5 8 4v9.5a3.5 3.5 0 0 1-3.5 3.5l1.5 1.5v.5h-2l-2-2h-4l-2 2H6v-.5L7.5 19A3.5 3.5 0 0 1 4 15.5V6c0-3.5 4-4 8-4Zm0 2c-3.5 0-5.5.5-6 1.5V10h12V5.5C17.5 4.5 15.5 4 12 4ZM7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
+        Station${st.place ? ` · ${esc(st.place)}` : ""}
+      </div>
+      <h2>${esc(st.name)}</h2>
+    </div>
+    <ul class="served">${lines}</ul>
+    <h3 class="section-title">Next trains</h3>
+    <div class="deps">
+      ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
+        : `<p class="empty">${loading ? "Loading live departures…" : "No live trains are reporting a stop here right now."}</p>`}
+    </div>
+    ${nearby.length ? `<h3 class="section-title">Nearby trains</h3><div class="deps">${nearby.map(({ t, d }) => {
+      const a = AGENCIES[t.agency];
+      return `<button class="dep" data-select="${esc(t.id)}">
+        <span class="when"><strong>${(d / 1609).toFixed(d < 16090 ? 1 : 0)}</strong><span>mi away</span></span>
+        <span class="badge" style="background:${a.color}">${esc(t.number || a.short)}</span>
+        <span class="what"><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><span class="sub">${esc([a.short, t.route].filter(Boolean).join(" · "))}</span></span>
+        <span></span></button>`;
+    }).join("")}</div>` : ""}
+    <p class="estimate-note">Times are live predictions from each railroad. Trains on railroads whose feeds don't list stops appear under “Nearby trains”.</p>`;
+}
+
 function renderAll() {
   renderLiveCount();
   renderAgencies();
   renderResults();
   renderCredits();
-  if (state.selected) renderDetail();
+  if (state.selected || state.station) renderDetail();
 }
 
 setInterval(renderLiveCount, 5000);
@@ -598,22 +882,35 @@ function applySelectionFilter() {
   map.setFilter("tt-halo", ["==", ["get", "id"], id]);
   map.setFilter("tt-label-selected", ["==", ["get", "id"], id]);
   map.setFilter("tt-labels", ["!=", ["get", "id"], id]);
+  map.setFilter("tt-station-selected", ["==", ["get", "id"], state.station || ""]);
 }
 
-function setUrlTrain(id) {
+function setUrlSelection() {
   const url = new URL(location.href);
-  if (id) url.searchParams.set("train", id);
-  else url.searchParams.delete("train");
+  url.searchParams.delete("train");
+  url.searchParams.delete("station");
+  if (state.selected) url.searchParams.set("train", state.selected);
+  if (state.station) url.searchParams.set("station", state.station);
   history.replaceState(null, "", url);
 }
 
-function select(id, { fly = true } = {}) {
-  state.selected = id;
-  setUrlTrain(id);
-  applySelectionFilter();
-  $("view-list").hidden = !!id;
-  $("view-train").hidden = !id;
+function showDetailView(open) {
+  $("view-list").hidden = open;
+  $("view-train").hidden = !open;
+  $("follow-btn").hidden = !state.selected;
   delete $("train-detail").dataset.scrollTop;
+  $("train-detail").scrollTop = 0;
+}
+
+function select(id, { fly = true } = {}) {
+  state.returnTo = null;
+  $("back-btn").lastChild.textContent = " All trains";
+  state.selected = id;
+  state.station = null;
+  state.predictions = null;
+  setUrlSelection();
+  applySelectionFilter();
+  showDetailView(!!id);
   if (!id) {
     setFollow(false);
     renderAll();
@@ -632,6 +929,50 @@ function select(id, { fly = true } = {}) {
   if (isPhone) setSheet("");
 }
 
+let predictionTimer;
+async function refreshPredictions(st) {
+  const place = st.members.find((m) => m.agency === "mbta");
+  if (!place || state.station !== st.id) return;
+  try {
+    state.predictions = await mbtaPredictions(place.id);
+  } catch {
+    state.predictions = [];
+  }
+  if (state.station === st.id) renderDetail();
+}
+
+function selectStation(id, { fly = true } = {}) {
+  const st = state.stations.get(id);
+  if (!st) return;
+  state.selected = null;
+  state.station = id;
+  state.predictions = null;
+  setFollow(false);
+  setUrlSelection();
+  applySelectionFilter();
+  showDetailView(true);
+  renderDetail();
+  clearInterval(predictionTimer);
+  if (st.agencies.includes("mbta")) {
+    refreshPredictions(st);
+    predictionTimer = setInterval(() => refreshPredictions(st), 30000);
+  }
+  if (fly) {
+    map.flyTo({ center: [st.lon, st.lat], zoom: Math.max(map.getZoom(), 12), padding: panelPadding(), duration: 900 });
+  }
+  if (isPhone) setSheet("");
+}
+
+function closeDetail() {
+  clearInterval(predictionTimer);
+  const back = state.selected && state.returnTo;
+  state.returnTo = null;
+  $("back-btn").lastChild.textContent = " All trains";
+  if (back && state.stations.has(back)) return selectStation(back, { fly: false });
+  state.station = null;
+  select(null);
+}
+
 function panelPadding() {
   if (matchMedia("(max-width: 720px)").matches) return { bottom: window.innerHeight * 0.46, top: 0, left: 0, right: 0 };
   return { left: 360, top: 0, bottom: 0, right: 0 };
@@ -644,18 +985,39 @@ function setFollow(on) {
 
 // ---------- Events ----------
 
-map.on("click", "tt-trains", (e) => {
-  const f = e.features?.[0];
-  if (f) select(f.properties.id);
-});
-
-map.on("click", (e) => {
-  const hit = map.queryRenderedFeatures(e.point, { layers: ["tt-trains"] });
-  if (!hit.length && state.selected && !state.follow) select(null);
-});
-
 const canHover = matchMedia("(hover: hover)").matches;
 const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: "hover-card" });
+
+const STATION_LAYERS = ["tt-stations-major", "tt-stations-minor", "tt-station-labels"];
+
+// One click handler so a train sitting on a station wins over the station.
+map.on("click", (e) => {
+  const box = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
+  const train = map.queryRenderedFeatures(box, { layers: ["tt-trains"] })[0];
+  if (train) return select(train.properties.id);
+  const station = map.queryRenderedFeatures(box, { layers: STATION_LAYERS.filter((l) => map.getLayer(l)) })[0];
+  if (station) return selectStation(station.properties.id);
+  if ((state.selected && !state.follow) || state.station) closeDetail();
+});
+
+for (const layer of STATION_LAYERS) {
+  map.on("mousemove", layer, (e) => {
+    if (map.queryRenderedFeatures(e.point, { layers: ["tt-trains"] }).length) return;
+    map.getCanvas().style.cursor = "pointer";
+    if (!canHover) return;
+    const st = state.stations.get(e.features[0].properties.id);
+    if (!st) return;
+    popup
+      .setLngLat([st.lon, st.lat])
+      .setHTML(`<div class="t">${esc(st.name)}</div><div class="s">${st.agencies.map((a) => esc(AGENCIES[a].short)).join(" · ")}</div>`)
+      .addTo(map);
+  });
+  map.on("mouseleave", layer, () => {
+    map.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+}
+
 map.on("mousemove", "tt-trains", (e) => {
   map.getCanvas().style.cursor = "pointer";
   if (!canHover) return;
@@ -676,7 +1038,18 @@ map.on("mouseleave", "tt-trains", () => {
 
 map.on("dragstart", () => state.follow && setFollow(false));
 
-$("back-btn").addEventListener("click", () => select(null));
+$("back-btn").addEventListener("click", closeDetail);
+$("train-detail").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-select]");
+  if (b) {
+    const from = state.station;
+    select(b.dataset.select);
+    state.returnTo = from; // "back" from this train goes to the station
+    $("back-btn").lastChild.textContent = from ? " Station" : " All trains";
+  }
+  const st = e.target.closest("[data-station]");
+  if (st) selectStation(st.dataset.station);
+});
 $("follow-btn").addEventListener("click", () => {
   setFollow(!state.follow);
   const t = state.trains.get(state.selected);
@@ -699,7 +1072,9 @@ $("search").addEventListener("keydown", (e) => {
 
 $("results").addEventListener("click", (e) => {
   const b = e.target.closest("[data-select]");
+  const st = e.target.closest("[data-station]");
   if (b) select(b.dataset.select);
+  else if (st) selectStation(st.dataset.station);
 });
 
 $("agencies").addEventListener("click", (e) => {
@@ -710,6 +1085,7 @@ $("agencies").addEventListener("click", (e) => {
     state.hidden.has(id) ? state.hidden.delete(id) : state.hidden.add(id);
     store.set("tt-hidden", [...state.hidden]);
     redraw();
+    redrawStations();
     renderAll();
   } else if (zoom) {
     const id = zoom.dataset.zoom;
@@ -734,6 +1110,7 @@ $("kind-filter").addEventListener("click", (e) => {
   state.kind = b.dataset.kind;
   for (const x of $("kind-filter").children) x.setAttribute("aria-selected", String(x === b));
   redraw();
+  redrawStations();
   renderAll();
 });
 
@@ -769,6 +1146,7 @@ function toast(msg) {
 }
 
 // Open a shared link to a specific train once its feed has loaded.
+const wantedStation = new URL(location.href).searchParams.get("station");
 const wanted = new URL(location.href).searchParams.get("train");
 if (wanted) {
   const wait = setInterval(() => {

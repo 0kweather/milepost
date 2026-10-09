@@ -108,6 +108,7 @@ function parseAmtraker(json) {
         // Long-distance trains run for days, so the same number can be on the map twice.
         departedOn: departureDay(stations[0]),
         stops: stations.map((s) => ({
+          key: `ic:${s.code}`,
           name: s.name,
           tz: s.tz,
           time: s.status === "Departed" ? s.dep || s.arr : s.arr || s.dep,
@@ -198,8 +199,9 @@ function tripProgress(stops, now, lookup) {
   return { at: s, lat: p[1], lon: p[2], prev: s, next: s, list, dwelling: true };
 }
 
-function mtaStops(list, lookup, now, nextStop) {
+function mtaStops(agency, list, lookup, now, nextStop) {
   return list.map((s) => ({
+    key: `${agency}:${s.stopId}`,
     name: lookup[s.stopId][0],
     tz: "America/New_York",
     time: new Date(evTime(s) * 1000).toISOString(),
@@ -246,7 +248,7 @@ function parseMta(agency, buf, meta) {
       statusText: prog.dwelling ? `At ${lookup[prog.at.stopId][0]}` : delaySec != null ? delayText(delaySec / 60) : null,
       updated: fresh ? vp.timestamp * 1000 : (feed.timestamp || now) * 1000,
       estimated: !fresh,
-      stops: mtaStops(prog.list, lookup, now, nextStop),
+      stops: mtaStops(agency, prog.list, lookup, now, nextStop),
       // Kept so estimated positions can be advanced between refreshes.
       _progress: fresh ? null : { stops: tu.stops, lookup },
     }));
@@ -299,17 +301,19 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
 
 function parseSepta(json) {
   return json
-    .filter((t) => valid(+t.lat, +t.lon))
+    // TrainView keeps some parked trains listed as many hours "late"; skip them.
+    .filter((t) => valid(+t.lat, +t.lon) && !(t.late > 600))
     .map((t) => train({
       id: `septa:${t.trainno}`,
       agency: "septa",
       number: t.trainno,
-      route: `${t.line} Line`,
+      route: /line$/i.test(t.line) ? t.line : `${t.line} Line`,
       lat: +t.lat, lon: +t.lon,
       bearing: t.heading != null && t.heading !== "" ? +t.heading : null,
       origin: t.SOURCE,
       destination: t.dest,
       nextStop: t.nextstop,
+      currentStop: t.currentstop,
       delayMin: t.late,
       statusText: delayText(t.late),
       detail: t.consist ? `Cars ${t.consist.replace(/,/g, ", ")}` : null,

@@ -31,7 +31,7 @@
 
       <div class="search">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
-        <input id="search" type="search" placeholder="Train number, line, or city" autocomplete="off" spellcheck="false">
+        <input id="search" type="search" placeholder="Train, station, line, or city" autocomplete="off" spellcheck="false">
       </div>
 
       <div class="segmented" role="tablist" id="kind-filter">
@@ -39,6 +39,12 @@
         <button role="tab" data-kind="intercity" aria-selected="false">Intercity</button>
         <button role="tab" data-kind="commuter" aria-selected="false">Commuter</button>
       </div>
+
+      <label class="toggle">
+        <input type="checkbox" id="estimate-toggle">
+        <span class="switch" aria-hidden="true"></span>
+        <span class="toggle-text"><strong>Estimate live location</strong><span>Moves trains between reports using speed, predicted arrivals and the track</span></span>
+      </label>
 
       <div id="results" class="results" hidden></div>
       <div id="agencies" class="agencies"></div>

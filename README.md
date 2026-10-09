@@ -29,6 +29,13 @@ Not yet covered, because they don't publish public vehicle positions: MARC, VRE,
 
 ## Using it
 
+- **Stations:** every station on these railroads is on the map (intercity stops from regional zoom, commuter stops once you zoom into a metro area). Click one, or search for it, to see which railroads and lines serve it and the next trains due, with live predicted times and delays. Stations shared by several railroads, like New York Penn or Boston South Station, appear as one stop. MBTA stations show the MBTA's own live predictions. For railroads whose feeds don't list stops, the panel shows the trains nearby.
+- **Estimate live location** (toggle in the panel): feeds report positions anywhere from seconds to about 10 minutes late, and Amtrak's are the slowest. With this on, each train moves forward from its last report to where it most likely is now:
+  1. If the feed predicts its arrival at the next station, the train covers that share of the distance by the time elapsed.
+  2. Otherwise it's dead-reckoned from its last speed and heading, and the assumed speed is reduced the longer the gap gets.
+
+  Either way it moves along the actual track (USDOT rail lines), never faster than a bit over its reported speed (at least 60 mph), and never past the station it's due at. Trains sitting at their next station stay put. The train panel says when a position is estimated and how old the last real report is.
+
 - Zoomed out, trains are plain dots so the map stays readable; names appear once you zoom in, and labels that would overlap are hidden instead of piling up.
 - Search by train number, line, or city. Click a train for its status, next stop, speed and full stop list. The URL updates so you can share a specific train.
 - Toggle railroads on or off, filter to intercity or commuter, and switch light/dark with the moon button.
@@ -63,11 +70,14 @@ index.html, css/, js/     the site (MapLibre GL + OpenFreeMap basemap)
 js/sources.js             one adapter per feed → common train objects
 js/gtfsrt.js              small dependency-free GTFS-realtime decoder
 data/mta.json             LIRR/Metro-North station + branch lookups
-data/rail.geojson         US passenger rail lines (USDOT NTAD)
+data/rail.geojson         US passenger rail lines (USDOT NTAD), merged into continuous lines
+data/stations.json        stations for every railroad (NTAD, Amtraker, agency GTFS)
+js/stations.js            station merging and "next trains" lookups
+js/estimate.js            live-location estimates (ETA interpolation, dead reckoning, track snapping)
 scripts/                  rebuild the data files; local dev relay
 relay/                    Cloudflare Worker for CORS-less and keyed feeds
 ```
 
-Refresh the static data occasionally with `python3 scripts/build_static.py` and `python3 scripts/build_rail.py`.
+Refresh the static data occasionally with `python3 scripts/build_static.py`, `python3 scripts/build_rail.py` and `python3 scripts/build_stations.py`.
 
 Map data © OpenStreetMap contributors, tiles by OpenFreeMap. Train data from the agencies listed above. Rail lines from the USDOT/BTS National Transportation Atlas Database.
