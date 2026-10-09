@@ -265,9 +265,10 @@ function addLayers() {
       "circle-stroke-width": 3,
     },
   });
-  // Station names only (the basemap's place names are hidden): the busiest
-  // stations when zoomed out, every station once zoomed in. Labels that would
-  // collide are dropped, busiest stations first in line.
+  // Station names (most of the basemap's place names are hidden): the
+  // busiest stations at every zoom, every intercity station from zoom 7, and
+  // every station from zoom 9. Labels that would collide are dropped, busiest
+  // stations first in line.
   map.addLayer({
     id: "tt-station-labels",
     type: "symbol",
@@ -275,10 +276,11 @@ function addLayers() {
     minzoom: 4.5,
     layout: {
       "text-field": ["step", ["zoom"],
-        ["case", ["get", "top"], ["get", "name"], ""], // busiest stations
-        11, ["get", "name"]],                                          // every station
+        ["case", ["get", "top"], ["get", "name"], ""],                 // busiest stations
+        7, ["case", ["any", ["get", "top"], ["get", "major"]], ["get", "name"], ""], // + every intercity station
+        9, ["get", "name"]],                                           // every station
       "text-font": ["case", ["get", "top"], ["literal", ["Noto Sans Bold"]], ["literal", ["Noto Sans Regular"]]],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 4.5, 10, 8, 11, 11, 11.5, 15, 13],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 4.5, 10, 9, 11, 15, 13],
       "text-max-width": 8,
       "text-variable-anchor": ["top", "bottom", "right", "left"],
       "text-radial-offset": ["interpolate", ["linear"], ["zoom"], 4.5, 0.6, 12, 0.9],
