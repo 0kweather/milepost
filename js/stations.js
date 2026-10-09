@@ -55,8 +55,7 @@ export async function loadStations() {
       }
     }
     if (home) {
-      home.members.push(m);
-      if (m.name.length > home.name.length) home.name = m.name;
+      home.members.push(m); // keeps the highest-priority railroad's name
       home.place ||= m.place;
     } else {
       const s = { id: m.key, name: m.name, lat: m.lat, lon: m.lon, place: m.place, members: [m] };

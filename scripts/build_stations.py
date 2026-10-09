@@ -68,7 +68,10 @@ def gtfs_stations(url, keep, line_name):
         s = stops.get(sid)
         if not s or not s.get("stop_lat"):
             continue
-        out.append([sid, s["stop_name"].strip(), round(float(s["stop_lat"]), 5), round(float(s["stop_lon"]), 5),
+        name = s["stop_name"].strip()
+        if name.isupper():  # NJ Transit publishes names in capitals
+            name = name.title()
+        out.append([sid, name, round(float(s["stop_lat"]), 5), round(float(s["stop_lon"]), 5),
                     sorted(l for l in ls if l), ""])
     return out
 
@@ -87,10 +90,16 @@ def intercity_stations():
             if types[code] != "TRAIN":
                 continue  # Thruway bus stop
             agency = "amtrak"
+        elif len(code) == 4:
+            agency = "via"
         else:
-            agency = "via" if len(code) == 4 else "brightline"
+            agency = "brightline"
         place = ", ".join(x for x in (s.get("city"), s.get("state")) if x and x.strip())
         out[agency].append([code, s["name"].strip(), round(s["lat"], 5), round(s["lon"], 5), [], place])
+    # Amtraker also gives VIA codes to a few US stations Amtrak already covers
+    # (e.g., New York Penn for the Adirondack); drop those duplicates.
+    near = lambda a, b: abs(a[2] - b[2]) < 0.02 and abs(a[3] - b[3]) < 0.025
+    out["via"] = [v for v in out["via"] if not any(near(v, a) for a in out["amtrak"])]
     return out
 
 

@@ -33,6 +33,7 @@ const state = {
   station: null,         // selected station id
   predictions: null,     // live MBTA predictions for the selected station
   estimate: store.get("tt-estimate", false), // "Estimate live location" mode
+  showStations: store.get("tt-stations", true),
   est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
   rail: null,            // RailIndex, loaded when estimating
   stopPos: new Map(),    // station member key -> { lat, lon }
@@ -44,7 +45,10 @@ const state = {
 // ---------- Theme ----------
 
 const prefersDark = matchMedia("(prefers-color-scheme: dark)");
-let theme = store.get("tt-theme", null) || (prefersDark.matches ? "dark" : "light");
+// "auto" follows the device's light/dark setting.
+let themePref = store.get("tt-theme", "auto");
+const resolveTheme = () => (themePref === "auto" ? (prefersDark.matches ? "dark" : "light") : themePref);
+let theme = resolveTheme();
 document.documentElement.dataset.theme = theme;
 
 // ---------- Map ----------
@@ -175,6 +179,7 @@ function addLayers() {
   });
   map.addLayer({
     id: "tt-stations-minor",
+    layout: { visibility: state.showStations ? "visible" : "none" },
     type: "circle",
     source: "stations",
     minzoom: 8,
@@ -183,6 +188,7 @@ function addLayers() {
   });
   map.addLayer({
     id: "tt-stations-major",
+    layout: { visibility: state.showStations ? "visible" : "none" },
     type: "circle",
     source: "stations",
     minzoom: 4.5,
@@ -215,6 +221,7 @@ function addLayers() {
       "text-radial-offset": 0.8,
       "text-padding": 4,
       "symbol-sort-key": ["case", ["get", "major"], 0, 1],
+      visibility: state.showStations ? "visible" : "none",
     },
     paint: { "text-color": colors.stationText, "text-halo-color": colors.halo, "text-halo-width": 1.4 },
   });
@@ -397,27 +404,53 @@ function computeEstimates() {
 
 // Slides markers from where they're drawn to where they should be.
 let anim = null;
+// Approximate on-screen distance in pixels between two positions at the
+// current zoom (Web Mercator: 512 px per world at zoom 0).
+function pixelGap(a, b) {
+  const scale = (512 * 2 ** map.getZoom()) / 360;
+  const k = 1 / Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((b.lon - a.lon) * scale, (b.lat - a.lat) * scale * k);
+}
+
 function animateTo(duration = ANIM_MS, linear = false) {
-  const from = new Map(state.display);
-  const start = performance.now();
-  const targets = new Map([...state.trains.values()].map((t) => [t.id, targetOf(t)]));
-  for (const id of [...state.display.keys()]) if (!targets.has(id)) state.display.delete(id);
   cancelAnimationFrame(anim);
-  if (document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    for (const [id, p] of targets) state.display.set(id, { lat: p.lat, lon: p.lon });
-    redraw();
-    return;
+  const targets = new Map();
+  for (const t of state.trains.values()) targets.set(t.id, targetOf(t));
+  for (const id of [...state.display.keys()]) if (!targets.has(id)) state.display.delete(id);
+
+  // Only animate trains that are on screen and would visibly move; everything
+  // else jumps straight to its new spot in the same single redraw.
+  const view = map.getBounds();
+  const pad = 0.2 * Math.max(view.getNorth() - view.getSouth(), view.getEast() - view.getWest());
+  const inView = (p) => p.lat > view.getSouth() - pad && p.lat < view.getNorth() + pad &&
+    p.lon > view.getWest() - pad && p.lon < view.getEast() + pad;
+  const still = document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const movers = [];
+  for (const [id, p] of targets) {
+    const f = state.display.get(id);
+    if (still || !f || Math.abs(f.lat - p.lat) + Math.abs(f.lon - p.lon) > 1 ||
+        !(inView(f) || inView(p)) || pixelGap(f, p) < 1) {
+      state.display.set(id, { lat: p.lat, lon: p.lon });
+    } else {
+      movers.push([id, f, p]);
+    }
   }
+  redraw();
+  if (!movers.length) return;
+
+  // Rebuilding the marker layer is the expensive part, so cap the frame rate:
+  // ~30 fps for short refresh glides, ~10 fps for continuous estimate drift.
+  const frameMs = linear ? 100 : 33;
+  const start = performance.now();
+  let last = 0;
   const step = (now) => {
     const k = Math.min(1, (now - start) / duration);
-    const e = linear ? k : k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-    for (const [id, p] of targets) {
-      const f = from.get(id);
-      // Teleport if new or the jump is huge (e.g., a feed glitch).
-      if (!f || Math.abs(f.lat - p.lat) + Math.abs(f.lon - p.lon) > 1) state.display.set(id, { lat: p.lat, lon: p.lon });
-      else state.display.set(id, { lat: f.lat + (p.lat - f.lat) * e, lon: f.lon + (p.lon - f.lon) * e });
+    if (now - last >= frameMs || k === 1) {
+      last = now;
+      const e = linear ? k : k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      for (const [id, f, p] of movers) state.display.set(id, { lat: f.lat + (p.lat - f.lat) * e, lon: f.lon + (p.lon - f.lon) * e });
+      redraw();
     }
-    redraw();
     if (k < 1) anim = requestAnimationFrame(step);
   };
   anim = requestAnimationFrame(step);
@@ -512,24 +545,35 @@ document.addEventListener("visibilitychange", () => {
 
 // Trains placed by timetable keep moving between refreshes; in live-estimate
 // mode every train does, re-estimated every couple of seconds.
-let ticks = 0;
-setInterval(() => {
-  if (document.hidden) return;
-  ticks++;
+// Timetable-placed trains (Metro-North) advance every 6 s. In live-estimate
+// mode every train is re-estimated, more often when zoomed in where the
+// motion is visible: every 2 s in a city, up to 8 s for the whole country.
+let lastTimetable = 0;
+function tick() {
+  const z = map.getZoom();
+  const every = !state.estimate ? 2000 : z >= 9 ? 2000 : z >= 6 ? 4000 : 8000;
+  setTimeout(tick, every);
+  if (document.hidden || map.isMoving()) return;
+  const now = Date.now();
   let moved = false;
-  if (ticks % 3 === 0) for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
+  if (now - lastTimetable >= 6000) {
+    lastTimetable = now;
+    for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
+  }
   if (state.estimate) {
     computeEstimates();
-    animateTo(2000, true);
+    animateTo(every, true);
     if (state.follow && state.selected) {
       const t = state.trains.get(state.selected);
-      if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: 2000, easing: (x) => x });
+      if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: every, easing: (x) => x });
     }
-    if (state.selected && ticks % 5 === 0) renderDetail();
   } else if (moved) {
     animateTo();
   }
-}, 2000);
+}
+setTimeout(tick, 2000);
+// The selected train's panel ("estimated now", "last report") ages too.
+setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 
 async function setEstimate(on) {
   state.estimate = on;
@@ -1114,14 +1158,62 @@ $("kind-filter").addEventListener("click", (e) => {
   renderAll();
 });
 
-$("theme-btn").addEventListener("click", () => {
-  theme = theme === "dark" ? "light" : "dark";
-  store.set("tt-theme", theme);
+// ---------- Settings menu ----------
+
+function applyTheme() {
+  const next = resolveTheme();
+  for (const b of $("theme-choice").children) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === themePref));
+  if (next === theme) return;
+  theme = next;
   document.documentElement.dataset.theme = theme;
   // diff:false forces a full reload so "style.load" fires and our layers are
   // re-added; a diffed swap silently drops them.
   map.setStyle(STYLES[theme], { diff: false });
+}
+prefersDark.addEventListener("change", () => themePref === "auto" && applyTheme());
+
+$("theme-choice").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-theme-choice]");
+  if (!b) return;
+  themePref = b.dataset.themeChoice;
+  store.set("tt-theme", themePref);
+  applyTheme();
 });
+
+function setShowStations(on) {
+  state.showStations = on;
+  store.set("tt-stations", on);
+  $("stations-toggle").checked = on;
+  for (const id of ["tt-stations-minor", "tt-stations-major", "tt-station-labels"]) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+  }
+}
+$("stations-toggle").addEventListener("change", (e) => setShowStations(e.target.checked));
+
+function toggleMenu(open = $("settings-menu").hidden) {
+  const menu = $("settings-menu"), btn = $("settings-btn");
+  menu.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  // Pin the menu under the gear, kept inside the window.
+  const r = btn.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  menu.style.left = `${Math.max(12, Math.min(r.right - w, innerWidth - w - 12))}px`;
+  menu.style.top = `${r.bottom + 8 + h > innerHeight ? Math.max(12, r.top - h - 8) : r.bottom + 8}px`;
+}
+$("settings-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleMenu();
+});
+document.addEventListener("click", (e) => {
+  if (!$("settings-menu").hidden && !e.target.closest("#settings-menu")) toggleMenu(false);
+});
+document.addEventListener("keydown", (e) => e.key === "Escape" && toggleMenu(false));
+map.on("movestart", () => toggleMenu(false));
+
+applyTheme();
+$("stations-toggle").checked = state.showStations;
+$("estimate-toggle").checked = state.estimate;
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {

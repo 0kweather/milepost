@@ -24,8 +24,8 @@
           <h1>TrainTracker</h1>
           <p class="live"><span class="pulse" aria-hidden="true"></span><span id="live-count">Loading trains…</span></p>
         </div>
-        <button class="icon-btn" id="theme-btn" title="Switch light/dark map" aria-label="Switch light/dark map">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36A5.5 5.5 0 0 1 12.36 3.1 9.3 9.3 0 0 0 12 3Z"/></svg>
+        <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.8a7 7 0 0 1 0 1.9l2 1.8-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6a7 7 0 0 1-1.7-.9l-2.5.9-1.7-2.9 2-1.8a7 7 0 0 1 0-1.9l-2-1.8 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9L10.3 2ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" transform="translate(0 1)"/></svg>
         </button>
       </header>
 
@@ -39,12 +39,6 @@
         <button role="tab" data-kind="intercity" aria-selected="false">Intercity</button>
         <button role="tab" data-kind="commuter" aria-selected="false">Commuter</button>
       </div>
-
-      <label class="toggle">
-        <input type="checkbox" id="estimate-toggle">
-        <span class="switch" aria-hidden="true"></span>
-        <span class="toggle-text"><strong>Estimate live location</strong><span>Moves trains between reports using speed, predicted arrivals and the track</span></span>
-      </label>
 
       <div id="results" class="results" hidden></div>
       <div id="agencies" class="agencies"></div>
@@ -73,6 +67,26 @@
       <div id="train-detail"></div>
     </section>
   </aside>
+
+  <div id="settings-menu" class="menu" role="dialog" aria-label="Settings" hidden>
+    <div class="menu-title">Appearance</div>
+    <div class="segmented" id="theme-choice">
+      <button data-theme-choice="auto">Auto</button>
+      <button data-theme-choice="light">Light</button>
+      <button data-theme-choice="dark">Dark</button>
+    </div>
+    <div class="menu-title">Map</div>
+    <label class="toggle">
+      <input type="checkbox" id="estimate-toggle">
+      <span class="switch" aria-hidden="true"></span>
+      <span class="toggle-text"><strong>Estimate live location</strong><span>Moves trains between reports using speed, predicted arrivals and the track</span></span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="stations-toggle">
+      <span class="switch" aria-hidden="true"></span>
+      <span class="toggle-text"><strong>Show stations</strong><span>Station markers and names on the map</span></span>
+    </label>
+  </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

@@ -30,15 +30,16 @@ Not yet covered, because they don't publish public vehicle positions: MARC, VRE,
 ## Using it
 
 - **Stations:** every station on these railroads is on the map (intercity stops from regional zoom, commuter stops once you zoom into a metro area). Click one, or search for it, to see which railroads and lines serve it and the next trains due, with live predicted times and delays. Stations shared by several railroads, like New York Penn or Boston South Station, appear as one stop. MBTA stations show the MBTA's own live predictions. For railroads whose feeds don't list stops, the panel shows the trains nearby.
-- **Estimate live location** (toggle in the panel): feeds report positions anywhere from seconds to about 10 minutes late, and Amtrak's are the slowest. With this on, each train moves forward from its last report to where it most likely is now:
+- **Settings** (gear button): light/dark/auto appearance, **Estimate live location**, and **Show stations**.
+- **Estimate live location**: feeds report positions anywhere from seconds to about 10 minutes late, and Amtrak's are the slowest. With this on, each train moves forward from its last report to where it most likely is now:
   1. If the feed predicts its arrival at the next station, the train covers that share of the distance by the time elapsed.
   2. Otherwise it's dead-reckoned from its last speed and heading, and the assumed speed is reduced the longer the gap gets.
 
-  Either way it moves along the actual track (USDOT rail lines), never faster than a bit over its reported speed (at least 60 mph), and never past the station it's due at. Trains sitting at their next station stay put. The train panel says when a position is estimated and how old the last real report is.
+  Either way it moves along the actual track (USDOT rail lines), never faster than a bit over its reported speed (at least 60 mph), and never past the station it's due at. Trains sitting at their next station stay put. The train panel says when a position is estimated and how old the last real report is. To stay smooth on any device, only trains on screen that would visibly move are animated, redraws are capped at about 10 per second, and estimates refresh every 2 s in a city view but only every 8 s for the whole country, where the motion is too small to see.
 
 - Zoomed out, trains are plain dots so the map stays readable; names appear once you zoom in, and labels that would overlap are hidden instead of piling up.
 - Search by train number, line, or city. Click a train for its status, next stop, speed and full stop list. The URL updates so you can share a specific train.
-- Toggle railroads on or off, filter to intercity or commuter, and switch light/dark with the moon button.
+- Toggle railroads on or off and filter to intercity or commuter.
 
 ## Running locally
 
