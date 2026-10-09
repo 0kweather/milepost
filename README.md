@@ -38,7 +38,9 @@ Not yet covered, because they don't publish public vehicle positions: MARC, VRE,
   Either way it moves along the actual track (USDOT rail lines), never faster than a bit over its reported speed (at least 60 mph), and never past the station it's due at. Trains sitting at their next station stay put. The train panel says when a position is estimated and how old the last real report is. To stay smooth on any device, only trains on screen that would visibly move are animated, redraws are capped at about 10 per second, and estimates refresh every 2 s in a city view but only every 8 s for the whole country, where the motion is too small to see.
 
 - **Rail lines are colored by network.** Each stretch of track takes the color of the railroads that run passenger trains on it, and shared track (Amtrak and Metro-North on the New Haven Line, for example) is drawn as side-by-side strands, one per railroad. Hover a line to see who runs on it. Railroads come from USDOT's track ownership and trackage-rights codes, plus the nearest commuter station for commuter trains on freight-owned track.
-- **Trains sit on the track.** Reported positions are snapped to the nearest rail line within 1.5 km, preferring the train's own railroad when it's about as close. Trains farther than that from any mapped track (mostly VIA in Canada) stay where reported.
+- **Trains sit on the track.** Reported positions are snapped to the nearest rail line within 1.5 km, preferring the train's own railroad when it's about as close. The rail lines form a graph, so trains placed from the timetable (Metro-North), live estimates and slide animations all follow the track between two points (a shortest-path route) instead of cutting across curves.
+- **Stations sit on the track** too: each is drawn at the nearest point on its railroad's track within 400 m. Terminals like Boston South Station, whose tracks end short of the building, sit at the end of the platforms.
+- **Main line only.** Yard tracks, sidings and spurs are left out (from both the passenger network and the basemap), so big terminals don't turn into a tangle.
 - Zoomed out, trains are plain dots so the map stays readable; names appear once you zoom in, and labels that would overlap are hidden instead of piling up.
 - Search by train number, line, or city. Click a train for its status, next stop, speed and full stop list. The URL updates so you can share a specific train.
 - Toggle railroads on or off and filter to intercity or commuter.
@@ -73,7 +75,7 @@ index.html, css/, js/     the site (MapLibre GL + OpenFreeMap basemap)
 js/sources.js             one adapter per feed → common train objects
 js/gtfsrt.js              small dependency-free GTFS-realtime decoder
 data/mta.json             LIRR/Metro-North station + branch lookups
-data/rail.geojson         US passenger rail lines (USDOT NTAD) tagged by network, merged into continuous lines
+data/rail.geojson         US and Canadian passenger main lines (USDOT NTAD) tagged by network, merged into continuous lines
 data/stations.json        stations for every railroad (NTAD, Amtraker, agency GTFS)
 js/stations.js            station merging and "next trains" lookups
 js/estimate.js            track snapping and live-location estimates (ETA interpolation, dead reckoning)

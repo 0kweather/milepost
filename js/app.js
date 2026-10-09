@@ -136,6 +136,8 @@ function addLayers() {
   addImages();
   const colors = themeColors();
   const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
+  // The basemap's own rail layers draw every yard and siding up close; ours replace them.
+  for (const l of map.getStyle().layers) if (/^railway/.test(l.id)) map.setLayoutProperty(l.id, "visibility", "none");
 
   // Passenger rail network (USDOT NTAD), colored by the railroads that run on
   // each stretch. Track shared by several railroads (up to three) is drawn as
@@ -167,14 +169,15 @@ function addLayers() {
       },
     }, firstSymbol);
   });
-  // Other tracks (freight, yards) from the basemap, faintly, when zoomed in.
+  // Other main-line track (freight) from the basemap, faintly, when zoomed in.
+  // Yards, sidings and spurs are left out; they turn terminals into a tangle.
   map.addLayer({
     id: "tt-rail-other",
     type: "line",
     source: "openmaptiles",
     "source-layer": "transportation",
-    minzoom: 9,
-    filter: ["==", ["get", "class"], "rail"],
+    minzoom: 10,
+    filter: ["all", ["==", ["get", "class"], "rail"], ["!", ["has", "service"]]],
     paint: { "line-color": colors.railCommuter, "line-opacity": 0.45, "line-width": 1 },
   }, "tt-rail-casing");
 
@@ -372,14 +375,35 @@ function agencyShown(agency) {
   return src && sourceAvailability(src).ok;
 }
 
+// Draw each station on its railroad's track: the nearest point on the track
+// of its first (highest-priority) railroad within STATION_SNAP_M.
+const STATION_SNAP_M = 400;
+function snapStations() {
+  if (!state.rail) return;
+  for (const st of state.stations.values()) {
+    st.draw = null;
+    for (const m of st.members) {
+      const s = state.rail.snap([st.lon, st.lat], STATION_SNAP_M, m.agency);
+      if (s && state.rail.lines[s.line].nets.includes(m.agency)) {
+        const [lon, lat] = state.rail.at(s.line, s.along).point;
+        st.draw = { lon, lat };
+        break;
+      }
+    }
+  }
+  redrawStations();
+}
+const stationPos = (st) => st.draw || st;
+
 function stationCollection() {
   const features = [];
   for (const st of state.stations.values()) {
     const shown = st.agencies.filter(agencyShown);
     if (!shown.length) continue;
+    const pos = stationPos(st);
     features.push({
       type: "Feature",
-      geometry: { type: "Point", coordinates: [st.lon, st.lat] },
+      geometry: { type: "Point", coordinates: [pos.lon, pos.lat] },
       properties: {
         id: st.id,
         name: st.name,
@@ -430,6 +454,7 @@ function loadRail() {
     .then((geojson) => {
       state.rail = new RailIndex(geojson);
       snapCache.clear();
+      snapStations();
       computeEstimates();
       animateTo();
     })
@@ -445,6 +470,18 @@ function pixelGap(a, b) {
   const scale = (512 * 2 ** map.getZoom()) / 360;
   const k = 1 / Math.cos((a.lat * Math.PI) / 180);
   return Math.hypot((b.lon - a.lon) * scale, (b.lat - a.lat) * scale * k);
+}
+
+// Longer slides follow the track between the old and new spot, so a train
+// never cuts across a curve. Short hops just slide straight.
+function glidePath(t, from, to) {
+  if (!state.rail || !t) return null;
+  const straight = meters(from, to);
+  if (straight < 150) return null;
+  const a = state.rail.snap([from.lon, from.lat], 60, t.agency);
+  const b = state.rail.snap([to.lon, to.lat], 60, t.agency);
+  const path = state.rail.route(a, b, t.agency);
+  return path && path.length < straight * 2.5 + 300 ? path : null;
 }
 
 function animateTo(duration = ANIM_MS, linear = false) {
@@ -467,7 +504,7 @@ function animateTo(duration = ANIM_MS, linear = false) {
         !(inView(f) || inView(p)) || pixelGap(f, p) < 1) {
       state.display.set(id, { lat: p.lat, lon: p.lon });
     } else {
-      movers.push([id, f, p]);
+      movers.push([id, f, p, glidePath(state.trains.get(id), f, p)]);
     }
   }
   redraw();
@@ -483,7 +520,14 @@ function animateTo(duration = ANIM_MS, linear = false) {
     if (now - last >= frameMs || k === 1) {
       last = now;
       const e = linear ? k : k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-      for (const [id, f, p] of movers) state.display.set(id, { lat: f.lat + (p.lat - f.lat) * e, lon: f.lon + (p.lon - f.lon) * e });
+      for (const [id, f, p, path] of movers) {
+        if (path) {
+          const [lon, lat] = path.at(path.length * e).point;
+          state.display.set(id, { lat, lon });
+        } else {
+          state.display.set(id, { lat: f.lat + (p.lat - f.lat) * e, lon: f.lon + (p.lon - f.lon) * e });
+        }
+      }
       redraw();
     }
     if (k < 1) anim = requestAnimationFrame(step);
@@ -543,6 +587,7 @@ async function start() {
     .then((stations) => {
       state.stations = stations;
       for (const st of stations.values()) for (const m of st.members) state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
+      snapStations();
       computeEstimates();
       redrawStations();
       if (wantedStation) selectStation(wantedStation);
@@ -1033,7 +1078,7 @@ function selectStation(id, { fly = true } = {}) {
     predictionTimer = setInterval(() => refreshPredictions(st), 30000);
   }
   if (fly) {
-    map.flyTo({ center: [st.lon, st.lat], zoom: Math.max(map.getZoom(), 12), padding: panelPadding(), duration: 900 });
+    map.flyTo({ center: [stationPos(st).lon, stationPos(st).lat], zoom: Math.max(map.getZoom(), 12), padding: panelPadding(), duration: 900 });
   }
   if (isPhone) setSheet("");
 }
@@ -1103,7 +1148,7 @@ for (const layer of STATION_LAYERS) {
     const st = state.stations.get(e.features[0].properties.id);
     if (!st) return;
     popup
-      .setLngLat([st.lon, st.lat])
+      .setLngLat([stationPos(st).lon, stationPos(st).lat])
       .setHTML(`<div class="t">${esc(st.name)}</div><div class="s">${st.agencies.map((a) => esc(AGENCIES[a].short)).join(" · ")}</div>`)
       .addTo(map);
   });

@@ -94,7 +94,7 @@ function parseAmtraker(json) {
       out.push(train({
         id: `${agency}:${t.trainID}`,
         agency,
-        number: t.trainNum,
+        number: agency === "via" ? String(t.trainNum).replace(/^v/i, "") : t.trainNum, // Amtraker prefixes VIA numbers with "v"
         route: t.routeName,
         lat: t.lat, lon: t.lon,
         bearing: COMPASS[t.heading] ?? null,
@@ -189,6 +189,8 @@ function tripProgress(stops, now, lookup) {
         lat: here[1] + (there[1] - here[1]) * f,
         lon: here[2] + (there[2] - here[2]) * f,
         bearing: bearingBetween([here[1], here[2]], [there[1], there[2]]),
+        // The stations it's between, so the map can follow the track.
+        leg: { from: [here[2], here[1]], to: [there[2], there[1]], f },
         prev: s, next: n, list,
       };
     }
@@ -248,6 +250,7 @@ function parseMta(agency, buf, meta) {
       statusText: prog.dwelling ? `At ${lookup[prog.at.stopId][0]}` : delaySec != null ? delayText(delaySec / 60) : null,
       updated: fresh ? vp.timestamp * 1000 : (feed.timestamp || now) * 1000,
       estimated: !fresh,
+      leg: fresh ? null : prog.leg || null,
       stops: mtaStops(agency, prog.list, lookup, now, nextStop),
       // Kept so estimated positions can be advanced between refreshes.
       _progress: fresh ? null : { stops: tu.stops, lookup },
@@ -264,6 +267,7 @@ export function advanceEstimated(t) {
   if (!p) return false;
   t.lat = p.lat;
   t.lon = p.lon;
+  t.leg = p.leg || null;
   if (p.bearing != null) t.bearing = p.bearing;
   return true;
 }

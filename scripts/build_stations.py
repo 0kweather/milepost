@@ -23,7 +23,7 @@ GTFS = {
     "mbta": ("https://cdn.mbta.com/MBTA_GTFS.zip", rail, lambda r: long_name(r).replace("/", " / ")),
     "septa": (MDB.format("mdb-503"), lambda r: True,
               lambda r: long_name(r) if long_name(r).endswith("Line") else long_name(r) + " Line"),
-    "njt": (MDB.format("mdb-509"), lambda r: True, long_name),
+    "njt": (MDB.format("mdb-509"), rail, long_name),  # the feed also has its light rail lines
     "metra": (MDB.format("mdb-2854"), lambda r: True, long_name),
     "rtd": (MDB.format("mdb-178"),
             lambda r: r["route_id"] in ("A", "113B", "113G", "117N"),

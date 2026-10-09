@@ -1,4 +1,4 @@
-"""Build data/rail.geojson: US passenger rail lines, tagged by the networks
+"""Build data/rail.geojson: US and Canadian passenger rail lines, tagged by the networks
 (railroads) that run passenger trains on them.
 
 Source: USDOT/BTS National Transportation Atlas Database, North American Rail
@@ -31,8 +31,10 @@ CODES = {
     "SFRC": "trirail", "TRCX": "trirail", "CFCR": "sunrail", "NCTD": "coaster", "SMRT": "smart",
     "MNRX": "northstar", "DRTD": "rtd", "RTDC": "rtd", "CMRX": "capmetro", "TRE": "tre", "DART": "tre",
     "NMRX": "railrunner", "WES": "wes", "TEXR": "texrail",
+    # Canada
+    "GO": "go", "AMT": "exo", "EXO": "exo", "WCE": "wce", "WCXR": "wce",
 }
-ORDER = ["amtrak", "brightline"]  # intercity first, then commuter networks alphabetically
+ORDER = ["amtrak", "via", "brightline"]  # intercity first, then commuter networks alphabetically
 COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "northstar", "rtd", "frontrunner",
                      "capmetro", "trirail", "caltrain", "smart", "metrolink"}
 NEAREST_KM = 4
@@ -80,6 +82,10 @@ def nearest_commuter(pt):
 
 def networks(props, pt):
     p = props.get("PASSNGR")
+    if p == "V":  # VIA Rail Canada
+        return ("via",)
+    if p == "D":  # Alaska Railroad
+        return ("alaska",)
     nets = {CODES[c] for c in (props.get(f) for f in CODE_FIELDS) if c in CODES}
     commuter = {n for n in nets if n != "amtrak"} if p in ("B", "C") else set()
     if p in ("B", "C") and not commuter:
@@ -88,15 +94,18 @@ def networks(props, pt):
     return tuple(sorted(out, key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n)))[:3]
 
 
-print("passenger lines")
+print("passenger lines (US and Canada)")
 segments = []
-for f in query("PASSNGR IN ('A','B','C') AND COUNTRY = 'US'", ["PASSNGR"] + CODE_FIELDS):
+# Main line only (NET = 'M'): yard tracks, sidings and industrial leads are
+# what make big terminals look like a tangle. PASSNGR: A Amtrak, B Amtrak and
+# commuter, C commuter, D Alaska Railroad, V VIA Rail (Canada).
+for f in query("NET = 'M' AND COUNTRY IN ('US', 'CA') AND PASSNGR IN ('A','B','C','D','V')", ["PASSNGR"] + CODE_FIELDS):
     for line in parts(f["geometry"]):
         if len(line) >= 2:
             segments.append((networks(f["properties"], line[len(line) // 2]), line))
 
 print("Brightline (Florida East Coast main line, Miami to Cocoa)")
-for f in query("RROWNER1 = 'FEC' AND (YARDNAME IS NULL OR YARDNAME = '')", ["RROWNER1"]):
+for f in query("RROWNER1 = 'FEC' AND NET = 'M'", ["RROWNER1"]):
     for line in parts(f["geometry"]):
         if len(line) >= 2 and line[0][1] < 28.45:
             segments.append((("brightline",), line))
