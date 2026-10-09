@@ -1,6 +1,6 @@
-import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js";
-import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js";
-import { RailIndex, estimatePosition } from "./estimate.js";
+import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
+import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js?v=dev";
+import { RailIndex, estimatePosition } from "./estimate.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -13,6 +13,10 @@ const STALE_MS = 10 * 60 * 1000;
 const ANIM_MS = 1200;
 
 const $ = (id) => document.getElementById(id);
+// Attach a listener if the element exists. A missing element (say, a stale
+// cached page) must never stop the trains from loading.
+const on = (id, type, fn) => $(id)?.addEventListener(type, fn);
+const setChecked = (id, value) => { const el = $(id); if (el) el.checked = value; };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -134,7 +138,7 @@ function addLayers() {
 
   // Passenger rail network (USDOT NTAD), visible at every zoom. Lines with
   // Amtrak service draw a little heavier than commuter-only lines.
-  map.addSource("rail", { type: "geojson", data: "data/rail.geojson", tolerance: 0.6 });
+  map.addSource("rail", { type: "geojson", data: "data/rail.geojson?v=dev", tolerance: 0.6 });
   const railWidth = (extra = 0) => ["interpolate", ["linear"], ["zoom"],
     3, ["case", ["==", ["get", "k"], "a"], 1.1 + extra, 0.7 + extra],
     7, ["case", ["==", ["get", "k"], "a"], 1.8 + extra, 1.3 + extra],
@@ -578,10 +582,10 @@ setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 async function setEstimate(on) {
   state.estimate = on;
   store.set("tt-estimate", on);
-  $("estimate-toggle").checked = on;
+  setChecked("estimate-toggle", on);
   if (on && !state.rail) {
     try {
-      state.rail = new RailIndex(await (await fetch("data/rail.geojson")).json());
+      state.rail = new RailIndex(await (await fetch("data/rail.geojson?v=dev")).json());
     } catch (err) {
       console.warn("rail index", err); // still estimates, just in straight lines
     }
@@ -591,7 +595,7 @@ async function setEstimate(on) {
   renderAll();
 }
 
-$("estimate-toggle").addEventListener("change", (e) => setEstimate(e.target.checked));
+on("estimate-toggle", "change", (e) => setEstimate(e.target.checked));
 
 // ---------- Rendering: list ----------
 
@@ -1024,7 +1028,7 @@ function panelPadding() {
 
 function setFollow(on) {
   state.follow = on;
-  $("follow-btn").setAttribute("aria-pressed", String(on));
+  $("follow-btn")?.setAttribute("aria-pressed", String(on));
 }
 
 // ---------- Events ----------
@@ -1082,8 +1086,8 @@ map.on("mouseleave", "tt-trains", () => {
 
 map.on("dragstart", () => state.follow && setFollow(false));
 
-$("back-btn").addEventListener("click", closeDetail);
-$("train-detail").addEventListener("click", (e) => {
+on("back-btn", "click", closeDetail);
+on("train-detail", "click", (e) => {
   const b = e.target.closest("[data-select]");
   if (b) {
     const from = state.station;
@@ -1094,18 +1098,18 @@ $("train-detail").addEventListener("click", (e) => {
   const st = e.target.closest("[data-station]");
   if (st) selectStation(st.dataset.station);
 });
-$("follow-btn").addEventListener("click", () => {
+on("follow-btn", "click", () => {
   setFollow(!state.follow);
   const t = state.trains.get(state.selected);
   if (state.follow && t) map.easeTo({ center: [t.lon, t.lat], padding: panelPadding() });
 });
 
-$("search").addEventListener("input", (e) => {
+on("search", "input", (e) => {
   state.query = e.target.value;
   renderResults();
   if (isPhone && state.query) setSheet("expanded");
 });
-$("search").addEventListener("keydown", (e) => {
+on("search", "keydown", (e) => {
   if (e.key === "Enter") $("results").querySelector("[data-select]")?.click();
   if (e.key === "Escape") {
     e.target.value = "";
@@ -1114,14 +1118,14 @@ $("search").addEventListener("keydown", (e) => {
   }
 });
 
-$("results").addEventListener("click", (e) => {
+on("results", "click", (e) => {
   const b = e.target.closest("[data-select]");
   const st = e.target.closest("[data-station]");
   if (b) select(b.dataset.select);
   else if (st) selectStation(st.dataset.station);
 });
 
-$("agencies").addEventListener("click", (e) => {
+on("agencies", "click", (e) => {
   const toggle = e.target.closest("[data-toggle]");
   const zoom = e.target.closest("[data-zoom]");
   if (toggle) {
@@ -1148,7 +1152,7 @@ $("agencies").addEventListener("click", (e) => {
   }
 });
 
-$("kind-filter").addEventListener("click", (e) => {
+on("kind-filter", "click", (e) => {
   const b = e.target.closest("[data-kind]");
   if (!b) return;
   state.kind = b.dataset.kind;
@@ -1162,7 +1166,7 @@ $("kind-filter").addEventListener("click", (e) => {
 
 function applyTheme() {
   const next = resolveTheme();
-  for (const b of $("theme-choice").children) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === themePref));
+  for (const b of $("theme-choice")?.children || []) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === themePref));
   if (next === theme) return;
   theme = next;
   document.documentElement.dataset.theme = theme;
@@ -1172,7 +1176,7 @@ function applyTheme() {
 }
 prefersDark.addEventListener("change", () => themePref === "auto" && applyTheme());
 
-$("theme-choice").addEventListener("click", (e) => {
+on("theme-choice", "click", (e) => {
   const b = e.target.closest("[data-theme-choice]");
   if (!b) return;
   themePref = b.dataset.themeChoice;
@@ -1183,12 +1187,12 @@ $("theme-choice").addEventListener("click", (e) => {
 function setShowStations(on) {
   state.showStations = on;
   store.set("tt-stations", on);
-  $("stations-toggle").checked = on;
+  setChecked("stations-toggle", on);
   for (const id of ["tt-stations-minor", "tt-stations-major", "tt-station-labels"]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
   }
 }
-$("stations-toggle").addEventListener("change", (e) => setShowStations(e.target.checked));
+on("stations-toggle", "change", (e) => setShowStations(e.target.checked));
 
 function toggleMenu(open = $("settings-menu").hidden) {
   const menu = $("settings-menu"), btn = $("settings-btn");
@@ -1201,7 +1205,7 @@ function toggleMenu(open = $("settings-menu").hidden) {
   menu.style.left = `${Math.max(12, Math.min(r.right - w, innerWidth - w - 12))}px`;
   menu.style.top = `${r.bottom + 8 + h > innerHeight ? Math.max(12, r.top - h - 8) : r.bottom + 8}px`;
 }
-$("settings-btn").addEventListener("click", (e) => {
+on("settings-btn", "click", (e) => {
   e.stopPropagation();
   toggleMenu();
 });
@@ -1212,8 +1216,8 @@ document.addEventListener("keydown", (e) => e.key === "Escape" && toggleMenu(fal
 map.on("movestart", () => toggleMenu(false));
 
 applyTheme();
-$("stations-toggle").checked = state.showStations;
-$("estimate-toggle").checked = state.estimate;
+setChecked("stations-toggle", state.showStations);
+setChecked("estimate-toggle", state.estimate);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
@@ -1223,7 +1227,7 @@ function setSheet(mode) {
   document.body.classList.toggle("sheet-collapsed", mode === "collapsed");
   document.body.classList.toggle("sheet-expanded", mode === "expanded");
 }
-$("sheet-handle").addEventListener("click", () => {
+on("sheet-handle", "click", () => {
   const p = $("panel");
   setSheet(p.classList.contains("collapsed") ? "" : p.classList.contains("expanded") ? "collapsed" : "expanded");
 });

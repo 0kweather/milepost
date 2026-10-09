@@ -9,7 +9,7 @@
 // site. "relay" sources don't (or need an API key), so they go through the
 // small Cloudflare Worker in /relay when one is configured.
 
-import { decodeFeed } from "./gtfsrt.js";
+import { decodeFeed } from "./gtfsrt.js?v=dev";
 
 export const AGENCIES = {
   amtrak:     { name: "Amtrak",              short: "Amtrak",   region: "Nationwide",          color: "#1f5fad", kind: "intercity" },
@@ -162,7 +162,7 @@ function parseMbta(json) {
 
 let mtaStatic = null;
 async function loadMtaStatic() {
-  mtaStatic ??= fetch("data/mta.json").then((r) => r.json());
+  mtaStatic ??= fetch("data/mta.json?v=dev").then((r) => r.json());
   return mtaStatic;
 }
 

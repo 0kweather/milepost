@@ -79,6 +79,8 @@ scripts/                  rebuild the data files; local dev relay
 relay/                    Cloudflare Worker for CORS-less and keyed feeds
 ```
 
+Deploys run through `.github/workflows/pages.yml`, which stamps every file reference (`?v=dev` in the source) with the commit ID so browsers never mix cached files from different versions.
+
 Refresh the static data occasionally with `python3 scripts/build_static.py`, `python3 scripts/build_rail.py` and `python3 scripts/build_stations.py`.
 
 Map data © OpenStreetMap contributors, tiles by OpenFreeMap. Train data from the agencies listed above. Rail lines from the USDOT/BTS National Transportation Atlas Database.

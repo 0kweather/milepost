@@ -5,7 +5,7 @@
 // and NJ Transit; Boston South Station for Amtrak and the MBTA) are merged so
 // the map shows one stop with everything that serves it.
 
-import { AGENCIES } from "./sources.js";
+import { AGENCIES } from "./sources.js?v=dev";
 
 const MERGE_METERS = 450;
 const INTERCITY = new Set(["amtrak", "via", "brightline"]);
@@ -26,7 +26,7 @@ function meters(a, b) {
 }
 
 export async function loadStations() {
-  const raw = await (await fetch("data/stations.json")).json();
+  const raw = await (await fetch("data/stations.json?v=dev")).json();
   const members = [];
   for (const [agency, list] of Object.entries(raw)) {
     if (!AGENCIES[agency]) continue;
