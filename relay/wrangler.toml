@@ -1,3 +1,3 @@
-name = "traintracker-relay"
+name = "milepost-relay"
 main = "worker.js"
 compatibility_date = "2025-01-01"

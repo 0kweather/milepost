@@ -5,7 +5,7 @@ import { NETWORKS, networkColor } from "./networks.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
-  window.TRAINTRACKER_RELAY || "").trim();
+  window.MILEPOST_RELAY || "").trim();
 const STYLES = {
   light: "https://tiles.openfreemap.org/styles/positron",
   dark: "https://tiles.openfreemap.org/styles/dark",
@@ -635,7 +635,7 @@ function mergeTrains() {
 // ---------- Feeds ----------
 
 function sourceAvailability(src) {
-  if (!src.relay || (window.TRAINTRACKER_FEEDS || {})[src.id]) return { ok: true };
+  if (!src.relay || (window.MILEPOST_FEEDS || {})[src.id]) return { ok: true };
   if (!RELAY) return { ok: false, reason: "Needs the relay (see README)" };
   if (state.relayFeeds && !state.relayFeeds[src.id]) {
     return { ok: false, reason: src.needsKey ? "Needs a free API key" : "Not enabled on relay" };
@@ -1651,6 +1651,6 @@ if (wanted) {
 }
 
 // Handy for poking at the live state from the browser console.
-window.traintracker = { state, map, checkTracked };
+window.milepost = { state, map, checkTracked };
 
 start();

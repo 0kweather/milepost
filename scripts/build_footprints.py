@@ -35,7 +35,7 @@ def overpass(query):
         url = MIRRORS[attempt % len(MIRRORS)]
         try:
             req = urllib.request.Request(url, data=urllib.parse.urlencode({"data": query}).encode(),
-                                         headers={"User-Agent": "traintracker-build"})
+                                         headers={"User-Agent": "milepost-build"})
             with urllib.request.urlopen(req, timeout=300) as r:
                 return json.load(r)["elements"]
         except Exception as err:

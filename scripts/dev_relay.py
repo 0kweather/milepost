@@ -2,7 +2,7 @@
 
     python3 scripts/dev_relay.py          # serves http://127.0.0.1:8787
 
-then set window.TRAINTRACKER_RELAY = "http://127.0.0.1:8787" in config.js.
+then set window.MILEPOST_RELAY = "http://127.0.0.1:8787" in config.js.
 Keyed feeds read the same environment variables as the Worker's secrets
 (METRA_API_TOKEN, API_511_KEY, METROLINK_API_KEY). NJ Transit is Worker-only.
 """
@@ -50,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
         hit = cache.get(name)
         if hit and time.time() - hit[0] < CACHE_SECONDS:
             return self.send(200, hit[1], hit[2])
-        req = urllib.request.Request(spec["url"], headers={"User-Agent": "TrainTracker relay", **spec.get("headers", {})})
+        req = urllib.request.Request(spec["url"], headers={"User-Agent": "Milepost relay", **spec.get("headers", {})})
         try:
             with urllib.request.urlopen(req, timeout=20) as r:
                 body, ctype = r.read(), r.headers.get("Content-Type", "application/octet-stream")
@@ -61,5 +61,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("TrainTracker dev relay on http://127.0.0.1:8787")
+    print("Milepost dev relay on http://127.0.0.1:8787")
     ThreadingHTTPServer(("127.0.0.1", 8787), Handler).serve_forever()

@@ -434,7 +434,7 @@ export const SOURCES = [
 
 export async function fetchSource(src, relayBase) {
   // A per-feed address in config.js wins (for feeds that block the relay).
-  const override = (window.TRAINTRACKER_FEEDS || {})[src.id];
+  const override = (window.MILEPOST_FEEDS || {})[src.id];
   const url = override || (src.relay ? `${relayBase.replace(/\/$/, "")}/feed/${src.id}` : src.url);
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

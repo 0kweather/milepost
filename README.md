@@ -1,8 +1,8 @@
-# TrainTracker
+# Milepost
 
 A live map of passenger trains across the United States: Amtrak and Brightline plus the commuter railroads that publish real-time positions, all on one map.
 
-**Live site:** https://0kweather.github.io/traintracker/
+**Live site:** https://0kweather.github.io/milepost/
 
 ## What's on the map
 
@@ -52,7 +52,7 @@ It's a static site with no build step:
 python3 -m http.server 8000
 ```
 
-then open http://localhost:8000. To try the relay feeds locally, run `python3 scripts/dev_relay.py` and set `window.TRAINTRACKER_RELAY = "http://127.0.0.1:8787"` in `config.js`.
+then open http://localhost:8000. To try the relay feeds locally, run `python3 scripts/dev_relay.py` and set `window.MILEPOST_RELAY = "http://127.0.0.1:8787"` in `config.js`.
 
 ## Turning on the relay feeds
 
@@ -63,7 +63,7 @@ then open http://localhost:8000. To try the relay feeds locally, run `python3 sc
    - `API_511_KEY`: https://511.org/open-data/token (Caltrain + SMART)
    - `METROLINK_API_KEY`: https://metrolinktrains.com/about/gtfs/
    - `NJT_USERNAME` and `NJT_PASSWORD`: https://developer.njtransit.com
-4. Put the Worker's URL in `config.js` (`window.TRAINTRACKER_RELAY = "https://traintracker-relay.<you>.workers.dev"`) and push.
+4. Put the Worker's URL in `config.js` (`window.MILEPOST_RELAY = "https://milepost-relay.<you>.workers.dev"`) and push.
 
 The relay only serves the feeds listed in `relay/worker.js` (it is not an open proxy) and caches each one for 15 seconds.
 
