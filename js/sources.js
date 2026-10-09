@@ -433,7 +433,9 @@ export const SOURCES = [
 ];
 
 export async function fetchSource(src, relayBase) {
-  const url = src.relay ? `${relayBase.replace(/\/$/, "")}/feed/${src.id}` : src.url;
+  // A per-feed address in config.js wins (for feeds that block the relay).
+  const override = (window.TRAINTRACKER_FEEDS || {})[src.id];
+  const url = override || (src.relay ? `${relayBase.replace(/\/$/, "")}/feed/${src.id}` : src.url);
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = src.format === "pb" ? await res.arrayBuffer() : await res.json();

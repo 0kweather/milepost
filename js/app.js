@@ -635,7 +635,7 @@ function mergeTrains() {
 // ---------- Feeds ----------
 
 function sourceAvailability(src) {
-  if (!src.relay) return { ok: true };
+  if (!src.relay || (window.TRAINTRACKER_FEEDS || {})[src.id]) return { ok: true };
   if (!RELAY) return { ok: false, reason: "Needs the relay (see README)" };
   if (state.relayFeeds && !state.relayFeeds[src.id]) {
     return { ok: false, reason: src.needsKey ? "Needs a free API key" : "Not enabled on relay" };
