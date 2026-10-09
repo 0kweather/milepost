@@ -140,7 +140,13 @@ function themeColors() {
 function addLayers() {
   addImages();
   const colors = themeColors();
-  const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
+  // Our layers go above every basemap shape (roads, buildings, water) but below
+  // its remaining labels. Styles differ: the dark one puts a label early and
+  // draws roads after it, so "before the first label" would bury the rails.
+  const baseLayers = map.getStyle().layers;
+  let lastShape = -1;
+  baseLayers.forEach((l, i) => { if (l.type !== "symbol") lastShape = i; });
+  const firstSymbol = baseLayers[lastShape + 1]?.id; // undefined = top of the stack
   // Keep the basemap quiet: of its labels only country and state names stay
   // (station names are the rest of the text); none of its rail layers (ours
   // replace them; its own draw every yard and siding up close); and its
