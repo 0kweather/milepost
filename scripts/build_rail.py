@@ -299,6 +299,7 @@ fill_gaps(segments)
 # the routing graph disconnected. Join each dead end to the nearest other
 # line within HEAL_M.
 HEAL_M = 60
+HEAL_SAME_M = 150  # when the nearby line is the same railroad
 
 
 def heal_dead_ends(segs):
@@ -315,6 +316,11 @@ def heal_dead_ends(segs):
             if degree[key(c[end])] != 1:
                 continue
             hit = cov.nearest(tuple(c[end]), HEAL_M, exclude=k)
+            if not hit:
+                # A bit farther is fine when it's the same railroad's track.
+                far = cov.nearest(tuple(c[end]), HEAL_SAME_M, exclude=k)
+                if far and set(segs[far[1]][0]) & set(nets):
+                    hit = far
             if hit and hit[0] > 0.5:
                 _d, k2, i, t, q = hit
                 c[end] = list(q)
@@ -328,6 +334,73 @@ def heal_dead_ends(segs):
 heal_dead_ends(segments)
 
 
+# ---------- Bridge small breaks ----------
+# Pieces of one line can still stop short of each other by a few hundred
+# meters (OSM ways that don't quite meet along a new corridor). Join two dead
+# ends of the same railroad up to BRIDGE_M apart when they face each other:
+# each points toward the other along its own line, so unrelated stubs that
+# merely sit near each other are left alone.
+BRIDGE_M = 1000
+FACING_DEG = 35
+
+
+def bridge_breaks(segs):
+    key = lambda pt: (round(pt[0], 4), round(pt[1], 4))
+    degree = defaultdict(int)
+    for _n, c in segs:
+        degree[key(c[0])] += 1
+        degree[key(c[-1])] += 1
+
+    def heading(a, b):
+        return math.degrees(math.atan2((b[1] - a[1]) * 110540, (b[0] - a[0]) * 111320 * math.cos(math.radians(a[1]))))
+
+    def turn(a, b):
+        return abs((a - b + 180) % 360 - 180)
+
+    ends = []  # (point, outward heading, nets)
+    for nets, c in segs:
+        if len(c) < 2:
+            continue
+        for tip, back in ((c[0], c[1]), (c[-1], c[-2])):
+            if degree[key(tip)] == 1:
+                ends.append((tuple(tip), heading(back, tip), set(nets)))
+    grid = defaultdict(list)
+    for i, (p, _h, _n) in enumerate(ends):
+        grid[(int(p[0] * 50), int(p[1] * 50))].append(i)
+    used, bridges = set(), []
+    for i, (p, h, nets) in enumerate(ends):
+        if i in used:
+            continue
+        best = None
+        gx, gy = int(p[0] * 50), int(p[1] * 50)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in grid.get((gx + dx, gy + dy), ()):
+                    q, hq, nq = ends[j]
+                    if j == i or j in used or not (nets & nq):
+                        continue
+                    d = meters(p, q)
+                    if not 0 < d <= BRIDGE_M:
+                        continue
+                    toward = heading(p, q)
+                    if turn(toward, h) <= FACING_DEG and turn(toward + 180, hq) <= FACING_DEG and (best is None or d < best[0]):
+                        best = (d, j)
+        if best:
+            j = best[1]
+            used.update((i, j))
+            bridges.append(((tuple(sorted(nets & ends[j][2])),), [list(p), list(ends[j][0])]))
+    for (nets,), line in bridges:
+        segs.append((order(nets), line))
+    print(f"bridged {len(bridges)} small breaks")
+
+
+def order(nets):
+    return tuple(sorted(set(nets), key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n)))[:3]
+
+
+bridge_breaks(segments)
+
+
 # ---------- Collapse parallel tracks ----------
 # NTAD (and OSM) sometimes map a corridor's two main tracks as separate lines a
 # few dozen meters apart (Providence, many stations), which draws the route
@@ -337,10 +410,6 @@ heal_dead_ends(segments)
 # connection. Its railroads are folded into the drawn line's colors.
 PARALLEL_M = 120
 MIN_PARALLEL_LEN_M = 150
-
-
-def order(nets):
-    return tuple(sorted(set(nets), key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n)))[:3]
 
 
 def collapse_parallel(segs):
