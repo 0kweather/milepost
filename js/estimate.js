@@ -4,17 +4,23 @@
 // Feeds report positions anywhere from seconds to ~10 minutes late (Amtrak's
 // GPS updates are the slowest). For each train we pick the best evidence:
 //
-//  1. Predicted arrival at the next station (Amtrak, VIA, Brightline, LIRR,
-//     Metro-North): the train must cover the distance from its last fix to
-//     that station by the predicted time, so slide it that fraction of the way.
-//  2. Speed and heading (most GPS feeds): dead-reckon forward for the time
-//     since the fix, slowing the assumed speed the longer we extrapolate.
+//  1. Predicted arrival times at its upcoming stops (Amtrak, VIA, Brightline,
+//     LIRR, Metro-North): the train runs from its last fix through each stop
+//     in turn, arriving at the predicted time and pausing a minute, so it keeps
+//     moving between feed reports instead of waiting at the next station.
+//  2. Speed and heading (most GPS feeds): it keeps its last reported speed,
+//     without slowing down, for up to 20 minutes.
 //
 // Either way the train moves along the actual track (USDOT rail lines) rather
-// than in a straight line, and it never runs past the next station it's due at.
+// than in a straight line, never faster than a bit over its reported speed
+// (at least ~90 mph, at most ~160 mph).
 
 const DEG = Math.PI / 180;
-const MAX_EXTRAPOLATE_S = 15 * 60; // older fixes are left where they are
+const MAX_EXTRAPOLATE_S = 60 * 60; // with a stop list, keep estimating this long after the last report
+const MAX_DEAD_RECKON_S = 20 * 60; // without one, keep moving at the last speed this long
+const MAX_SPEED_MPS = 72;          // ~160 mph: no train here runs faster
+const MIN_CAP_MPS = 40;            // ~90 mph: a train leaving a station may be well below its line speed
+const DWELL_S = 60;                // assumed stop at each station
 export const SNAP_M = 1500;        // how far a train may be from track and still snap to it
 const OWN_TRACK_SLACK_M = 150;     // prefer the train's own railroad's track if about as close
 const CELL = 0.02;                 // spatial index cell, degrees
@@ -317,60 +323,57 @@ export function estimatePosition(t, rail, stationAt, now = Date.now()) {
   const from = [t.lon, t.lat];
   const fromSnap = rail?.snap(from, SNAP_M, t.agency);
 
-  // Next station the train is due at, if its feed lists stops with times.
-  let next = null;
-  if (t.stops?.length) {
-    // Stopped at (or creeping into) its next station: it's dwelling, leave it.
-    const upcoming = t.stops.find((s) => s.status !== "past" && stationAt(s.key));
-    if (upcoming && (t.speedMph || 0) < 5) {
-      const p = stationAt(upcoming.key);
-      if (dist(from, [p.lon, p.lat]) < 1500) return null;
-    }
-    for (const s of t.stops) {
-      if (s.status === "past") continue;
-      const time = Date.parse(s.time);
-      const pos = stationAt(s.key);
-      if (!pos || Number.isNaN(time)) continue;
-      if (time > t.updated - 60000) {
-        next = { time, pos: [pos.lon, pos.lat], name: s.name };
-        break;
-      }
-    }
+  // Upcoming stops with predicted times: the train runs through them in
+  // order, pausing DWELL_S at each, so it keeps moving continuously instead of
+  // waiting at its next station for the feed's next report.
+  const stops = [];
+  for (const s of t.stops || []) {
+    if (s.status === "past") continue;
+    const time = Date.parse(s.time);
+    const pos = stationAt(s.key);
+    if (!pos || Number.isNaN(time) || time < t.updated - 60000) continue;
+    stops.push({ time, pos: [pos.lon, pos.lat], name: s.name });
   }
 
-  // Never assume the train went faster than it plausibly could: a bit over its
-  // reported speed, but at least 60 mph (it may have just left a station).
-  const capMeters = age * Math.max(27, ((t.speedMph || 0) / 2.23694) * 1.3);
+  // How fast it may plausibly go: a bit over its reported speed, at least
+  // ~90 mph, never over ~160 mph. Predictions it can't make (a stale or
+  // optimistic stop list) are reached late instead of with a sprint.
+  const capMps = Math.min(MAX_SPEED_MPS, Math.max(MIN_CAP_MPS, ((t.speedMph || 0) / 2.23694) * 1.4));
 
-  if (next) {
-    const total = next.time - t.updated;
-    let f = total <= 0 ? 1 : Math.max(0, Math.min(1, (now - t.updated) / total));
-    const toSnap = rail?.snap(next.pos, SNAP_M, t.agency);
-    // A station hundreds of km away with a fix only minutes old means the stop
-    // list is off; don't trust it.
-    if (dist(from, next.pos) / Math.max(60, total / 1000) < 75) { // under ~170 mph
-      // Follow the track from the last fix to the station.
-      const path = rail?.route(fromSnap, toSnap, t.agency);
-      const span = path ? path.length : dist(from, next.pos);
-      if (span * f > capMeters) f = capMeters / span;
-      if (path && path.length > 0) {
-        const { point, bearing: b } = path.at(path.length * f);
-        return { lon: point[0], lat: point[1], bearing: b, basis: `due at ${next.name} ${f >= 1 ? "now" : "soon"}` };
+  if (stops.length) {
+    let prev = { pos: from, snap: fromSnap, depart: t.updated };
+    for (const stop of stops) {
+      const snap = rail?.snap(stop.pos, SNAP_M, t.agency);
+      const path = rail?.route(prev.snap, snap, t.agency);
+      const span = path?.length || dist(prev.pos, stop.pos);
+      // Arrive at the predicted time, unless that would take an implausible
+      // speed (a stop list that's off): then run at the speed limit instead.
+      const arrive = Math.max(stop.time, prev.depart + (span / capMps) * 1000);
+      if (now < arrive) {
+        const f = Math.max(0, (now - prev.depart) / Math.max(1, arrive - prev.depart));
+        if (path && path.length > 0) {
+          const { point, bearing: b } = path.at(path.length * f);
+          return { lon: point[0], lat: point[1], bearing: b, basis: `due at ${stop.name}` };
+        }
+        const p = onTrack(rail, lerp(prev.pos, stop.pos, f), t.agency);
+        return { lon: p[0], lat: p[1], bearing: bearing(prev.pos, stop.pos), basis: `due at ${stop.name}` };
       }
-      // Different track pieces (a junction in between): go straight, then
-      // settle onto the nearest track.
-      const p = onTrack(rail, lerp(from, next.pos, f), t.agency);
-      return { lon: p[0], lat: p[1], bearing: bearing(from, next.pos), basis: `due at ${next.name}` };
+      if (now < arrive + DWELL_S * 1000) {
+        const [lon, lat] = snap ? rail.at(snap.line, snap.along).point : stop.pos;
+        return { lon, lat, bearing: t.bearing, basis: `stopping at ${stop.name}` };
+      }
+      prev = { pos: stop.pos, snap, depart: arrive + DWELL_S * 1000 };
     }
+    // Past its last stop: it has arrived there.
+    const [lon, lat] = prev.snap ? rail.at(prev.snap.line, prev.snap.along).point : prev.pos;
+    return { lon, lat, bearing: t.bearing, basis: `arrived at ${stops[stops.length - 1].name}` };
   }
 
-  // Dead reckoning from speed and heading.
-  const mps = (t.speedMph || 0) / 2.23694;
+  // No stop list: dead-reckon at the last reported speed and heading, without
+  // slowing down, for up to MAX_DEAD_RECKON_S.
+  const mps = Math.min((t.speedMph || 0) / 2.23694, MAX_SPEED_MPS);
   if (mps < 1 || t.bearing == null) return null;
-  // Assume the train keeps its speed for a couple of minutes, then hedge
-  // (it may stop at a station or slow down), so long gaps don't fling it far.
-  const effective = age <= 120 ? age : 120 + (age - 120) * 0.5;
-  const meters = Math.min(mps * effective, capMeters);
+  const meters = mps * Math.min(age, MAX_DEAD_RECKON_S);
   if (fromSnap) {
     const forward = angleDiff(fromSnap.bearing, t.bearing) < 90;
     const along = fromSnap.along + (forward ? meters : -meters);

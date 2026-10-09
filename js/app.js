@@ -823,7 +823,7 @@ function renderLiveCount() {
     return;
   }
   const ago = Math.round((Date.now() - Math.max(...times)) / 1000);
-  $("live-count").textContent = `${n.toLocaleString()} trains moving · updated ${ago < 5 ? "just now" : ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}`;
+  $("live-count").textContent = `Tracking ${n.toLocaleString()} trains · updated ${ago < 5 ? "just now" : ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}`;
 }
 
 function renderCredits() {
