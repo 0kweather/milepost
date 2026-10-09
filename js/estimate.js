@@ -15,7 +15,8 @@
 
 const DEG = Math.PI / 180;
 const MAX_EXTRAPOLATE_S = 15 * 60; // older fixes are left where they are
-const SNAP_M = 400;                // how far a fix may be from track to snap
+export const SNAP_M = 1500;        // how far a train may be from track and still snap to it
+const OWN_TRACK_SLACK_M = 150;     // prefer the train's own railroad's track if about as close
 const CELL = 0.02;                 // spatial index cell, degrees
 
 function dist(a, b) {
@@ -44,7 +45,9 @@ export class RailIndex {
         if (coords.length < 2) continue;
         const cum = [0];
         for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + dist(coords[i - 1], coords[i]));
-        const li = this.lines.push({ coords, cum }) - 1;
+        const p = f.properties || {};
+        const nets = [p.a, p.b, p.c].filter(Boolean);
+        const li = this.lines.push({ coords, cum, nets }) - 1;
         for (let i = 0; i < coords.length - 1; i++) {
           const [x0, y0] = coords[i], [x1, y1] = coords[i + 1];
           for (let gx = Math.floor(Math.min(x0, x1) / CELL); gx <= Math.floor(Math.max(x0, x1) / CELL); gx++) {
@@ -59,8 +62,11 @@ export class RailIndex {
     }
   }
 
-  // Closest point on any rail line: { line, along (meters), dist, bearing }.
-  snap(p, maxM = SNAP_M) {
+  // Closest point on the rail network: { line, along (meters), dist, bearing }.
+  // With a network id, that railroad's own track wins if it's nearly as close
+  // (so an LIRR train at Penn Station doesn't land on the NJ Transit track).
+  snap(p, maxM = SNAP_M, net = null) {
+    let own = null;
     const gx = Math.floor(p[0] / CELL), gy = Math.floor(p[1] / CELL);
     let best = null;
     for (let dx = -1; dx <= 1; dx++) {
@@ -76,13 +82,14 @@ export class RailIndex {
           const t = len2 ? Math.max(0, Math.min(1, (px * ax + py * ay) / len2)) : 0;
           const q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
           const d = dist(p, q);
-          if (d <= maxM && (!best || d < best.dist)) {
-            best = { line: li, along: cum[i] + (cum[i + 1] - cum[i]) * t, dist: d, bearing: bearing(a, b) };
-          }
+          if (d > maxM) continue;
+          const hit = () => ({ line: li, along: cum[i] + (cum[i + 1] - cum[i]) * t, dist: d, bearing: bearing(a, b) });
+          if (!best || d < best.dist) best = hit();
+          if (net && this.lines[li].nets.includes(net) && (!own || d < own.dist)) own = hit();
         }
       }
     }
-    return best;
+    return own && own.dist <= (best?.dist ?? Infinity) + OWN_TRACK_SLACK_M ? own : best;
   }
 
   // Point and travel bearing at a distance along a line (clamped to its ends).
@@ -107,8 +114,8 @@ export class RailIndex {
   }
 }
 
-function onTrack(rail, p) {
-  const snap = rail?.snap(p);
+function onTrack(rail, p, net = null) {
+  const snap = rail?.snap(p, SNAP_M, net);
   return snap ? rail.at(snap.line, snap.along).point : p;
 }
 
@@ -118,12 +125,22 @@ function lerp(a, b, f) {
 
 // Returns { lat, lon, bearing, basis } for "now", or null to leave the train
 // at its reported position.
+// The reported position, moved onto the nearest track (no time correction).
+export function snapToTrack(t, rail) {
+  const s = rail?.snap([t.lon, t.lat], SNAP_M, t.agency);
+  if (!s) return null;
+  const { point, bearing: b } = rail.at(s.line, s.along);
+  // Keep the feed's heading, but line it up with the track it's on.
+  const bearingOut = t.bearing == null ? null : angleDiff(b, t.bearing) < 90 ? b : (b + 180) % 360;
+  return { lon: point[0], lat: point[1], bearing: bearingOut, basis: null };
+}
+
 export function estimatePosition(t, rail, stationAt, now = Date.now()) {
   if (t.estimated) return null; // already placed from the timetable
   const age = (now - t.updated) / 1000;
   if (!(age > 5) || age > MAX_EXTRAPOLATE_S) return null;
   const from = [t.lon, t.lat];
-  const fromSnap = rail?.snap(from);
+  const fromSnap = rail?.snap(from, SNAP_M, t.agency);
 
   // Next station the train is due at, if its feed lists stops with times.
   let next = null;
@@ -153,7 +170,7 @@ export function estimatePosition(t, rail, stationAt, now = Date.now()) {
   if (next) {
     const total = next.time - t.updated;
     let f = total <= 0 ? 1 : Math.max(0, Math.min(1, (now - t.updated) / total));
-    const toSnap = rail?.snap(next.pos, 800);
+    const toSnap = rail?.snap(next.pos, SNAP_M, t.agency);
     // A station hundreds of km away with a fix only minutes old means the stop
     // list is off; don't trust it.
     if (dist(from, next.pos) / Math.max(60, total / 1000) < 75) { // under ~170 mph
@@ -170,7 +187,7 @@ export function estimatePosition(t, rail, stationAt, now = Date.now()) {
       }
       // Different track pieces (a junction in between): go straight, then
       // settle onto the nearest track.
-      const p = onTrack(rail, lerp(from, next.pos, f));
+      const p = onTrack(rail, lerp(from, next.pos, f), t.agency);
       return { lon: p[0], lat: p[1], bearing: bearing(from, next.pos), basis: `due at ${next.name}` };
     }
   }
@@ -191,6 +208,6 @@ export function estimatePosition(t, rail, stationAt, now = Date.now()) {
   const R = 6371000;
   const lat = t.lat + ((meters * Math.cos(t.bearing * DEG)) / R) / DEG;
   const lon = t.lon + ((meters * Math.sin(t.bearing * DEG)) / (R * Math.cos(t.lat * DEG))) / DEG;
-  const [x, y] = onTrack(rail, [lon, lat]);
+  const [x, y] = onTrack(rail, [lon, lat], t.agency);
   return { lat: y, lon: x, bearing: t.bearing, basis: "speed and heading" };
 }

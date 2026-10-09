@@ -617,6 +617,8 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 
 .maplibregl-popup-tip { display: none; }
 .hover-card .t { font-weight: 650; }
+.rail-net { display: flex; align-items: center; gap: 7px; font-size: 12.5px; line-height: 1.6; }
+.rail-net .dot { width: 14px; height: 4px; border-radius: 2px; }
 .hover-card .s { color: var(--muted); font-size: 12px; }
 
 .toast {

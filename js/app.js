@@ -1,6 +1,7 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
 import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js?v=dev";
-import { RailIndex, estimatePosition } from "./estimate.js?v=dev";
+import { RailIndex, estimatePosition, snapToTrack } from "./estimate.js?v=dev";
+import { NETWORKS, networkColor } from "./networks.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -126,9 +127,9 @@ function addImages() {
 function themeColors() {
   return theme === "dark"
     ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
-        stationFill: "#1c1f24", stationText: "#b9bfc8" }
+        stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85 }
     : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)",
-        stationFill: "#ffffff", stationText: "#4a505a" };
+        stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8 };
 }
 
 function addLayers() {
@@ -136,31 +137,36 @@ function addLayers() {
   const colors = themeColors();
   const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
 
-  // Passenger rail network (USDOT NTAD), visible at every zoom. Lines with
-  // Amtrak service draw a little heavier than commuter-only lines.
+  // Passenger rail network (USDOT NTAD), colored by the railroads that run on
+  // each stretch. Track shared by several railroads (up to three) is drawn as
+  // parallel strands, one color each, centered on the real alignment.
   map.addSource("rail", { type: "geojson", data: "data/rail.geojson?v=dev", tolerance: 0.6 });
-  const railWidth = (extra = 0) => ["interpolate", ["linear"], ["zoom"],
-    3, ["case", ["==", ["get", "k"], "a"], 1.1 + extra, 0.7 + extra],
-    7, ["case", ["==", ["get", "k"], "a"], 1.8 + extra, 1.3 + extra],
-    12, ["case", ["==", ["get", "k"], "a"], 3.2 + extra, 2.6 + extra]];
+  const STRAND = [[3, 1], [6, 1.6], [9, 2.4], [12, 3.4], [15, 5]]; // [zoom, strand width px]
+  const byZoom = (f) => ["interpolate", ["linear"], ["zoom"], ...STRAND.flatMap(([z, w]) => [z, f(w)])];
   map.addLayer({
     id: "tt-rail-casing",
     type: "line",
     source: "rail",
     minzoom: 6,
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": colors.railCasing, "line-width": railWidth(2) },
+    paint: { "line-color": colors.railCasing, "line-width": byZoom((w) => ["+", ["*", ["get", "n"], w], 2]) },
   }, firstSymbol);
-  map.addLayer({
-    id: "tt-rail",
-    type: "line",
-    source: "rail",
-    layout: { "line-join": "round", "line-cap": "round" },
-    paint: {
-      "line-color": ["case", ["==", ["get", "k"], "a"], colors.rail, colors.railCommuter],
-      "line-width": railWidth(),
-    },
-  }, firstSymbol);
+  ["a", "b", "c"].forEach((prop, slot) => {
+    map.addLayer({
+      id: `tt-rail-${slot}`,
+      type: "line",
+      source: "rail",
+      filter: [">", ["get", "n"], slot],
+      layout: { "line-join": "round", "line-cap": "butt" },
+      paint: {
+        "line-color": networkColor(prop),
+        "line-opacity": colors.railOpacity,
+        "line-width": byZoom((w) => w),
+        // Strand i of n sits (i - (n-1)/2) strand-widths off the centerline.
+        "line-offset": byZoom((w) => ["*", ["-", slot, ["/", ["-", ["get", "n"], 1], 2]], w]),
+      },
+    }, firstSymbol);
+  });
   // Other tracks (freight, yards) from the basemap, faintly, when zoomed in.
   map.addLayer({
     id: "tt-rail-other",
@@ -389,21 +395,46 @@ function redrawStations() {
   map.getSource("stations")?.setData(stationCollection());
 }
 
-// Where to draw a train: its estimated position in live-estimate mode,
-// otherwise exactly what the feed reported.
+// Where to draw a train: on the nearest track, and in live-estimate mode
+// moved forward to where it most likely is now. Falls back to exactly what
+// the feed reported (e.g., VIA trains in Canada, beyond the rail data).
 function targetOf(t) {
-  return (state.estimate && state.est.get(t.id)) || t;
+  return state.est.get(t.id) || t;
+}
+
+// Snapping depends only on the reported position, so cache it per train.
+const snapCache = new Map(); // id -> { lat, lon, result }
+function snapped(t) {
+  const c = snapCache.get(t.id);
+  if (c && c.lat === t.lat && c.lon === t.lon) return c.result;
+  const result = snapToTrack(t, state.rail);
+  snapCache.set(t.id, { lat: t.lat, lon: t.lon, result });
+  return result;
 }
 
 function computeEstimates() {
   state.est.clear();
-  if (!state.estimate) return;
   const stationAt = (key) => state.stopPos.get(key);
   const now = Date.now();
   for (const t of state.trains.values()) {
-    const e = estimatePosition(t, state.rail, stationAt, now);
+    const e = (state.estimate && estimatePosition(t, state.rail, stationAt, now)) || snapped(t);
     if (e) state.est.set(t.id, e);
   }
+  for (const id of snapCache.keys()) if (!state.trains.has(id)) snapCache.delete(id);
+}
+
+let railLoading = null;
+function loadRail() {
+  railLoading ??= fetch("data/rail.geojson?v=dev")
+    .then((r) => r.json())
+    .then((geojson) => {
+      state.rail = new RailIndex(geojson);
+      snapCache.clear();
+      computeEstimates();
+      animateTo();
+    })
+    .catch((err) => console.warn("rail index", err)); // trains stay at reported positions
+  return railLoading;
 }
 
 // Slides markers from where they're drawn to where they should be.
@@ -506,6 +537,7 @@ async function poll(src, attempt = 0) {
 }
 
 async function start() {
+  loadRail();
   if (state.estimate) setEstimate(true);
   loadStations()
     .then((stations) => {
@@ -572,6 +604,7 @@ function tick() {
       if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: every, easing: (x) => x });
     }
   } else if (moved) {
+    computeEstimates(); // re-snap the timetable-placed trains that moved
     animateTo();
   }
 }
@@ -583,13 +616,7 @@ async function setEstimate(on) {
   state.estimate = on;
   store.set("tt-estimate", on);
   setChecked("estimate-toggle", on);
-  if (on && !state.rail) {
-    try {
-      state.rail = new RailIndex(await (await fetch("data/rail.geojson?v=dev")).json());
-    } catch (err) {
-      console.warn("rail index", err); // still estimates, just in straight lines
-    }
-  }
+  await loadRail();
   computeEstimates();
   animateTo();
   renderAll();
@@ -771,10 +798,10 @@ function renderDetail() {
     ["Speed", t.speedMph != null && !t.estimated ? `${Math.round(t.speedMph)} mph` : null],
     ["Heading", t.bearing != null ? HEADINGS[Math.round(t.bearing / 45) % 8] : null],
     ["Departed", t.departedOn],
-    ["Position", state.est.get(t.id)
+    ["Position", state.est.get(t.id)?.basis
       ? `Estimated now (${state.est.get(t.id).basis})`
       : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`],
-    ["Last report", state.est.get(t.id) ? fmtAgo(t.updated) : null],
+    ["Last report", state.est.get(t.id)?.basis ? fmtAgo(t.updated) : null],
     ["Equipment", t.detail],
   ].filter(([, v]) => v);
   const stops = t.stops?.length
@@ -1035,6 +1062,26 @@ function setFollow(on) {
 
 const canHover = matchMedia("(hover: hover)").matches;
 const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: "hover-card" });
+
+// Hovering a track names the railroads that run on it.
+const RAIL_LAYERS = ["tt-rail-0", "tt-rail-1", "tt-rail-2"];
+map.on("mousemove", (e) => {
+  if (!canHover || !map.getLayer("tt-rail-0")) return;
+  const box = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
+  if (map.queryRenderedFeatures(box, { layers: ["tt-trains", ...STATION_LAYERS].filter((l) => map.getLayer(l)) }).length) return;
+  const rail = map.queryRenderedFeatures(box, { layers: RAIL_LAYERS })[0];
+  if (!rail) {
+    if (popup._railHover) popup.remove();
+    popup._railHover = false;
+    return;
+  }
+  const nets = ["a", "b", "c"].map((k) => rail.properties[k]).filter(Boolean);
+  popup
+    .setLngLat(e.lngLat)
+    .setHTML(nets.map((n) => `<div class="rail-net"><span class="dot" style="background:${NETWORKS[n]?.color || "#8d95a3"}"></span>${esc(NETWORKS[n]?.name || "Commuter rail")}</div>`).join(""))
+    .addTo(map);
+  popup._railHover = true;
+});
 
 const STATION_LAYERS = ["tt-stations-major", "tt-stations-minor", "tt-station-labels"];
 
