@@ -938,7 +938,7 @@ function fmtAgo(ms) {
   return `${Math.round(s / 3600)} h ago`;
 }
 
-const HEADINGS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 // ---------- Service notices ----------
 
