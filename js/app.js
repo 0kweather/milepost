@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 // cached page) must never stop the trains from loading.
 const on = (id, type, fn) => $(id)?.addEventListener(type, fn);
 const setChecked = (id, value) => { const el = $(id); if (el) el.checked = value; };
-// A milepost plate: the train's number on a white sign, railroad color on top.
+// Milepost plate: a train's number on a white sign, railroad color on top.
 const plate = (text, color, size = "") => `<span class="plate ${size}" style="--c:${color}"><span>${esc(text)}</span></span>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const store = {
@@ -86,28 +86,27 @@ map.touchZoomRotate.disableRotation();
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 map.addControl(new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 10 } }), "bottom-right");
 
-// Marker images are drawn on a canvas once per railroad and kind: a white
-// body with a ring in the railroad's color (so a train stands out from track
-// of the same color), plus a heading pointer when the feed gives a bearing.
-// Intercity trains get a colored center.
+// Marker images are drawn on a canvas once per agency color: a dot for trains
+// with no known heading, and a dot with a pointer for trains that have one.
 function markerImage(color, withArrow, intercity) {
   const ratio = 2, size = 44, c = document.createElement("canvas");
   c.width = c.height = size * ratio;
   const g = c.getContext("2d");
   g.scale(ratio, ratio);
-  const cx = size / 2, cy = size / 2, r = 8;
+  const cx = size / 2, cy = size / 2, r = 7.5;
   g.lineJoin = "round";
-  g.shadowColor = "rgba(0,0,0,0.35)";
+  g.shadowColor = "rgba(0,0,0,0.3)";
   g.shadowBlur = 3;
   g.shadowOffsetY = 0.5;
   if (withArrow) {
-    // Pointer just ahead of the body, facing north; MapLibre rotates it.
+    // Chevron just ahead of the dot, pointing north; MapLibre rotates it.
     g.beginPath();
-    g.moveTo(cx, cy - r - 9.5);
-    g.lineTo(cx + 6, cy - r - 0.5);
-    g.lineTo(cx - 6, cy - r - 0.5);
+    g.moveTo(cx, cy - r - 9);
+    g.lineTo(cx + 6.5, cy - r - 1);
+    g.lineTo(cx, cy - r - 3.5);
+    g.lineTo(cx - 6.5, cy - r - 1);
     g.closePath();
-    g.lineWidth = 2.5;
+    g.lineWidth = 3;
     g.strokeStyle = "#fff";
     g.stroke();
     g.fillStyle = color;
@@ -115,16 +114,21 @@ function markerImage(color, withArrow, intercity) {
   }
   g.beginPath();
   g.arc(cx, cy, r, 0, Math.PI * 2);
-  g.fillStyle = color;
+  g.fillStyle = "#fff";
   g.fill();
   g.shadowColor = "transparent";
   g.beginPath();
-  g.arc(cx, cy, r - 3, 0, Math.PI * 2);
-  g.fillStyle = "#fff";
+  g.arc(cx, cy, r - 2, 0, Math.PI * 2);
+  g.fillStyle = color;
   g.fill();
   if (intercity) {
+    // Amtrak, VIA and Brightline: a white ring around a colored center dot.
     g.beginPath();
-    g.arc(cx, cy, 2.2, 0, Math.PI * 2);
+    g.arc(cx, cy, r - 3.6, 0, Math.PI * 2);
+    g.fillStyle = "#fff";
+    g.fill();
+    g.beginPath();
+    g.arc(cx, cy, 2.1, 0, Math.PI * 2);
     g.fillStyle = color;
     g.fill();
   }
@@ -251,38 +255,6 @@ function addLayers() {
     },
   }, firstSymbol);
 
-  // The selected train's route ahead: from where it is now through its
-  // remaining stops, along the track, in its railroad's color.
-  map.addSource("route-ahead", { type: "geojson", data: routeAheadCollection() });
-  map.addLayer({
-    id: "tt-route-casing",
-    type: "line",
-    source: "route-ahead",
-    filter: ["==", ["geometry-type"], "LineString"],
-    layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": colors.halo, "line-width": ["interpolate", ["linear"], ["zoom"], 4, 5, 12, 10] },
-  });
-  map.addLayer({
-    id: "tt-route",
-    type: "line",
-    source: "route-ahead",
-    filter: ["==", ["geometry-type"], "LineString"],
-    layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 4, 2.5, 12, 6] },
-  });
-  map.addLayer({
-    id: "tt-route-stops",
-    type: "circle",
-    source: "route-ahead",
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 2.5, 12, 6],
-      "circle-color": colors.stationFill,
-      "circle-stroke-color": ["get", "color"],
-      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 1.5, 12, 3],
-    },
-  });
-
   // Stations sit under the trains. Intercity stops appear from regional zoom,
   // commuter stops once you're looking at a metro area.
   map.addSource("stations", { type: "geojson", data: stationCollection() });
@@ -383,8 +355,7 @@ function addLayers() {
       "icon-rotate": ["get", "bearing"],
       "icon-rotation-alignment": "map",
       "icon-allow-overlap": true,
-      // Trains always draw, but station names placed after them avoid them.
-      "icon-ignore-placement": false,
+      "icon-ignore-placement": true,
       "symbol-sort-key": ["get", "drawOrder"],
     },
     paint: { "icon-opacity": ["case", ["get", "stale"], 0.45, 1] },
@@ -435,7 +406,7 @@ function addLayers() {
 
 map.on("style.load", addLayers);
 
-// ---- 8. Map chrome: start with the attribution folded into its ⓘ button ----
+// Start with the attribution folded into its ⓘ button.
 map.once("load", () => {
   const attrib = document.querySelector(".maplibregl-ctrl-attrib");
   attrib?.classList.remove("maplibregl-compact-show");
@@ -629,7 +600,6 @@ function loadRail() {
       snapStations();
       computeEstimates();
       animateTo();
-      updateRouteAhead();
     })
     .catch((err) => console.warn("rail index", err)); // trains stay at reported positions
   return railLoading;
@@ -714,7 +684,6 @@ function mergeTrains() {
   computeEstimates();
   animateTo();
   checkTracked();
-  if (state.selected) updateRouteAhead();
   renderAll();
   if (state.follow && state.selected) {
     const t = state.trains.get(state.selected);
@@ -827,7 +796,6 @@ function tick() {
   if (state.estimate) {
     computeEstimates();
     animateTo(every, true);
-    if (state.selected) updateRouteAhead();
     if (state.follow && state.selected) {
       const t = state.trains.get(state.selected);
       if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: every, easing: (x) => x });
@@ -866,39 +834,42 @@ function agencyCounts() {
 
 function renderAgencies() {
   const counts = agencyCounts();
-  const chips = { intercity: [], commuter: [], off: [] };
+  const rows = { intercity: [], commuter: [], off: [] };
   for (const src of SOURCES) {
     const avail = sourceAvailability(src);
     const st = state.sourceStatus[src.id];
     for (const id of src.agencies) {
       const a = AGENCIES[id];
       if (!avail.ok) {
-        chips.off.push(`<div class="rr-chip unavailable" style="--c:${a.color}" title="${esc(avail.reason)}">
-            <div class="rr-toggle"><span class="rr-name">${esc(a.short.length <= 12 ? a.short : a.name)}</span><span class="rr-region">${esc(a.region)} · ${esc(avail.reason)}</span></div>
+        rows.off.push(`
+          <div class="agency unavailable" style="--swatch:${a.color}" title="${esc(avail.reason)}">
+            <span class="check"></span>
+            <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)} · ${esc(avail.reason)}</span></span>
+            <span></span>
           </div>`);
         continue;
       }
       const off = state.hidden.has(id);
-      let count = `<span class="rr-count">${counts[id] || 0}</span>`;
-      if (st?.status === "loading") count = '<span class="rr-count"><span class="skel skel-num"></span></span>';
-      else if (st?.status === "error" && !counts[id]) count = `<span class="rr-count err" title="${esc(st.error)}">offline</span>`;
-      chips[a.kind].push(`<div class="rr-chip ${off ? "off" : ""}" style="--c:${a.color}">
-          <button class="rr-toggle" data-toggle="${id}" aria-pressed="${!off}" title="${esc(a.name)}" aria-label="${esc(a.name)}: ${off ? "hidden" : "shown"}, ${counts[id] || 0} trains">
-            <span class="rr-name">${esc(a.short.length <= 12 ? a.short : a.name)}</span>
-            <span class="rr-region">${esc(a.region)}</span>
+      let count = `<span class="count">${counts[id] || 0}</span>`;
+      if (st?.status === "loading") count = '<span class="count">…</span>';
+      else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline</span>`;
+      rows[a.kind].push(`
+        <div class="agency-row">
+          <button class="agency ${off ? "off" : ""}" data-toggle="${id}" style="--swatch:${a.color}" aria-pressed="${!off}">
+            <span class="check">${CHECK}</span>
+            <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)}</span></span>
             ${count}
           </button>
-          <button class="rr-zoom" data-zoom="${id}" title="Show ${esc(a.short)} on the map" aria-label="Show ${esc(a.name)} on the map">${ZOOM}</button>
+          <button class="zoom" data-zoom="${id}" title="Show ${esc(a.short)} trains" aria-label="Zoom to ${esc(a.name)}">${ZOOM}</button>
         </div>`);
     }
   }
-  const grid = (list) => `<div class="rr-grid">${list.join("")}</div>`;
   const showIntercity = state.kind !== "commuter", showCommuter = state.kind !== "intercity";
   $("agencies").innerHTML =
-    (showIntercity ? `<div class="group-title">Intercity</div>${grid(chips.intercity)}` : "") +
-    (showCommuter ? `<div class="group-title">Commuter &amp; regional</div>${grid(chips.commuter)}` : "") +
-    (chips.off.length
-      ? `<div class="group-title">Not connected yet</div>${grid(chips.off)}
+    (showIntercity ? `<div class="group-title">Intercity</div>${rows.intercity.join("")}` : "") +
+    (showCommuter ? `<div class="group-title">Commuter &amp; regional</div>${rows.commuter.join("")}` : "") +
+    (rows.off.length
+      ? `<div class="group-title">Not connected yet</div>${rows.off.join("")}
          <p class="note">These railroads publish live data, but it has to be fetched through a small relay server${RELAY ? " or with a free developer key" : ""}. See the README to switch them on.</p>`
       : "");
 }
@@ -970,7 +941,7 @@ function renderResults() {
     const sub = [t.destination && `to ${t.destination}`, t.nextStop && !t.destination && `next ${t.nextStop}`, t.departedOn && `left ${t.departedOn}`]
       .filter(Boolean).join(" · ") || a.region;
     return `<button class="result" data-select="${esc(t.id)}">
-      ${plate(t.number || a.short, a.color)}
+      <span class="badge" style="background:${a.color}">${esc(t.number || a.short)}</span>
       <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc(a.short)} · ${esc(sub)}</span></span>
       ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : ""}
     </button>`;
@@ -1020,8 +991,9 @@ function noticesHtml(t) {
   const list = state.notices.id === t.id ? state.notices.list : [];
   if (!list.length) return "";
   return `<div class="notices">
+    <h3 class="section-title">Service notices</h3>
     ${list.map((n) => `<div class="notice">
-      <span class="notice-icon" aria-hidden="true"><b>!</b></span>
+      <span class="notice-icon" aria-hidden="true">!</span>
       <div class="notice-body">
         <p class="notice-head">${esc(n.header)}</p>
         ${n.description && n.description !== n.header
@@ -1047,63 +1019,42 @@ function renderDetail() {
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
   const est = state.est.get(t.id);
-  const meta = [
+  const chips = [
+    t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
     t.speedMph != null && !t.estimated ? `<strong>${Math.round(t.speedMph)}</strong> mph` : null,
     t.bearing != null ? `Heading <strong>${HEADINGS[Math.round(t.bearing / 45) % 8]}</strong>` : null,
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
-    est?.basis ? `Estimated now · report ${fmtAgo(t.updated)}` : `${t.estimated ? "Timetable position" : "GPS"} · ${fmtAgo(t.updated)}`,
+    est?.basis ? `Estimated now · ${esc(est.basis)}` : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
+    est?.basis ? `Last report ${fmtAgo(t.updated)}` : null,
     t.detail ? esc(t.detail) : null,
   ].filter(Boolean);
   const stops = t.stops?.length
     ? `<h3 class="section-title">Stops</h3><div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s) => {
-        // Predicted time, with the scheduled one struck through when they differ.
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
-        const time = fmtTime(s.time, s.tz);
-        const sched = lateMin > 1 ? `<s>${fmtTime(s.scheduled, s.tz)}</s>` : "";
-        return `<li class="${s.status}"><span>${esc(s.name)}</span><span class="time ${lateMin > 1 && s.status !== "past" ? "late" : ""}">${sched}${time}</span></li>`;
+        const late = lateMin > 1
+          ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
+          : "";
+        return `<li class="${s.status}"><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`
     : "";
   const keepScroll = el.scrollTop;
   el.innerHTML = `
     <div class="hero">
-      <div class="rr-label" style="--c:${a.color}"><i></i>${esc(a.name)}</div>
-      <div class="hero-title">${plate(t.number || a.short, a.color, "lg")}<h2>${esc(trainTitle(t))}</h2></div>
+      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
+      <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${esc(trainTitle(t))}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
         ${t.statusText ? `<span class="pill ${statusClass(t)}">${esc(t.statusText)}</span>` : ""}
         ${trackButton(t)}
       </div>
     </div>
-    ${journeyHtml(t, lineColor)}
-    ${state.trackPicker === t.id ? `<div style="height:12px"></div>${trackPicker(t)}` : ""}
-    ${noticesHtml(t) ? `<h3 class="section-title">Service notices</h3>${noticesHtml(t)}` : ""}
-    ${meta.length ? `<ul class="meta">${meta.map((m) => `<li>${m}</li>`).join("")}</ul>` : ""}
+    ${state.trackPicker === t.id ? trackPicker(t) : ""}
+    ${noticesHtml(t)}
+    ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
   // Re-rendering replaces the content; keep the reader where they were.
   el.scrollTop = keepScroll;
-}
-
-// Where the train is between its last stop and its next one, by time.
-function journeyHtml(t, color) {
-  if (!t.stops?.length) {
-    return t.nextStop
-      ? `<div class="journey" style="--c:${color}"><div class="j-eta"><span class="where">Next stop <strong>${esc(t.nextStop)}</strong></span></div></div>`
-      : "";
-  }
-  const i = t.stops.findIndex((s) => s.status !== "past");
-  if (i < 0) return "";
-  const next = t.stops[i], prev = t.stops[i - 1];
-  const tn = Date.parse(next.time), tp = prev ? Date.parse(prev.time) : NaN;
-  let f = next.here ? 1 : tn > tp ? (Date.now() - tp) / (tn - tp) : 0.5;
-  f = Math.max(0.03, Math.min(0.97, Number.isFinite(f) ? f : 0.5));
-  const when = next.here ? "Now"
-    : `${fmtTime(next.time, next.tz)}<small>${tn > Date.now() ? `in ${fmtIn(tn)}` : "due"}</small>`;
-  return `<div class="journey" style="--c:${color}">
-    <div class="j-ends"><span>${esc(prev ? prev.name : t.origin || "")}</span><span>${esc(next.name)}</span></div>
-    <div class="j-bar" role="img" aria-label="${Math.round(f * 100)}% of the way to ${esc(next.name)}"><span style="width:${f * 100}%"></span><i style="left:${f * 100}%"></i></div>
-    <div class="j-eta"><span class="where">${next.here ? "At" : "Next stop"} <strong>${esc(next.name)}</strong></span><span class="when">${when}</span></div>
-  </div>`;
 }
 
 function fmtIn(ms) {
@@ -1124,7 +1075,7 @@ function departureRow({ id, color, badge, title, sub, time, tz, status, statusCl
     ? `<span class="when"><strong>${fmtTime(new Date(time).toISOString(), tz)}</strong><span>${fmtIn(time)}</span></span>`
     : '<span class="when"><strong>Next</strong><span>stop</span></span>';
   const inner = `${when}
-    ${plate(badge, color)}
+    ${plate(badge, color, "sm")}
     <span class="what"><span class="title">${esc(title)}</span><span class="sub">${esc(sub || "")}</span></span>
     ${status ? `<span class="status ${statusCls}">${esc(status)}</span>` : "<span></span>"}`;
   return id
@@ -1189,21 +1140,23 @@ function renderStation() {
 
   el.innerHTML = `
     <div class="hero">
-      <div class="rr-label" style="--c:${AGENCIES[st.agencies[0]].color}"><i></i>Station${st.place ? ` · ${esc(st.place)}` : ""}</div>
-      <div class="hero-title"><h2>${esc(st.name)}</h2></div>
+      <div class="agency-name" style="color:var(--muted)">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2c4 0 8 .5 8 4v9.5a3.5 3.5 0 0 1-3.5 3.5l1.5 1.5v.5h-2l-2-2h-4l-2 2H6v-.5L7.5 19A3.5 3.5 0 0 1 4 15.5V6c0-3.5 4-4 8-4Zm0 2c-3.5 0-5.5.5-6 1.5V10h12V5.5C17.5 4.5 15.5 4 12 4ZM7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
+        Station${st.place ? ` · ${esc(st.place)}` : ""}
+      </div>
+      <h2>${esc(st.name)}</h2>
     </div>
     <ul class="served">${lines}</ul>
     <h3 class="section-title">Next trains</h3>
     <div class="deps">
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
-        : loading ? '<span class="skel skel-row"></span><span class="skel skel-row"></span><span class="skel skel-row"></span>'
-        : '<p class="empty">No live trains are reporting a stop here right now.</p>'}
+        : `<p class="empty">${loading ? "Loading live departures…" : "No live trains are reporting a stop here right now."}</p>`}
     </div>
     ${nearby.length ? `<h3 class="section-title">Nearby trains</h3><div class="deps">${nearby.map(({ t, d }) => {
       const a = AGENCIES[t.agency];
       return `<button class="dep" data-select="${esc(t.id)}">
-        <span class="when"><strong>${(d / 1609).toFixed(d < 16090 ? 1 : 0)} mi</strong><span>away</span></span>
-        ${plate(t.number || a.short, a.color)}
+        <span class="when"><strong>${(d / 1609).toFixed(d < 16090 ? 1 : 0)}</strong><span>mi away</span></span>
+        ${plate(t.number || a.short, a.color, "sm")}
         <span class="what"><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><span class="sub">${esc([a.short, t.route].filter(Boolean).join(" · "))}</span></span>
         <span></span></button>`;
     }).join("")}</div>` : ""}
@@ -1374,10 +1327,10 @@ function renderTracked() {
       where = rec.stopName ? `to <strong>${esc(rec.stopName)}</strong>` : "";
       warn = `<span class="stale">Not reporting · last seen ${fmtAgo(rec.lastSeen)}</span>`;
     }
-    return `<div class="track-card" style="--c:${a.color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}" aria-label="Open ${esc(trainLabel(rec))}">
-      ${plate(rec.number || a.short, a.color)}
+    return `<div class="track-card" style="--c:${a.color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
+      <span class="bar"></span>
       <span class="tc-main">
-        <span class="tc-title">${esc(rec.route || trainLabel(rec))}</span>
+        <span class="tc-title"><strong>${esc(trainLabel(rec))}</strong>${rec.route ? ` · ${esc(rec.route)}` : ""}</span>
         ${where ? `<span class="tc-where">${where}</span>` : ""}
         ${status || warn ? `<span class="tc-status">${status}${warn}</span>` : ""}
       </span>
@@ -1386,7 +1339,6 @@ function renderTracked() {
   }).join("");
   // On phones, keep the cards visible when the sheet is collapsed.
   document.documentElement.style.setProperty("--tracked-h", `${el.hidden ? 0 : el.offsetHeight}px`);
-  if (sheetMode === "peek" && phoneNow()) setSheet("peek"); // tracked cards change the peek height
 }
 
 function openTracked(id) {
@@ -1419,60 +1371,6 @@ function applySelectionFilter() {
   map.setFilter("tt-label-selected", ["==", ["get", "id"], id]);
   map.setFilter("tt-labels", ["!=", ["get", "id"], id]);
   map.setFilter("tt-station-selected", ["==", ["get", "id"], state.station || ""]);
-  // With a train selected, the others step back.
-  map.setPaintProperty("tt-trains", "icon-opacity", id
-    ? ["case", ["==", ["get", "id"], id], 1, ["get", "stale"], 0.2, 0.35]
-    : ["case", ["get", "stale"], 0.45, 1]);
-  map.setPaintProperty("tt-labels", "text-opacity", id ? 0.45 : 1);
-  updateRouteAhead();
-  pulse(!!id);
-}
-
-// The selected train breathes slowly so it's easy to find again.
-let pulseRaf = null;
-function pulse(on) {
-  cancelAnimationFrame(pulseRaf);
-  if (!on || matchMedia("(prefers-reduced-motion: reduce)").matches || !map.getLayer("tt-halo")) return;
-  let last = 0;
-  const step = (now) => {
-    if (now - last > 50) {
-      last = now;
-      const k = (Math.sin(now / 450) + 1) / 2; // 0..1, ~2.8 s cycle
-      map.setPaintProperty("tt-halo", "circle-opacity", 0.12 + 0.18 * k);
-      map.setPaintProperty("tt-halo", "circle-stroke-opacity", 0.35 + 0.5 * k);
-    }
-    pulseRaf = requestAnimationFrame(step);
-  };
-  pulseRaf = requestAnimationFrame(step);
-}
-
-function routeAheadCollection() {
-  const empty = { type: "FeatureCollection", features: [] };
-  const t = state.selected && state.trains.get(state.selected);
-  if (!t || !state.rail || !t.stops?.length) return empty;
-  const color = t.routeColor || AGENCIES[t.agency].color;
-  const from = targetOf(t);
-  let prev = state.rail.snap([from.lon, from.lat], 1500, t.agency);
-  const coords = prev ? [state.rail.at(prev.line, prev.along).point] : [[from.lon, from.lat]];
-  const features = [];
-  for (const s of t.stops) {
-    if (s.status === "past") continue;
-    const p = state.stopPos.get(s.key);
-    if (!p) continue;
-    const snap = state.rail.snap([p.lon, p.lat], 1500, t.agency);
-    const point = snap ? state.rail.at(snap.line, snap.along).point : [p.lon, p.lat];
-    const path = prev && snap ? state.rail.route(prev, snap, t.agency) : null;
-    if (path) coords.push(...path.coords.slice(1));
-    else coords.push(point); // a gap in the track data: a short straight piece
-    features.push({ type: "Feature", geometry: { type: "Point", coordinates: point }, properties: { color } });
-    prev = snap || prev;
-  }
-  if (coords.length > 1) features.unshift({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { color } });
-  return { type: "FeatureCollection", features };
-}
-
-function updateRouteAhead() {
-  map.getSource("route-ahead")?.setData(routeAheadCollection());
 }
 
 function setUrlSelection() {
@@ -1485,15 +1383,8 @@ function setUrlSelection() {
 }
 
 function showDetailView(open) {
-  const view = $(open ? "view-train" : "view-list");
-  const wasHidden = view.hidden;
   $("view-list").hidden = open;
   $("view-train").hidden = !open;
-  if (wasHidden) {
-    view.classList.remove("enter");
-    void view.offsetWidth; // restart the animation
-    view.classList.add("enter");
-  }
   $("follow-btn").hidden = !state.selected;
   delete $("train-detail").dataset.scrollTop;
   $("train-detail").scrollTop = 0;
@@ -1523,7 +1414,7 @@ function select(id, { fly = true } = {}) {
       duration: 900,
     });
   }
-  if (isPhone) setSheet("half");
+  if (isPhone) setSheet("");
 }
 
 let predictionTimer;
@@ -1557,7 +1448,7 @@ function selectStation(id, { fly = true } = {}) {
   if (fly) {
     map.flyTo({ center: [stationPos(st).lon, stationPos(st).lat], zoom: Math.max(map.getZoom(), 12), padding: panelPadding(), duration: 900 });
   }
-  if (isPhone) setSheet("half");
+  if (isPhone) setSheet("");
 }
 
 function closeDetail() {
@@ -1571,8 +1462,8 @@ function closeDetail() {
 }
 
 function panelPadding() {
-  if (phoneNow()) return { bottom: sheetPx(), top: 0, left: 0, right: 0 };
-  return { left: 376, top: 0, bottom: 0, right: 0 };
+  if (matchMedia("(max-width: 720px)").matches) return { bottom: window.innerHeight * 0.46, top: 0, left: 0, right: 0 };
+  return { left: 360, top: 0, bottom: 0, right: 0 };
 }
 
 function setFollow(on) {
@@ -1744,7 +1635,7 @@ on("follow-btn", "click", () => {
 on("search", "input", (e) => {
   state.query = e.target.value;
   renderResults();
-  if (isPhone && state.query) setSheet("full");
+  if (isPhone && state.query) setSheet("expanded");
 });
 on("search", "keydown", (e) => {
   if (e.key === "Enter") $("results").querySelector("[data-select]")?.click();
@@ -1788,7 +1679,7 @@ on("agencies", "click", (e) => {
     const b = new maplibregl.LngLatBounds();
     for (const t of pts) b.extend([t.lon, t.lat]);
     map.fitBounds(b, { padding: { ...panelPadding(), top: 60, right: 60, bottom: Math.max(60, panelPadding().bottom), left: Math.max(60, panelPadding().left + 40) }, maxZoom: 10, duration: 900 });
-    if (isPhone) setSheet("peek");
+    if (isPhone) setSheet("collapsed");
   }
 });
 
@@ -1860,66 +1751,18 @@ applyTheme();
 setChecked("stations-toggle", state.showStations);
 setChecked("estimate-toggle", state.estimate);
 
-// Phone bottom sheet with three heights: "peek" (just the search bar, so the
-// map shows), "half" and "full". Drag the handle to resize; let go and it
-// settles on the nearest height. Tapping the handle steps through them.
-const phoneNow = () => matchMedia("(max-width: 720px)").matches;
-const SHEET_HEIGHTS = {
-  peek: () => 80 + ($("tracked")?.offsetHeight || 0), // handle + search bar (+ tracked cards)
-  half: () => Math.round(innerHeight * 0.52),
-  full: () => Math.round(innerHeight * 0.88),
-};
-let sheetMode = "peek";
-
-function sheetPx() {
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sheet-h")) || SHEET_HEIGHTS[sheetMode]();
-}
-
+// Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
-  if (!SHEET_HEIGHTS[mode]) mode = "half";
-  sheetMode = mode;
-  document.documentElement.style.setProperty("--sheet-h", `${SHEET_HEIGHTS[mode]()}px`);
+  const p = $("panel");
+  p.classList.toggle("collapsed", mode === "collapsed");
+  p.classList.toggle("expanded", mode === "expanded");
+  document.body.classList.toggle("sheet-collapsed", mode === "collapsed");
+  document.body.classList.toggle("sheet-expanded", mode === "expanded");
 }
-
-(() => {
-  const handle = $("sheet-handle"), panel = $("panel");
-  if (!handle || !panel) return;
-  let startY = 0, startH = 0, moved = false;
-  handle.addEventListener("pointerdown", (e) => {
-    if (!phoneNow()) return;
-    startY = e.clientY;
-    startH = panel.getBoundingClientRect().height;
-    moved = false;
-    panel.classList.add("dragging");
-    handle.setPointerCapture(e.pointerId);
-  });
-  handle.addEventListener("pointermove", (e) => {
-    if (!panel.classList.contains("dragging")) return;
-    const dy = startY - e.clientY;
-    if (Math.abs(dy) > 4) moved = true;
-    const h = Math.max(SHEET_HEIGHTS.peek(), Math.min(SHEET_HEIGHTS.full(), startH + dy));
-    document.documentElement.style.setProperty("--sheet-h", `${h}px`);
-  });
-  const end = () => {
-    if (!panel.classList.contains("dragging")) return;
-    panel.classList.remove("dragging");
-    if (!moved) {
-      setSheet({ peek: "half", half: "full", full: "peek" }[sheetMode]);
-      return;
-    }
-    const h = panel.getBoundingClientRect().height;
-    const nearest = Object.entries(SHEET_HEIGHTS).sort((x, y) => Math.abs(x[1]() - h) - Math.abs(y[1]() - h))[0][0];
-    setSheet(nearest);
-  };
-  handle.addEventListener("pointerup", end);
-  handle.addEventListener("pointercancel", end);
-  handle.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowUp") setSheet(sheetMode === "peek" ? "half" : "full");
-    if (e.key === "ArrowDown") setSheet(sheetMode === "full" ? "half" : "peek");
-  });
-  addEventListener("resize", () => phoneNow() && setSheet(sheetMode));
-  if (phoneNow()) setSheet("peek");
-})();
+on("sheet-handle", "click", () => {
+  const p = $("panel");
+  setSheet(p.classList.contains("collapsed") ? "" : p.classList.contains("expanded") ? "collapsed" : "expanded");
+});
 
 let toastTimer;
 function toast(msg) {

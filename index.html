@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Milepost</title>
   <meta name="description" content="Live map of passenger trains across the United States — Amtrak, Brightline and commuter railroads in one place.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='14.5' y='22' width='3' height='9' fill='%23121417'/%3E%3Crect x='7' y='2' width='18' height='22' rx='2.5' fill='white' stroke='%23121417' stroke-width='2'/%3E%3Crect x='8' y='3' width='16' height='4' fill='%23f2a40c'/%3E%3Crect x='11' y='11' width='10' height='3' rx='1' fill='%23121417'/%3E%3Crect x='11' y='16.5' width='10' height='3' rx='1' fill='%23121417'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f5fad'/%3E%3Ccircle cx='16' cy='16' r='6' fill='white'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <link rel="stylesheet" href="css/style.css?v=dev">
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -17,8 +14,8 @@
 <body>
   <div id="map" aria-label="Map of live train positions"></div>
 
-  <aside id="panel" class="panel glass" aria-label="Trains">
-    <button class="sheet-handle" id="sheet-handle" aria-label="Resize panel (drag, or tap to step through sizes)"></button>
+  <aside id="panel" class="panel" aria-label="Trains">
+    <button class="sheet-handle" id="sheet-handle" aria-label="Expand or collapse panel"></button>
 
     <!-- Trains being tracked: always visible, above everything else -->
     <div id="tracked" class="tracked" aria-label="Tracked trains" hidden></div>
@@ -44,6 +41,14 @@
       <div id="results" class="results" hidden></div>
       <div id="agencies" class="agencies"></div>
 
+      <footer class="foot">
+        <details>
+          <summary>About the data</summary>
+          <p>Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
+          <p id="credits"></p>
+          <p><a href="https://github.com/0kweather/milepost">Source on GitHub</a></p>
+        </details>
+      </footer>
     </section>
 
     <!-- Train detail view -->
@@ -53,7 +58,7 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="m14.7 5.3 1.4 1.4L10.8 12l5.3 5.3-1.4 1.4L8 12z"/></svg>
           All trains
         </button>
-        <button class="icon-btn" id="follow-btn" title="Keep this train centered" aria-label="Keep this train centered on the map" aria-pressed="false">
+        <button class="icon-btn" id="follow-btn" title="Keep this train centered" aria-pressed="false">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm-1-6h2v3.06A7 7 0 0 1 18.94 11H22v2h-3.06A7 7 0 0 1 13 18.94V22h-2v-3.06A7 7 0 0 1 5.06 13H2v-2h3.06A7 7 0 0 1 11 5.06Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
         </button>
       </div>
@@ -61,8 +66,7 @@
     </section>
   </aside>
 
-  <div id="settings-menu" class="menu glass" role="dialog" aria-label="Settings" hidden>
-    <div class="wordmark"><span class="plate" style="--c:var(--signal)"><span>MP</span></span>Milepost</div>
+  <div id="settings-menu" class="menu" role="dialog" aria-label="Settings" hidden>
     <div class="menu-title">Appearance</div>
     <div class="segmented" id="theme-choice">
       <button data-theme-choice="auto">Auto</button>
@@ -80,15 +84,9 @@
       <span class="switch" aria-hidden="true"></span>
       <span class="toggle-text"><strong>Show stations</strong><span>Station markers and names on the map</span></span>
     </label>
-    <div class="menu-title">About the data</div>
-    <div class="about">
-      <p>Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
-      <p id="credits"></p>
-      <p><a href="https://github.com/0kweather/milepost" target="_blank" rel="noopener">Source on GitHub</a></p>
-    </div>
   </div>
 
-  <div id="toast" class="toast glass" role="status" aria-live="polite" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <script type="module" src="js/app.js?v=dev"></script>
 </body>

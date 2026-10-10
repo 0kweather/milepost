@@ -28,10 +28,6 @@ Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't 
 
 ## Using it
 
-- **Design:** "Signal" — train numbers on white milepost plates, a condensed signage typeface (Barlow Condensed) for numbers, times and headings with Inter for text, frosted-glass panels, and one signal-amber accent for focus and live states (railroad colors are reserved for data). Built on a small token system (4 px spacing, three radii, six type sizes) with 4.5:1 text contrast, 40–44 px touch targets, visible keyboard focus, and solid panels / no animation for people who ask for reduced transparency or motion.
-- **Selecting a train** draws its route ahead along the track through its remaining stops and dims the other trains; the selected train pulses gently. Its page shows a journey bar (progress from the last stop to the next, with a countdown), compact facts, service notices, and every stop with predicted times (scheduled times struck through when they differ).
-- **Phone:** the panel is a bottom sheet with three heights (search bar only, half, full); drag the handle or tap it to step through them.
-
 - **Stations:** every station on these railroads is on the map (intercity stops from regional zoom, commuter stops once you zoom into a metro area). Click one, or search for it, to see which railroads and lines serve it and the next trains due, with live predicted times and delays. Stations shared by several railroads, like New York Penn or Boston South Station, appear as one stop. MBTA stations show the MBTA's own live predictions. For railroads whose feeds don't list stops, the panel shows the trains nearby.
 - **Settings** (gear button): light/dark/auto appearance, **Estimate live location**, and **Show stations**.
 - **Estimate live location**: feeds report positions anywhere from seconds to about 10 minutes late, and Amtrak's are the slowest. With this on, each train moves forward from its last report to where it most likely is now:
@@ -46,7 +42,7 @@ Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't 
 - **Main line only.** Yard tracks, sidings and spurs are left out (from both the passenger network and the basemap), so big terminals don't turn into a tangle.
 - Zoomed out, trains are plain dots so the map stays readable; names appear once you zoom in, and labels that would overlap are hidden instead of piling up.
 - Search by train number, line, or city. Click a train for its status, next stop, speed and full stop list. The URL updates so you can share a specific train.
-- Railroads appear as chips with live train counts: tap one to show or hide it (track included), or its pin to zoom to its trains. Filter to intercity or commuter.
+- Toggle railroads on or off and filter to intercity or commuter.
 
 ## Running locally
 
