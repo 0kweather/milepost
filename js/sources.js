@@ -104,6 +104,7 @@ function parseAmtraker(json) {
         delayMin,
         statusText: delayText(delayMin),
         updated: Date.parse(t.lastValTS) || Date.now(),
+        alerts: (t.alerts || []).map((a) => a.message).filter(Boolean), // official notices for this train
         // Long-distance trains run for days, so the same number can be on the map twice.
         departedOn: departureDay(stations[0]),
         stops: stations.map((s) => ({
@@ -143,6 +144,8 @@ function parseMbta(json) {
     out.push(train({
       id: `mbta:${v.id}`,
       agency: "mbta",
+      routeId,
+      tripId: v.relationships.trip?.data?.id || null,
       number: trip?.attributes?.name || a.label,
       route: MBTA_ROUTES[routeId] || routeId.replace(/^CR-/, "").replace(/([a-z])([A-Z])/g, "$1 $2") + " Line",
       routeColor: "#80276c",
@@ -241,6 +244,8 @@ function parseMta(agency, buf, meta) {
     out.push(train({
       id: `${agency}:${tripId}`,
       agency,
+      routeId: tu.trip.routeId || null,
+      tripId,
       number,
       route: route ? route[0] : null,
       routeColor: route ? route[1] : null,

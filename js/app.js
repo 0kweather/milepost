@@ -2,6 +2,7 @@ import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v
 import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js?v=dev";
 import { RailIndex, estimatePosition, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
+import { trainNotices } from "./notices.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -43,6 +44,7 @@ const state = {
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
   tracked: store.get("tt-tracked", []),
   trackPicker: null,     // train id whose "where are you headed?" picker is open
+  notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   trackQuery: "",        // what's typed in the picker's station search
   trackActive: 0,        // highlighted match (arrow keys)
   est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
@@ -948,6 +950,41 @@ function fmtAgo(ms) {
 
 const HEADINGS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
 
+// ---------- Service notices ----------
+
+const NOTICE_REFRESH_MS = 2 * 60 * 1000;
+
+function loadNotices(t) {
+  const n = state.notices;
+  if (n.id === t.id && Date.now() - n.at < NOTICE_REFRESH_MS) return;
+  state.notices = { id: t.id, list: n.id === t.id ? n.list : [], at: Date.now() };
+  trainNotices(t)
+    .then((list) => {
+      if (state.notices.id !== t.id) return;
+      state.notices.list = list;
+      if (state.selected === t.id) renderDetail();
+    })
+    .catch((err) => console.warn("notices", err));
+}
+
+function noticesHtml(t) {
+  const list = state.notices.id === t.id ? state.notices.list : [];
+  if (!list.length) return "";
+  return `<div class="notices">
+    <h3 class="section-title">Service notices</h3>
+    ${list.map((n) => `<div class="notice">
+      <span class="notice-icon" aria-hidden="true">!</span>
+      <div class="notice-body">
+        <p class="notice-head">${esc(n.header)}</p>
+        ${n.description && n.description !== n.header
+          ? `<details><summary>More</summary><p>${esc(n.description).replace(/\n+/g, "<br>")}</p></details>` : ""}
+        ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">Details</a>` : ""}
+        ${n.scope === "line" && t.route ? `<span class="notice-scope">${esc(t.route)}</span>` : ""}
+      </div>
+    </div>`).join("")}
+  </div>`;
+}
+
 function renderDetail() {
   if (state.station) return renderStation();
   // Feed updates redraw the panel; don't wipe what the rider is typing.
@@ -958,6 +995,7 @@ function renderDetail() {
     el.innerHTML = '<p class="empty">This train isn’t reporting right now. It may have finished its trip.</p>';
     return;
   }
+  loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
   const facts = [
@@ -990,6 +1028,7 @@ function renderDetail() {
       ${trackButton(t)}
     </div>
     ${state.trackPicker === t.id ? trackPicker(t) : ""}
+    ${noticesHtml(t)}
     ${facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
