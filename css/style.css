@@ -363,6 +363,7 @@ a { color: var(--accent); }
 }
 
 .menu .segmented { margin: var(--s2) var(--s2) var(--s1); }
+.segmented.two { grid-template-columns: repeat(2, 1fr); }
 .menu .toggle { margin: 2px 0; }
 
 /* ---------- Toggle ---------- */

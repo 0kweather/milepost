@@ -41,6 +41,9 @@ const state = {
   station: null,         // selected station id
   predictions: null,     // live MBTA predictions for the selected station
   showStations: store.get("tt-stations", true),
+  // Miles or kilometers. The default follows the browser's language: miles in
+  // the few countries that still use them, kilometers everywhere else.
+  units: store.get("tt-units", /-(US|GB|LR|MM)\b/i.test(navigator.language || "en-US") ? "mi" : "km"),
   // Trains the viewer is following (saved in the browser):
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
   tracked: store.get("tt-tracked", []),
@@ -940,6 +943,16 @@ function fmtAgo(ms) {
 
 const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
+// Speed and distance in the chosen units.
+const KM_PER_MI = 1.609344;
+const speedText = (mph) => state.units === "km"
+  ? `<strong>${Math.round(mph * KM_PER_MI)}</strong> km/h`
+  : `<strong>${Math.round(mph)}</strong> mph`;
+function distanceParts(meters) {
+  const v = state.units === "km" ? meters / 1000 : meters / (KM_PER_MI * 1000);
+  return { value: v.toFixed(v < 10 ? 1 : 0), unit: state.units === "km" ? "km" : "mi" };
+}
+
 // ---------- Service notices ----------
 
 const NOTICE_REFRESH_MS = 2 * 60 * 1000;
@@ -990,7 +1003,7 @@ function renderDetail() {
   const lineColor = t.routeColor || a.color;
   const chips = [
     t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
-    t.speedMph != null && !t.estimated ? `<strong>${Math.round(t.speedMph)}</strong> mph` : null,
+    t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
     t.bearing != null ? `Heading <strong>${HEADINGS[Math.round(t.bearing / 45) % 8]}</strong>` : null,
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
     `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
@@ -1123,7 +1136,7 @@ function renderStation() {
     ${nearby.length ? `<h3 class="section-title">Nearby trains</h3><div class="deps">${nearby.map(({ t, d }) => {
       const a = AGENCIES[t.agency];
       return `<button class="dep" data-select="${esc(t.id)}">
-        <span class="when"><strong>${(d / 1609).toFixed(d < 16090 ? 1 : 0)}</strong><span>mi away</span></span>
+        <span class="when"><strong>${distanceParts(d).value}</strong><span>${distanceParts(d).unit} away</span></span>
         ${plate(t.number || a.short, a.color, "sm")}
         <span class="what"><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><span class="sub">${esc([a.short, t.route].filter(Boolean).join(" · "))}</span></span>
         <span></span></button>`;
@@ -1684,6 +1697,18 @@ on("theme-choice", "click", (e) => {
   applyTheme();
 });
 
+function applyUnits() {
+  for (const b of $("units-choice")?.children || []) b.setAttribute("aria-pressed", String(b.dataset.units === state.units));
+}
+on("units-choice", "click", (e) => {
+  const b = e.target.closest("[data-units]");
+  if (!b) return;
+  state.units = b.dataset.units;
+  store.set("tt-units", state.units);
+  applyUnits();
+  renderAll();
+});
+
 function setShowStations(on) {
   state.showStations = on;
   store.set("tt-stations", on);
@@ -1716,6 +1741,7 @@ document.addEventListener("keydown", (e) => e.key === "Escape" && toggleMenu(fal
 map.on("movestart", () => toggleMenu(false));
 
 applyTheme();
+applyUnits();
 setChecked("stations-toggle", state.showStations);
 
 // Phone bottom sheet: collapsed / normal / expanded.
