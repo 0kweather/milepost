@@ -137,7 +137,51 @@ function markerImage(color, withArrow, intercity) {
   return { image: g.getImageData(0, 0, c.width, c.height), ratio };
 }
 
+// A rounded tag that stretches around a label: the callout for whatever is
+// selected. One per railroad color, plus one for stations.
+function tagImage(fill) {
+  const ratio = 2, w = 48, h = 36, c = document.createElement("canvas");
+  c.width = w * ratio;
+  c.height = h * ratio;
+  const g = c.getContext("2d");
+  g.scale(ratio, ratio);
+  g.shadowColor = "rgba(0,0,0,0.28)";
+  g.shadowBlur = 4;
+  g.shadowOffsetY = 1;
+  g.beginPath();
+  g.roundRect(4, 3, w - 8, h - 8, 9);
+  g.fillStyle = fill;
+  g.fill();
+  return {
+    image: g.getImageData(0, 0, c.width, c.height),
+    options: {
+      pixelRatio: ratio,
+      stretchX: [[14 * ratio, 34 * ratio]],
+      stretchY: [[13 * ratio, 18 * ratio]],
+      content: [11 * ratio, 6 * ratio, 37 * ratio, 25 * ratio],
+    },
+  };
+}
+
+// Dark text on light railroad colors (Brightline yellow), white on the rest.
+function inkOn(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? "#16181c" : "#ffffff";
+}
+
 function addImages() {
+  for (const [id, a] of Object.entries(AGENCIES)) {
+    const tag = `tt-tag-${id}`;
+    if (!map.hasImage(tag)) {
+      const { image, options } = tagImage(a.color);
+      map.addImage(tag, image, options);
+    }
+  }
+  if (!map.hasImage("tt-tag-station")) {
+    const { image, options } = tagImage(theme === "dark" ? "#eceef1" : "#1b1d21");
+    map.addImage("tt-tag-station", image, options);
+  }
   for (const [id, a] of Object.entries(AGENCIES)) {
     for (const arrow of [true, false]) {
       const name = `tt-${id}-${arrow ? "arrow" : "dot"}`;
@@ -284,16 +328,33 @@ function addLayers() {
     filter: ["get", "major"],
     paint: stationPaint(["interpolate", ["linear"], ["zoom"], 4.5, 1.8, 8, 3.6, 12, 6, 15, 8]),
   });
+  // Selected station: a ping, a soft shadow, then a white disc ringed in the
+  // station's color, lifted above the map.
+  const stationSel = ["==", ["get", "id"], ""];
+  map.addLayer({
+    id: "tt-station-ping",
+    type: "circle",
+    source: "stations",
+    filter: stationSel,
+    paint: { "circle-radius": 10, "circle-color": "transparent", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": 0 },
+  });
+  map.addLayer({
+    id: "tt-station-shadow",
+    type: "circle",
+    source: "stations",
+    filter: stationSel,
+    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 9, 12, 14], "circle-color": "#000", "circle-opacity": 0.22, "circle-blur": 0.9, "circle-translate": [0, 1] },
+  });
   map.addLayer({
     id: "tt-station-selected",
     type: "circle",
     source: "stations",
-    filter: ["==", ["get", "id"], ""],
+    filter: stationSel,
     paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 7, 12, 12],
-      "circle-color": "transparent",
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 6, 12, 10],
+      "circle-color": colors.stationFill,
       "circle-stroke-color": ["get", "color"],
-      "circle-stroke-width": 3,
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 2.5, 12, 3.5],
     },
   });
   // Station names (most of the basemap's place names are hidden): the
@@ -326,24 +387,71 @@ function addLayers() {
     },
   });
 
+  map.addLayer({
+    id: "tt-station-selected-label",
+    type: "symbol",
+    source: "stations",
+    filter: stationSel,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 13,
+      "text-anchor": "bottom",
+      "text-offset": [0, -1.6],
+      "icon-image": "tt-tag-station", // fitted around the text, so it moves with it
+      "icon-text-fit": "both",
+      "icon-text-fit-padding": [3, 8, 3, 8],
+      "text-allow-overlap": true,
+      "icon-allow-overlap": true,
+      "text-ignore-placement": true,
+      "icon-ignore-placement": true,
+    },
+    paint: { "text-color": theme === "dark" ? "#16181c" : "#ffffff" },
+  });
+
+  // A selected terminal's outline is drawn bolder.
+  map.addLayer({
+    id: "tt-footprint-selected",
+    type: "line",
+    source: "footprints",
+    filter: stationSel,
+    layout: { "line-join": "round" },
+    paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 3.5] },
+  }, "tt-station-ping");
+
   map.addSource("trains", { type: "geojson", data: featureCollection() });
 
   // Intercity trains draw a little larger than commuter trains.
   const sized = (v) => ["*", ["case", ["get", "intercity"], 1.12, 1], v];
   const iconSize = ["interpolate", ["linear"], ["zoom"], 2, sized(0.5), 5, sized(0.68), 8, sized(0.85), 12, sized(1)];
 
+  // Selected train: a ping, a soft shadow and a white disc ringed in its
+  // railroad's color under the marker, so it looks lifted off the map.
+  const trainSel = ["==", ["get", "id"], ""];
+  map.addLayer({
+    id: "tt-ping",
+    type: "circle",
+    source: "trains",
+    filter: trainSel,
+    paint: { "circle-radius": 12, "circle-color": "transparent", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": 0 },
+  });
+  map.addLayer({
+    id: "tt-halo-shadow",
+    type: "circle",
+    source: "trains",
+    filter: trainSel,
+    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 12, 8, 17, 12, 20], "circle-color": "#000", "circle-opacity": 0.25, "circle-blur": 0.9, "circle-translate": [0, 1.5] },
+  });
   map.addLayer({
     id: "tt-halo",
     type: "circle",
     source: "trains",
-    filter: ["==", ["get", "id"], ""],
+    filter: trainSel,
     paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 11, 8, 17, 12, 21],
-      "circle-color": ["get", "color"],
-      "circle-opacity": 0.22,
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 9, 8, 13, 12, 16],
+      "circle-color": "#ffffff",
       "circle-stroke-color": ["get", "color"],
-      "circle-stroke-width": 2,
-      "circle-stroke-opacity": 0.7,
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 2, 2, 12, 3],
     },
   });
 
@@ -398,9 +506,21 @@ function addLayers() {
     id: "tt-label-selected",
     type: "symbol",
     source: "trains",
-    filter: ["==", ["get", "id"], ""],
-    layout: { ...labelLayout, "text-allow-overlap": true, "text-ignore-placement": true },
-    paint: labelPaint,
+    filter: trainSel,
+    layout: {
+      ...labelLayout,
+      "text-size": 13,
+      "text-variable-anchor": ["left", "right", "top", "bottom"],
+      "text-radial-offset": 1.6,
+      "icon-image": ["concat", "tt-tag-", ["get", "agency"]],
+      "icon-text-fit": "both",
+      "icon-text-fit-padding": [3, 8, 3, 8],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+    paint: { "text-color": ["get", "ink"] },
   });
 
   applySelectionFilter();
@@ -444,6 +564,7 @@ function featureCollection() {
         id: t.id,
         agency: t.agency,
         color: AGENCIES[t.agency].color,
+        ink: inkOn(AGENCIES[t.agency].color),
         label: labelFor(t),
         // Second label line, shown when zoomed in; skipped if the label already names the line.
         subtitle: t.number && t.route ? t.route : "",
@@ -1347,11 +1468,45 @@ function renderAll() {
 
 function applySelectionFilter() {
   if (!map.getLayer("tt-halo")) return;
-  const id = state.selected || "";
-  map.setFilter("tt-halo", ["==", ["get", "id"], id]);
-  map.setFilter("tt-label-selected", ["==", ["get", "id"], id]);
+  const id = state.selected || "", sid = state.station || "";
+  for (const l of ["tt-ping", "tt-halo-shadow", "tt-halo", "tt-label-selected"]) map.setFilter(l, ["==", ["get", "id"], id]);
   map.setFilter("tt-labels", ["!=", ["get", "id"], id]);
-  map.setFilter("tt-station-selected", ["==", ["get", "id"], state.station || ""]);
+  for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-station-selected-label", "tt-footprint-selected"]) {
+    map.setFilter(l, ["==", ["get", "id"], sid]);
+  }
+  map.setFilter("tt-station-labels", ["!=", ["get", "id"], sid]); // the callout replaces its plain label
+  ping(Boolean(id || sid));
+}
+
+// A ring that expands and fades from the selected train or station every
+// couple of seconds, like a signal. A still ring if motion is reduced.
+let pingRaf = null;
+function ping(on) {
+  cancelAnimationFrame(pingRaf);
+  const layers = ["tt-ping", "tt-station-ping"].filter((l) => map.getLayer(l));
+  if (!on || !layers.length) return;
+  const zoomR = () => 9 + Math.max(0, Math.min(1, (map.getZoom() - 2) / 10)) * 7; // matches the disc
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    for (const l of layers) {
+      map.setPaintProperty(l, "circle-radius", zoomR() + 6);
+      map.setPaintProperty(l, "circle-stroke-opacity", 0.45);
+    }
+    return;
+  }
+  let last = 0;
+  const step = (now) => {
+    if (now - last > 33 && !document.hidden) {
+      last = now;
+      const k = (now % 2200) / 2200; // 0 → 1 every 2.2 s
+      const e = 1 - (1 - k) ** 3;     // ease out
+      for (const l of layers) {
+        map.setPaintProperty(l, "circle-radius", zoomR() + 2 + e * 18);
+        map.setPaintProperty(l, "circle-stroke-opacity", 0.7 * (1 - k));
+      }
+    }
+    pingRaf = requestAnimationFrame(step);
+  };
+  pingRaf = requestAnimationFrame(step);
 }
 
 function setUrlSelection() {
