@@ -1018,6 +1018,7 @@ function renderDetail() {
         return `<li class="${s.status}"><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`
     : "";
+  const keepScroll = el.scrollTop;
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
@@ -1032,13 +1033,8 @@ function renderDetail() {
     ${facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
-  // Re-rendering replaces the list, so keep the reader's scroll position;
-  // the first time, center the next stop.
-  const list = el.querySelector(".stops-scroll");
-  const next = el.querySelector(".stops li.next");
-  if (list && el.dataset.scrollTop != null) list.scrollTop = +el.dataset.scrollTop;
-  else if (list && next) list.scrollTop = Math.max(0, next.offsetTop - list.clientHeight / 2);
-  list?.addEventListener("scroll", () => (el.dataset.scrollTop = list.scrollTop));
+  // Re-rendering replaces the content; keep the reader where they were.
+  el.scrollTop = keepScroll;
 }
 
 function fmtIn(ms) {

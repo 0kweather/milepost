@@ -628,23 +628,21 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 
 .back:hover { background: var(--hover); }
 
+/* The whole train page scrolls as one piece; content fades out at the
+   panel's top and bottom edges instead of sliding under a heading. */
 #train-detail {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 16px;
+  overscroll-behavior: contain;
+  padding: 10px 16px 24px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 24px), transparent 100%);
 }
 
-.stops-scroll {
-  position: relative;
-  flex: 1 1 160px;
-  min-height: 160px;
-  overflow-y: auto;
-  margin: 0 -16px;
-  padding: 0 16px 12px;
-}
+.stops-scroll { position: relative; flex: none; }
 
 .hero, .facts, .estimate-note { flex: none; }
 .hero { padding: 6px 0 14px; border-bottom: 1px solid var(--line); }
