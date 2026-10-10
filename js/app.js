@@ -163,19 +163,54 @@ function tagImage(fill) {
   };
 }
 
-// Dark text on light railroad colors (Brightline yellow), white on the rest.
-function inkOn(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return lum > 0.6 ? "#16181c" : "#ffffff";
+// The selected train's callout: a milepost plate like the one in the panel,
+// white with a black outline and the railroad's color across the top. It
+// stretches sideways to fit the number.
+function plateImage(color) {
+  const ratio = 2, w = 40, h = 40, c = document.createElement("canvas");
+  c.width = w * ratio;
+  c.height = h * ratio;
+  const g = c.getContext("2d");
+  g.scale(ratio, ratio);
+  const x = 3, y = 2, pw = 34, ph = 34, band = 5;
+  g.save();
+  g.shadowColor = "rgba(0,0,0,0.3)";
+  g.shadowBlur = 4;
+  g.shadowOffsetY = 1;
+  g.beginPath();
+  g.roundRect(x, y, pw, ph, 5);
+  g.fillStyle = "#fff";
+  g.fill();
+  g.restore();
+  g.save();
+  g.beginPath();
+  g.roundRect(x, y, pw, ph, 5);
+  g.clip();
+  g.fillStyle = color;
+  g.fillRect(x, y, pw, band);
+  g.restore();
+  g.beginPath();
+  g.roundRect(x + 0.75, y + 0.75, pw - 1.5, ph - 1.5, 4.5);
+  g.lineWidth = 1.5;
+  g.strokeStyle = "#121417";
+  g.stroke();
+  return {
+    image: g.getImageData(0, 0, c.width, c.height),
+    options: {
+      pixelRatio: ratio,
+      stretchX: [[10 * ratio, 30 * ratio]],
+      stretchY: [[16 * ratio, 26 * ratio]],
+      content: [8 * ratio, (y + band + 2) * ratio, 32 * ratio, (y + ph - 3) * ratio],
+    },
+  };
 }
 
 function addImages() {
   for (const [id, a] of Object.entries(AGENCIES)) {
-    const tag = `tt-tag-${id}`;
-    if (!map.hasImage(tag)) {
-      const { image, options } = tagImage(a.color);
-      map.addImage(tag, image, options);
+    const name = `tt-plate-${id}`;
+    if (!map.hasImage(name)) {
+      const { image, options } = plateImage(a.color);
+      map.addImage(name, image, options);
     }
   }
   if (!map.hasImage("tt-tag-station")) {
@@ -198,6 +233,22 @@ function themeColors() {
         stationFill: "#1c1f24", stationText: "#b9bfc8", railOpacity: 0.85, footprintOpacity: 0.18, stateBorder: "rgba(160,170,185,0.35)" }
     : { text: "#1b1d21", halo: "rgba(255,255,255,0.95)", rail: "#5d6675", railCommuter: "#8d95a3", railCasing: "rgba(255,255,255,0.9)",
         stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1, stateBorder: "rgba(90,100,115,0.35)" };
+}
+
+// The selected train's white rim: a hair larger than the marker's body, so the
+// heading arrow starts at its edge and points out past it at every zoom.
+// Mirrors the marker's icon-size.
+const DISC_STOPS = [[2, 0.5], [5, 0.68], [8, 0.85], [12, 1]].map(([z, k]) => [z, 7.5 * k * 1.12 + 1.5]);
+function discRadius(extra = 0) {
+  return ["interpolate", ["linear"], ["zoom"], ...DISC_STOPS.flatMap(([z, r]) => [z, r + extra])];
+}
+function discRadiusAt(z) {
+  const s = DISC_STOPS;
+  if (z <= s[0][0]) return s[0][1];
+  for (let i = 1; i < s.length; i++) {
+    if (z <= s[i][0]) return s[i - 1][1] + ((z - s[i - 1][0]) / (s[i][0] - s[i - 1][0])) * (s[i][1] - s[i - 1][1]);
+  }
+  return s[s.length - 1][1];
 }
 
 function addLayers() {
@@ -387,27 +438,6 @@ function addLayers() {
     },
   });
 
-  map.addLayer({
-    id: "tt-station-selected-label",
-    type: "symbol",
-    source: "stations",
-    filter: stationSel,
-    layout: {
-      "text-field": ["get", "name"],
-      "text-font": ["Noto Sans Bold"],
-      "text-size": 13,
-      "text-anchor": "bottom",
-      "text-offset": [0, -1.6],
-      "icon-image": "tt-tag-station", // fitted around the text, so it moves with it
-      "icon-text-fit": "both",
-      "icon-text-fit-padding": [3, 8, 3, 8],
-      "text-allow-overlap": true,
-      "icon-allow-overlap": true,
-      "text-ignore-placement": true,
-      "icon-ignore-placement": true,
-    },
-    paint: { "text-color": theme === "dark" ? "#16181c" : "#ffffff" },
-  });
 
   // A selected terminal's outline is drawn bolder.
   map.addLayer({
@@ -440,7 +470,7 @@ function addLayers() {
     type: "circle",
     source: "trains",
     filter: trainSel,
-    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 12, 8, 17, 12, 20], "circle-color": "#000", "circle-opacity": 0.25, "circle-blur": 0.9, "circle-translate": [0, 1.5] },
+    paint: { "circle-radius": discRadius(2.5), "circle-color": "#000", "circle-opacity": 0.25, "circle-blur": 0.9, "circle-translate": [0, 1.5] },
   });
   map.addLayer({
     id: "tt-halo",
@@ -448,10 +478,10 @@ function addLayers() {
     source: "trains",
     filter: trainSel,
     paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 9, 8, 13, 12, 16],
+      "circle-radius": discRadius(),
       "circle-color": "#ffffff",
       "circle-stroke-color": ["get", "color"],
-      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 2, 2, 12, 3],
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 2, 1.5, 12, 2],
     },
   });
 
@@ -508,20 +538,46 @@ function addLayers() {
     source: "trains",
     filter: trainSel,
     layout: {
-      ...labelLayout,
+      "text-field": ["get", "plate"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 16,
+      "text-anchor": "left",
+      "text-offset": [1.9, 0],
+      "icon-image": ["concat", "tt-plate-", ["get", "agency"]], // fitted around the number
+      "icon-text-fit": "both",
+      "icon-text-fit-padding": [1, 6, 1, 6],
+      // Always shown, and other labels placed after it move out of its way.
+      "text-allow-overlap": true,
+      "icon-allow-overlap": true,
+      "text-ignore-placement": false,
+      "icon-ignore-placement": false,
+    },
+    paint: { "text-color": "#121417" },
+  });
+
+  map.addLayer({
+    id: "tt-station-selected-label",
+    type: "symbol",
+    source: "stations",
+    filter: stationSel,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": ["Noto Sans Bold"],
       "text-size": 13,
-      "text-variable-anchor": ["left", "right", "top", "bottom"],
-      "text-radial-offset": 1.6,
-      "icon-image": ["concat", "tt-tag-", ["get", "agency"]],
+      "text-anchor": "bottom",
+      "text-offset": [0, -2.2],
+      "icon-image": "tt-tag-station", // fitted around the text, so it moves with it
       "icon-text-fit": "both",
       "icon-text-fit-padding": [3, 8, 3, 8],
       "text-allow-overlap": true,
-      "text-ignore-placement": true,
       "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
+      // Always shown, and other labels placed after it move out of its way.
+      "text-ignore-placement": false,
+      "icon-ignore-placement": false,
     },
-    paint: { "text-color": ["get", "ink"] },
+    paint: { "text-color": theme === "dark" ? "#16181c" : "#ffffff" },
   });
+
 
   applySelectionFilter();
 }
@@ -564,7 +620,7 @@ function featureCollection() {
         id: t.id,
         agency: t.agency,
         color: AGENCIES[t.agency].color,
-        ink: inkOn(AGENCIES[t.agency].color),
+        plate: t.number || AGENCIES[t.agency].short,
         label: labelFor(t),
         // Second label line, shown when zoomed in; skipped if the label already names the line.
         subtitle: t.number && t.route ? t.route : "",
@@ -1478,17 +1534,19 @@ function applySelectionFilter() {
   ping(Boolean(id || sid));
 }
 
-// A ring that expands and fades from the selected train or station every
-// couple of seconds, like a signal. A still ring if motion is reduced.
+// A ring that grows and fades from the selected train or station, then
+// rests before the next one. It fades in as it starts, so there's no visible
+// jump back to the small size. A still ring if motion is reduced.
 let pingRaf = null;
+const PING_MS = 1800, PING_REST_MS = 900;
 function ping(on) {
   cancelAnimationFrame(pingRaf);
   const layers = ["tt-ping", "tt-station-ping"].filter((l) => map.getLayer(l));
   if (!on || !layers.length) return;
-  const zoomR = () => 9 + Math.max(0, Math.min(1, (map.getZoom() - 2) / 10)) * 7; // matches the disc
+  const base = () => discRadiusAt(map.getZoom());
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     for (const l of layers) {
-      map.setPaintProperty(l, "circle-radius", zoomR() + 6);
+      map.setPaintProperty(l, "circle-radius", base() + 6);
       map.setPaintProperty(l, "circle-stroke-opacity", 0.45);
     }
     return;
@@ -1497,11 +1555,13 @@ function ping(on) {
   const step = (now) => {
     if (now - last > 33 && !document.hidden) {
       last = now;
-      const k = (now % 2200) / 2200; // 0 → 1 every 2.2 s
-      const e = 1 - (1 - k) ** 3;     // ease out
+      const t = now % (PING_MS + PING_REST_MS);
+      const k = Math.min(1, t / PING_MS);
+      const grow = 1 - (1 - k) ** 3; // ease out
+      const opacity = t > PING_MS ? 0 : 0.7 * Math.min(1, k / 0.15) * (1 - k);
       for (const l of layers) {
-        map.setPaintProperty(l, "circle-radius", zoomR() + 2 + e * 18);
-        map.setPaintProperty(l, "circle-stroke-opacity", 0.7 * (1 - k));
+        map.setPaintProperty(l, "circle-radius", base() + 2 + grow * 18);
+        map.setPaintProperty(l, "circle-stroke-opacity", opacity);
       }
     }
     pingRaf = requestAnimationFrame(step);
