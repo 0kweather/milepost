@@ -1,20 +1,9 @@
-// "Estimate live location": moves each train from where its feed last saw it
-// to where it most likely is now.
-//
-// Feeds report positions anywhere from seconds to ~10 minutes late (Amtrak's
-// GPS updates are the slowest). For each train we pick the best evidence:
-//
-//  1. Predicted arrival at the next station (Amtrak, VIA, Brightline, LIRR,
-//     Metro-North): the train must cover the distance from its last fix to
-//     that station by the predicted time, so slide it that fraction of the way.
-//  2. Speed and heading (most GPS feeds): dead-reckon forward for the time
-//     since the fix, slowing the assumed speed the longer we extrapolate.
-//
-// Either way the train moves along the actual track (USDOT rail lines) rather
-// than in a straight line, and it never runs past the next station it's due at.
+// Rail geometry for the map: a spatial index over the passenger rail lines,
+// snapping train and station positions onto the nearest track, and
+// shortest-path routing along the track (so trains placed from the timetable
+// and slide animations follow the rails instead of cutting across curves).
 
 const DEG = Math.PI / 180;
-const MAX_EXTRAPOLATE_S = 15 * 60; // older fixes are left where they are
 export const SNAP_M = 1500;        // how far a train may be from track and still snap to it
 const OWN_TRACK_SLACK_M = 150;     // prefer the train's own railroad's track if about as close
 const CELL = 0.02;                 // spatial index cell, degrees
@@ -278,17 +267,6 @@ export class RailIndex {
   }
 }
 
-function onTrack(rail, p, net = null) {
-  const snap = rail?.snap(p, SNAP_M, net);
-  return snap ? rail.at(snap.line, snap.along).point : p;
-}
-
-function lerp(a, b, f) {
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-}
-
-// Returns { lat, lon, bearing, basis } for "now", or null to leave the train
-// at its reported position.
 // The reported position, moved onto the nearest track (no time correction).
 export function snapToTrack(t, rail) {
   // Trains placed from the timetable (no GPS) are somewhere between two
@@ -299,7 +277,7 @@ export function snapToTrack(t, rail) {
     const path = rail.route(a, b, t.agency);
     if (path && path.length > 0) {
       const { point, bearing: br } = path.at(path.length * t.leg.f);
-      return { lon: point[0], lat: point[1], bearing: br, basis: null };
+      return { lon: point[0], lat: point[1], bearing: br };
     }
   }
   const s = rail?.snap([t.lon, t.lat], SNAP_M, t.agency);
@@ -307,79 +285,5 @@ export function snapToTrack(t, rail) {
   const { point, bearing: b } = rail.at(s.line, s.along);
   // Keep the feed's heading, but line it up with the track it's on.
   const bearingOut = t.bearing == null ? null : angleDiff(b, t.bearing) < 90 ? b : (b + 180) % 360;
-  return { lon: point[0], lat: point[1], bearing: bearingOut, basis: null };
-}
-
-export function estimatePosition(t, rail, stationAt, now = Date.now()) {
-  if (t.estimated) return null; // already placed from the timetable
-  const age = (now - t.updated) / 1000;
-  if (!(age > 5) || age > MAX_EXTRAPOLATE_S) return null;
-  const from = [t.lon, t.lat];
-  const fromSnap = rail?.snap(from, SNAP_M, t.agency);
-
-  // Next station the train is due at, if its feed lists stops with times.
-  let next = null;
-  if (t.stops?.length) {
-    // Stopped at (or creeping into) its next station: it's dwelling, leave it.
-    const upcoming = t.stops.find((s) => s.status !== "past" && stationAt(s.key));
-    if (upcoming && (t.speedMph || 0) < 5) {
-      const p = stationAt(upcoming.key);
-      if (dist(from, [p.lon, p.lat]) < 1500) return null;
-    }
-    for (const s of t.stops) {
-      if (s.status === "past") continue;
-      const time = Date.parse(s.time);
-      const pos = stationAt(s.key);
-      if (!pos || Number.isNaN(time)) continue;
-      if (time > t.updated - 60000) {
-        next = { time, pos: [pos.lon, pos.lat], name: s.name };
-        break;
-      }
-    }
-  }
-
-  // Never assume the train went faster than it plausibly could: a bit over its
-  // reported speed, but at least 60 mph (it may have just left a station).
-  const capMeters = age * Math.max(27, ((t.speedMph || 0) / 2.23694) * 1.3);
-
-  if (next) {
-    const total = next.time - t.updated;
-    let f = total <= 0 ? 1 : Math.max(0, Math.min(1, (now - t.updated) / total));
-    const toSnap = rail?.snap(next.pos, SNAP_M, t.agency);
-    // A station hundreds of km away with a fix only minutes old means the stop
-    // list is off; don't trust it.
-    if (dist(from, next.pos) / Math.max(60, total / 1000) < 75) { // under ~170 mph
-      // Follow the track from the last fix to the station.
-      const path = rail?.route(fromSnap, toSnap, t.agency);
-      const span = path ? path.length : dist(from, next.pos);
-      if (span * f > capMeters) f = capMeters / span;
-      if (path && path.length > 0) {
-        const { point, bearing: b } = path.at(path.length * f);
-        return { lon: point[0], lat: point[1], bearing: b, basis: `due at ${next.name} ${f >= 1 ? "now" : "soon"}` };
-      }
-      // Different track pieces (a junction in between): go straight, then
-      // settle onto the nearest track.
-      const p = onTrack(rail, lerp(from, next.pos, f), t.agency);
-      return { lon: p[0], lat: p[1], bearing: bearing(from, next.pos), basis: `due at ${next.name}` };
-    }
-  }
-
-  // Dead reckoning from speed and heading.
-  const mps = (t.speedMph || 0) / 2.23694;
-  if (mps < 1 || t.bearing == null) return null;
-  // Assume the train keeps its speed for a couple of minutes, then hedge
-  // (it may stop at a station or slow down), so long gaps don't fling it far.
-  const effective = age <= 120 ? age : 120 + (age - 120) * 0.5;
-  const meters = Math.min(mps * effective, capMeters);
-  if (fromSnap) {
-    const forward = angleDiff(fromSnap.bearing, t.bearing) < 90;
-    const along = fromSnap.along + (forward ? meters : -meters);
-    const { point, bearing: b } = rail.at(fromSnap.line, along);
-    return { lon: point[0], lat: point[1], bearing: forward ? b : (b + 180) % 360, basis: "speed and heading" };
-  }
-  const R = 6371000;
-  const lat = t.lat + ((meters * Math.cos(t.bearing * DEG)) / R) / DEG;
-  const lon = t.lon + ((meters * Math.sin(t.bearing * DEG)) / (R * Math.cos(t.lat * DEG))) / DEG;
-  const [x, y] = onTrack(rail, [lon, lat], t.agency);
-  return { lat: y, lon: x, bearing: t.bearing, basis: "speed and heading" };
+  return { lon: point[0], lat: point[1], bearing: bearingOut };
 }

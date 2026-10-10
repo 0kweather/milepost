@@ -29,15 +29,9 @@ Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't 
 ## Using it
 
 - **Stations:** every station on these railroads is on the map (intercity stops from regional zoom, commuter stops once you zoom into a metro area). Click one, or search for it, to see which railroads and lines serve it and the next trains due, with live predicted times and delays. Stations shared by several railroads, like New York Penn or Boston South Station, appear as one stop. MBTA stations show the MBTA's own live predictions. For railroads whose feeds don't list stops, the panel shows the trains nearby.
-- **Settings** (gear button): light/dark/auto appearance, **Estimate live location**, and **Show stations**.
-- **Estimate live location**: feeds report positions anywhere from seconds to about 10 minutes late, and Amtrak's are the slowest. With this on, each train moves forward from its last report to where it most likely is now:
-  1. If the feed predicts its arrival at the next station, the train covers that share of the distance by the time elapsed.
-  2. Otherwise it's dead-reckoned from its last speed and heading, and the assumed speed is reduced the longer the gap gets.
-
-  Either way it moves along the actual track (USDOT rail lines), never faster than a bit over its reported speed (at least 60 mph), and never past the station it's due at. Trains sitting at their next station stay put. The train panel says when a position is estimated and how old the last real report is. To stay smooth on any device, only trains on screen that would visibly move are animated, redraws are capped at about 10 per second, and estimates refresh every 2 s in a city view but only every 8 s for the whole country, where the motion is too small to see.
-
+- **Settings** (gear button): light/dark/auto appearance and **Show stations**.
 - **Rail lines are colored by network.** Each stretch of track takes the color of the railroads that run passenger trains on it, and shared track (Amtrak and Metro-North on the New Haven Line, for example) is drawn as side-by-side strands, one per railroad. Hover a line to see who runs on it. Railroads come from USDOT's track ownership and trackage-rights codes, plus the nearest commuter station for commuter trains on freight-owned track.
-- **Trains sit on the track.** Reported positions are snapped to the nearest rail line within 1.5 km, preferring the train's own railroad when it's about as close. The rail lines form a graph, so trains placed from the timetable (Metro-North), live estimates and slide animations all follow the track between two points (a shortest-path route) instead of cutting across curves.
+- **Trains sit on the track.** Reported positions are snapped to the nearest rail line within 1.5 km, preferring the train's own railroad when it's about as close. The rail lines form a graph, so trains placed from the timetable (Metro-North) and slide animations follow the track between two points (a shortest-path route) instead of cutting across curves.
 - **Stations sit on the track** too: each is drawn at the nearest point on its railroad's track within 400 m. Terminals like Boston South Station, whose tracks end short of the building, sit at the end of the platforms.
 - **Main line only.** Yard tracks, sidings and spurs are left out (from both the passenger network and the basemap), so big terminals don't turn into a tangle.
 - Zoomed out, trains are plain dots so the map stays readable; names appear once you zoom in, and labels that would overlap are hidden instead of piling up.
@@ -77,7 +71,7 @@ data/mta.json             LIRR/Metro-North station + branch lookups
 data/rail.geojson         US and Canadian passenger main lines (USDOT NTAD) tagged by network, merged into continuous lines
 data/stations.json        stations for every railroad (NTAD, Amtraker, agency GTFS)
 js/stations.js            station merging and "next trains" lookups
-js/estimate.js            track snapping and live-location estimates (ETA interpolation, dead reckoning)
+js/estimate.js            rail index: snapping to track and routing along it
 js/networks.js            rail network names and colors
 scripts/                  rebuild the data files; local dev relay
 relay/                    Cloudflare Worker for CORS-less and keyed feeds

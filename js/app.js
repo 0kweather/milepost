@@ -1,6 +1,6 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
 import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js?v=dev";
-import { RailIndex, estimatePosition, snapToTrack } from "./estimate.js?v=dev";
+import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices } from "./notices.js?v=dev";
 
@@ -40,7 +40,6 @@ const state = {
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
   predictions: null,     // live MBTA predictions for the selected station
-  estimate: store.get("tt-estimate", false), // "Estimate live location" mode
   showStations: store.get("tt-stations", true),
   // Trains the viewer is following (saved in the browser):
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
@@ -49,7 +48,7 @@ const state = {
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   trackQuery: "",        // what's typed in the picker's station search
   trackActive: 0,        // highlighted match (arrow keys)
-  est: new Map(),        // train id -> estimated { lat, lon, bearing, basis }
+  est: new Map(),        // train id -> position on the track { lat, lon, bearing }
   rail: null,            // RailIndex (routing and snapping; uses every track)
   railGeo: null,         // rail.geojson as loaded; drawn filtered by railCollection()
   stopPos: new Map(),    // station member key -> { lat, lon }
@@ -560,9 +559,8 @@ function redrawStations() {
   map.getSource("footprints")?.setData(footprintCollection());
 }
 
-// Where to draw a train: on the nearest track, and in live-estimate mode
-// moved forward to where it most likely is now. Falls back to exactly what
-// the feed reported (e.g., VIA trains in Canada, beyond the rail data).
+// Where to draw a train: on the nearest track. Falls back to exactly what the
+// feed reported (e.g., trains beyond the rail data).
 function targetOf(t) {
   return state.est.get(t.id) || t;
 }
@@ -577,13 +575,11 @@ function snapped(t) {
   return result;
 }
 
-function computeEstimates() {
+function computePositions() {
   state.est.clear();
-  const stationAt = (key) => state.stopPos.get(key);
-  const now = Date.now();
   for (const t of state.trains.values()) {
-    const e = (state.estimate && estimatePosition(t, state.rail, stationAt, now)) || snapped(t);
-    if (e) state.est.set(t.id, e);
+    const p = snapped(t);
+    if (p) state.est.set(t.id, p);
   }
   for (const id of snapCache.keys()) if (!state.trains.has(id)) snapCache.delete(id);
 }
@@ -598,7 +594,7 @@ function loadRail() {
       state.rail = new RailIndex(geojson);
       snapCache.clear();
       snapStations();
-      computeEstimates();
+      computePositions();
       animateTo();
     })
     .catch((err) => console.warn("rail index", err)); // trains stay at reported positions
@@ -627,7 +623,7 @@ function glidePath(t, from, to) {
   return path && path.length < straight * 2.5 + 300 ? path : null;
 }
 
-function animateTo(duration = ANIM_MS, linear = false) {
+function animateTo(duration = ANIM_MS) {
   cancelAnimationFrame(anim);
   const targets = new Map();
   for (const t of state.trains.values()) targets.set(t.id, targetOf(t));
@@ -653,16 +649,15 @@ function animateTo(duration = ANIM_MS, linear = false) {
   redraw();
   if (!movers.length) return;
 
-  // Rebuilding the marker layer is the expensive part, so cap the frame rate:
-  // ~30 fps for short refresh glides, ~10 fps for continuous estimate drift.
-  const frameMs = linear ? 100 : 33;
+  // Rebuilding the marker layer is the expensive part, so cap it at ~30 fps.
+  const frameMs = 33;
   const start = performance.now();
   let last = 0;
   const step = (now) => {
     const k = Math.min(1, (now - start) / duration);
     if (now - last >= frameMs || k === 1) {
       last = now;
-      const e = linear ? k : k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
       for (const [id, f, p, path] of movers) {
         if (path) {
           const [lon, lat] = path.at(path.length * e).point;
@@ -681,7 +676,7 @@ function animateTo(duration = ANIM_MS, linear = false) {
 function mergeTrains() {
   state.trains = new Map();
   for (const list of Object.values(state.bySource)) for (const t of list) state.trains.set(t.id, t);
-  computeEstimates();
+  computePositions();
   animateTo();
   checkTracked();
   renderAll();
@@ -726,7 +721,6 @@ async function poll(src, attempt = 0) {
 
 async function start() {
   loadRail();
-  if (state.estimate) setEstimate(true);
   loadStations()
     .then((stations) => {
       state.stations = stations;
@@ -740,7 +734,7 @@ async function start() {
         .catch(() => {});
       for (const st of stations.values()) for (const m of st.members) state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
       snapStations();
-      computeEstimates();
+      computePositions();
       redrawStations();
       if (wantedStation) selectStation(wantedStation);
       renderResults();
@@ -776,50 +770,26 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// Trains placed by timetable keep moving between refreshes; in live-estimate
-// mode every train does, re-estimated every couple of seconds.
-// Timetable-placed trains (Metro-North) advance every 6 s. In live-estimate
-// mode every train is re-estimated, more often when zoomed in where the
-// motion is visible: every 2 s in a city, up to 8 s for the whole country.
+// Trains placed from the timetable (Metro-North) advance between refreshes.
 let lastTimetable = 0;
 function tick() {
-  const z = map.getZoom();
-  const every = !state.estimate ? 2000 : z >= 9 ? 2000 : z >= 6 ? 4000 : 8000;
-  setTimeout(tick, every);
+  setTimeout(tick, 2000);
   if (document.hidden || map.isMoving()) return;
   const now = Date.now();
+  if (now - lastTimetable < 6000) return;
+  lastTimetable = now;
   let moved = false;
-  if (now - lastTimetable >= 6000) {
-    lastTimetable = now;
-    for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
-  }
-  if (state.estimate) {
-    computeEstimates();
-    animateTo(every, true);
-    if (state.follow && state.selected) {
-      const t = state.trains.get(state.selected);
-      if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: every, easing: (x) => x });
-    }
-  } else if (moved) {
-    computeEstimates(); // re-snap the timetable-placed trains that moved
+  for (const t of state.trains.values()) moved = advanceEstimated(t) || moved;
+  if (moved) {
+    computePositions(); // re-snap the timetable-placed trains that moved
     animateTo();
   }
 }
 setTimeout(tick, 2000);
-// The selected train's panel ("estimated now", "last report") ages too.
+// The selected train's panel ("GPS · 3 min ago") ages too.
 setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 
-async function setEstimate(on) {
-  state.estimate = on;
-  store.set("tt-estimate", on);
-  setChecked("estimate-toggle", on);
-  await loadRail();
-  computeEstimates();
-  animateTo();
-  renderAll();
-}
 
-on("estimate-toggle", "change", (e) => setEstimate(e.target.checked));
 
 // ---------- Rendering: list ----------
 
@@ -1018,14 +988,12 @@ function renderDetail() {
   loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
-  const est = state.est.get(t.id);
   const chips = [
     t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
     t.speedMph != null && !t.estimated ? `<strong>${Math.round(t.speedMph)}</strong> mph` : null,
     t.bearing != null ? `Heading <strong>${HEADINGS[Math.round(t.bearing / 45) % 8]}</strong>` : null,
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
-    est?.basis ? null : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
-    est?.basis ? `Last report ${fmtAgo(t.updated)}` : null,
+    `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
     t.detail ? esc(t.detail) : null,
   ].filter(Boolean);
   const stops = t.stops?.length
@@ -1408,7 +1376,7 @@ function select(id, { fly = true } = {}) {
   const t = state.trains.get(id);
   if (t && fly) {
     map.flyTo({
-      center: [targetOf(t).lon, targetOf(t).lat], // where it's drawn (estimated position if that's on)
+      center: [targetOf(t).lon, targetOf(t).lat], // where it's drawn (on the track)
       zoom: Math.max(map.getZoom(), 9),
       padding: panelPadding(),
       duration: 900,
@@ -1749,7 +1717,6 @@ map.on("movestart", () => toggleMenu(false));
 
 applyTheme();
 setChecked("stations-toggle", state.showStations);
-setChecked("estimate-toggle", state.estimate);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
