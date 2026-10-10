@@ -1024,7 +1024,7 @@ function renderDetail() {
     t.speedMph != null && !t.estimated ? `<strong>${Math.round(t.speedMph)}</strong> mph` : null,
     t.bearing != null ? `Heading <strong>${HEADINGS[Math.round(t.bearing / 45) % 8]}</strong>` : null,
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
-    est?.basis ? `Estimated now · ${esc(est.basis)}` : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
+    est?.basis ? null : `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
     est?.basis ? `Last report ${fmtAgo(t.updated)}` : null,
     t.detail ? esc(t.detail) : null,
   ].filter(Boolean);
