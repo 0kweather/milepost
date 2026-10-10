@@ -1241,7 +1241,6 @@ function trackPicker(t) {
     <div class="tp-results" id="tp-results" role="listbox">${trackResults(t)}</div>
     <div class="tp-actions">
       <button class="btn small" data-tp-cancel>Cancel</button>
-      <button class="btn small" data-tp-none="${esc(t.id)}">Just follow it</button>
     </div>
   </div>`;
 }
@@ -1558,12 +1557,6 @@ on("train-detail", "click", (e) => {
   if (match) {
     const t = state.trains.get(state.trackPicker);
     if (t) startTracking(t, match.dataset.tpStop);
-    return;
-  }
-  const none = e.target.closest("[data-tp-none]");
-  if (none) {
-    const t = state.trains.get(none.dataset.tpNone);
-    if (t) startTracking(t, null);
     return;
   }
   const stop = e.target.closest("[data-untrack]");

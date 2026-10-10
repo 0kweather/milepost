@@ -286,14 +286,14 @@ a { color: var(--accent); }
 
 .tp-search:focus-within { border-color: var(--accent); }
 .tp-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; }
-.tp-results { display: grid; gap: 2px; margin: 6px -4px 0; max-height: 240px; overflow-y: auto; }
+.tp-results { display: grid; gap: 2px; margin: 6px 0 0; max-height: 240px; overflow-y: auto; }
 
 .tp-match {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 10px; /* text lines up with the search box's */
   border: 0;
   border-radius: 8px;
   background: transparent;
