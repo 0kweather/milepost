@@ -347,10 +347,13 @@ function addLayers() {
 
   // Labels only appear once there's room for them, and collide with each
   // other instead of piling up — intercity trains win ties.
-  const labelText = ["format",
-    ["get", "label"], {},
-    ["case", [">", ["length", ["get", "subtitle"]], 0], ["concat", "\n", ["get", "subtitle"]], ""],
-    { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }];
+  // "Amtrak 171" from zoom 8; the line name joins it underneath from zoom 10.
+  const labelText = ["step", ["zoom"],
+    ["get", "label"],
+    10, ["format",
+      ["get", "label"], {},
+      ["case", [">", ["length", ["get", "subtitle"]], 0], ["concat", "\n", ["get", "subtitle"]], ""],
+      { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }]];
   const labelLayout = {
     "text-field": labelText,
     "text-font": ["Noto Sans Bold"],
@@ -367,7 +370,7 @@ function addLayers() {
     id: "tt-labels",
     type: "symbol",
     source: "trains",
-    minzoom: 11, // trains are unlabeled dots until zoomed in tight
+    minzoom: 8, // zoomed further out, trains are unlabeled dots
     filter: ["!=", ["get", "id"], ""],
     layout: labelLayout,
     paint: labelPaint,
