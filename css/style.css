@@ -38,6 +38,7 @@
   --warn: #b86e00;
   --bad: #c0312b;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.12);
+  --car-ink: #2b3036;
   color-scheme: light;
 }
 
@@ -56,6 +57,7 @@
   --warn: #f0a83a;
   --bad: #ff6b62;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --car-ink: #8d96a1;
   color-scheme: dark;
 }
 
@@ -619,7 +621,23 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 
 .stops-scroll { position: relative; flex: none; }
 
-.hero, .meta, .estimate-note { flex: none; }
+/* The train's cars, front on the left, scrolling sideways when long. */
+.consist { margin-top: var(--s3); }
+.consist .section-title { margin-bottom: var(--s1); }
+.consist-sum { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; }
+.consist-strip {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: var(--s1);
+  scrollbar-width: thin;
+}
+.consist .car { margin: 0; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.consist .car svg { display: block; color: var(--car-ink); }
+.consist .car figcaption { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.consist .estimate-note { margin-top: var(--s1); }
+
+.hero, .meta, .estimate-note, .consist { flex: none; }
 .hero { padding: 6px 0 var(--s4); border-bottom: 1px solid var(--line); }
 .hero .agency-name { font-size: var(--fs-xs); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .hero .dot { width: 9px; height: 9px; border-radius: 50%; }
