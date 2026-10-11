@@ -4,6 +4,7 @@ import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
+import { consistOf, consistHtml } from "./consist.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -1170,7 +1171,6 @@ function renderDetail() {
     headingChip(t),
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
     `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
-    t.detail ? esc(t.detail) : null,
   ].filter(Boolean);
   const stops = t.stops?.length
     ? `<h3 class="section-title">Stops</h3><div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s) => {
@@ -1196,6 +1196,7 @@ function renderDetail() {
     ${state.trackPicker === t.id ? trackPicker(t) : ""}
     ${noticesHtml(t)}
     ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
+    ${consistSection(t)}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
   // Re-rendering replaces the content; keep the reader where they were.
@@ -1217,6 +1218,23 @@ function inferredNote(t) {
   const d = distanceParts(n.meters);
   return `<p class="inferred-note">GPS had it still ${d.value} ${d.unit} from <strong>${esc(n.stop)}</strong> at ${at}, ${over} min after its posted arrival,
     so it can’t get there before ${fmtTime(new Date(n.earliest).toISOString(), n.tz)}. The railroad hasn’t reported this yet; the times below include it.</p>`;
+}
+
+// The train's cars: live where the railroad reports them, otherwise what
+// typically runs on the route, labeled as typical.
+function consistSection(t) {
+  const c = consistOf(t);
+  if (!c) return "";
+  const a = AGENCIES[t.agency];
+  const note = !c.typical ? ""
+    : c.reported ? `${esc(a.short)}’s feed names one car of this train, ${esc(c.reported.number)} (${esc(c.reported.name)}). The rest shows what typically runs on this line.`
+    : `${esc(a.short)} doesn’t report which cars this train has. This is what typically runs on this route.`;
+  return `<section class="consist${c.typical ? " typical" : ""}">
+    <h3 class="section-title">Consist${c.typical ? '<span class="typical-tag">Typical</span>' : ""}</h3>
+    <p class="consist-sum">${esc(c.summary)}</p>
+    <div class="consist-strip">${consistHtml(c, a.color)}</div>
+    ${note ? `<p class="estimate-note">${note}</p>` : ""}
+  </section>`;
 }
 
 function fmtIn(ms) {
