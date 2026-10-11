@@ -268,7 +268,10 @@ export class RailIndex {
 }
 
 // The reported position, moved onto the nearest track (no time correction).
-export function snapToTrack(t, rail) {
+// towards: optional { lat, lon } of the train's next stop. When the feed has
+// no heading, the train is pointed along the track the way the route to that
+// stop leads (falling back to the straight-line direction to it).
+export function snapToTrack(t, rail, towards = null) {
   // Trains placed from the timetable (no GPS) are somewhere between two
   // stations; put them that far along the track between them. Express runs
   // can skip many stops, where a straight line would cut far off the rails.
@@ -284,6 +287,13 @@ export function snapToTrack(t, rail) {
   if (!s) return null;
   const { point, bearing: b } = rail.at(s.line, s.along);
   // Keep the feed's heading, but line it up with the track it's on.
-  const bearingOut = t.bearing == null ? null : angleDiff(b, t.bearing) < 90 ? b : (b + 180) % 360;
-  return { lon: point[0], lat: point[1], bearing: bearingOut };
+  let heading = t.bearing, inferred = false;
+  if (heading == null && towards && b != null) {
+    const target = rail.snap([towards.lon, towards.lat], SNAP_M, t.agency);
+    const path = target && rail.route(s, target, t.agency);
+    heading = path && path.length > 30 ? path.at(Math.min(150, path.length / 2)).bearing : bearing(point, [towards.lon, towards.lat]);
+    inferred = heading != null;
+  }
+  const bearingOut = heading == null ? null : angleDiff(b, heading) < 90 ? b : (b + 180) % 360;
+  return { lon: point[0], lat: point[1], bearing: bearingOut, inferred };
 }

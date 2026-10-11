@@ -45,6 +45,8 @@ const state = {
   // Mark trains late when GPS shows a delay their railroad hasn't reported
   // (js/delays.js).
   inferDelays: store.get("tt-infer", true),
+  // Point trains whose feed has no heading toward their next stop.
+  inferHeading: store.get("tt-infer-heading", true),
   // Miles or kilometers. The default follows the browser's language: miles in
   // the few countries that still use them, kilometers everywhere else.
   units: store.get("tt-units", /-(US|GB|LR|MM)\b/i.test(navigator.language || "en-US") ? "mi" : "km"),
@@ -702,11 +704,23 @@ function targetOf(t) {
 // Snapping depends only on the reported position, so cache it per train.
 const snapCache = new Map(); // id -> { lat, lon, result }
 function snapped(t) {
+  const towards = state.inferHeading && t.bearing == null ? headingTarget(t) : null;
   const c = snapCache.get(t.id);
-  if (c && c.lat === t.lat && c.lon === t.lon) return c.result;
-  const result = snapToTrack(t, state.rail);
-  snapCache.set(t.id, { lat: t.lat, lon: t.lon, result });
+  if (c && c.lat === t.lat && c.lon === t.lon && c.towards?.lat === towards?.lat && c.towards?.lon === towards?.lon) return c.result;
+  const result = snapToTrack(t, state.rail, towards);
+  snapCache.set(t.id, { lat: t.lat, lon: t.lon, towards, result });
   return result;
+}
+
+// Where a train is headed next, for pointing it when its feed gives no
+// heading: its next stop, or the one after if it's standing at the next.
+function headingTarget(t) {
+  for (const s of t.stops || []) {
+    if (s.status === "past") continue;
+    const p = state.stopPos.get(s.key);
+    if (p && meters(p, t) > 400) return p;
+  }
+  return null;
 }
 
 function computePositions() {
@@ -1000,6 +1014,17 @@ function statusClass(t) {
   return "bad";
 }
 
+// The heading chip; a direction worked out from the next stop is marked.
+function headingChip(t) {
+  const est = state.est.get(t.id);
+  const b = t.bearing ?? est?.bearing;
+  if (b == null) return null;
+  const dir = HEADINGS[Math.round(b / 45) % 8];
+  return t.bearing == null && est?.inferred
+    ? `<span class="inferred" title="Worked out from the train's next stop; its railroad doesn't report a heading">Heading <strong>${dir}</strong></span>`
+    : `Heading <strong>${dir}</strong>`;
+}
+
 function trainTitle(t) {
   const a = AGENCIES[t.agency];
   return t.route ? `${t.route}` : a.name;
@@ -1142,7 +1167,7 @@ function renderDetail() {
   const chips = [
     t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
     t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
-    t.bearing != null ? `Heading <strong>${HEADINGS[Math.round(t.bearing / 45) % 8]}</strong>` : null,
+    headingChip(t),
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
     `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
     t.detail ? esc(t.detail) : null,
@@ -1907,6 +1932,14 @@ function setShowStations(on) {
 }
 on("stations-toggle", "change", (e) => setShowStations(e.target.checked));
 
+on("heading-toggle", "change", (e) => {
+  state.inferHeading = e.target.checked;
+  store.set("tt-infer-heading", state.inferHeading);
+  computePositions();
+  animateTo();
+  renderAll();
+});
+
 on("infer-toggle", "change", (e) => {
   state.inferDelays = e.target.checked;
   store.set("tt-infer", state.inferDelays);
@@ -1939,6 +1972,7 @@ applyTheme();
 applyUnits();
 setChecked("stations-toggle", state.showStations);
 setChecked("infer-toggle", state.inferDelays);
+setChecked("heading-toggle", state.inferHeading);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
