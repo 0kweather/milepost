@@ -168,10 +168,6 @@ function parseMbta(json) {
       routeId,
       tripId: v.relationships.trip?.data?.id || null,
       number: trip?.attributes?.name || a.label,
-      // Carriages when the MBTA lists them; otherwise the one car the label names.
-      cars: a.carriages?.length
-        ? { numbers: a.carriages.map((c) => c.label).filter(Boolean), complete: true }
-        : a.label ? { numbers: [a.label], complete: false } : null,
       route: MBTA_ROUTES[routeId] || routeId.replace(/^CR-/, "").replace(/([a-z])([A-Z])/g, "$1 $2") + " Line",
       routeColor: "#80276c",
       lat: a.latitude, lon: a.longitude,
@@ -289,8 +285,6 @@ function parseMta(agency, buf, meta) {
       statusText: prog.dwelling ? `At ${lookup[prog.at.stopId][0]}` : delaySec != null ? delayText(delaySec / 60) : null,
       updated: fresh ? vp.timestamp * 1000 : (feed.timestamp || now) * 1000,
       fixAt: fresh ? vp.timestamp * 1000 : null,
-      // LIRR's vehicle label is a car number (Metro-North's is the train number).
-      cars: agency === "lirr" && label ? { numbers: [label], complete: false } : null,
       estimated: !fresh,
       leg: fresh ? null : prog.leg || null,
       stops: mtaStops(agency, prog.list, lookup, now, nextStop, prog.dwelling ? prog.at : null),
@@ -362,7 +356,7 @@ function parseSepta(json) {
       currentStop: t.currentstop,
       delayMin: t.late,
       statusText: delayText(t.late),
-      cars: t.consist ? { numbers: t.consist.split(",").map((c) => c.trim()).filter(Boolean), complete: true } : null,
+      detail: t.consist ? `Cars ${t.consist.replace(/,/g, ", ")}` : null,
     }));
 }
 
