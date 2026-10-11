@@ -95,7 +95,14 @@ function parseAmtraker(json) {
       const agency = AMTRAKER_PROVIDERS[t.provider];
       if (!agency || t.trainState !== "Active" || !valid(t.lat, t.lon)) continue;
       const stations = t.stations || [];
-      const next = stations.find((s) => s.status === "Enroute" || s.status === "Station");
+      // The next stop is the first one still ahead that has a time. Amtrak's
+      // feed sometimes lists stops already passed as "Station" with no times,
+      // and keeps stale "Departed" entries from an earlier day near the end
+      // (Maple Leaf, in Canada), so statuses alone can't be trusted.
+      const ni = stations.findIndex((s) => (s.status === "Enroute" || s.status === "Station") && (s.arr || s.dep));
+      const next = ni >= 0 ? stations[ni] : null;
+      const nextAt = next ? Date.parse(next.arr || next.dep) : null;
+      const stale = (s, j) => j > ni && nextAt && Date.parse(s.dep || s.arr) < nextAt;
       let delayMin = null;
       if (next && next.arr && next.schArr) delayMin = (Date.parse(next.arr) - Date.parse(next.schArr)) / 60000;
       else if (next && next.dep && next.schDep) delayMin = (Date.parse(next.dep) - Date.parse(next.schDep)) / 60000;
@@ -117,16 +124,19 @@ function parseAmtraker(json) {
         alerts: (t.alerts || []).map((a) => a.message).filter(Boolean), // official notices for this train
         // Long-distance trains run for days, so the same number can be on the map twice.
         departedOn: departureDay(stations[0]),
-        stops: stations.map((s) => ({
-          key: `ic:${s.code}`,
-          name: s.name,
-          tz: s.tz,
-          time: s.status === "Departed" ? s.dep || s.arr : s.arr || s.dep,
-          scheduled: s.schArr || s.schDep,
-          arr: s.arr || null, dep: s.dep || null, schArr: s.schArr || null, schDep: s.schDep || null,
-          status: s.status === "Departed" ? "past" : s === next ? "next" : "future",
-          here: s.status === "Station", // standing at this station right now
-        })),
+        stops: stations.map((s, j) => {
+          const old = stale(s, j); // a time from an earlier trip: don't show it
+          return {
+            key: `ic:${s.code}`,
+            name: s.name,
+            tz: s.tz,
+            time: old ? null : s.status === "Departed" ? s.dep || s.arr : s.arr || s.dep,
+            scheduled: s.schArr || s.schDep,
+            arr: old ? null : s.arr || null, dep: old ? null : s.dep || null, schArr: s.schArr || null, schDep: s.schDep || null,
+            status: ni < 0 ? (s.status === "Departed" ? "past" : "future") : j < ni ? "past" : j === ni ? "next" : "future",
+            here: j === ni && s.status === "Station", // standing at this station right now
+          };
+        }),
       }));
     }
   }
