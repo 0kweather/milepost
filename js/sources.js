@@ -310,9 +310,48 @@ export function advanceEstimated(t) {
 
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
-function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination } = {}) {
+// Caltrain, SMART and Metrolink timetables: stop and trip lookups
+// (scripts/build_west.py).
+let westStatic = null;
+const loadWest = () => (westStatic ??= fetch("data/west.json?v=dev").then((r) => r.json()));
+
+// Fills in a train's upcoming stops, next stop, destination and delay from its
+// trip's predicted stop times (GTFS-realtime trip updates) and the railroad's
+// timetable. Feeds drop stops a train has left, so only what's ahead shows.
+function addTrip(t, agency, tripId, tu, west, now) {
+  const info = west.trips[tripId];
+  const list = (tu?.stops || []).filter((s) => !s.skipped && west.stops[s.stopId] && evTime(s));
+  if (info?.[1]) t.destination = info[1];
+  else if (list.length) t.destination = west.stops[list[list.length - 1].stopId][0];
+  if (!list.length) return;
+  const nextIdx = list.findIndex((s) => evTime(s) >= now - 20);
+  const next = list[nextIdx];
+  const dwelling = next && arrTime(next) <= now;
+  const iso = (sec) => (sec ? new Date(sec * 1000).toISOString() : null);
+  t.stops = list.map((s, i) => ({
+    key: `${agency}:${west.stops[s.stopId][3]}`,
+    name: west.stops[s.stopId][0],
+    tz: "America/Los_Angeles",
+    time: iso(evTime(s)),
+    arr: iso(s.arrival?.time), dep: iso(s.departure?.time),
+    status: i === nextIdx ? "next" : nextIdx < 0 || i < nextIdx ? "past" : "future",
+    here: i === nextIdx && dwelling,
+  }));
+  if (next) {
+    t.nextStop = west.stops[next.stopId][0];
+    const delaySec = next.arrival?.delay ?? next.departure?.delay;
+    if (delaySec != null) {
+      t.delayMin = delaySec / 60;
+      t.statusText = delayText(t.delayMin);
+    }
+    if (dwelling) t.statusText = `At ${t.nextStop}`;
+  }
+}
+
+function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination, west } = {}) {
   const feed = decodeFeed(buf);
   const now = nowSec();
+  const tripUpdates = new Map(feed.tripUpdates.filter((u) => u.trip?.tripId).map((u) => [u.trip.tripId, u]));
   const seen = new Set();
   const out = [];
   for (const v of feed.vehicles) {
@@ -332,7 +371,9 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
       speedMph: mps2mph(p.speed),
       destination: destination ? destination(v) : null,
       updated: (v.timestamp || feed.timestamp || now) * 1000,
+      fixAt: west && v.timestamp ? v.timestamp * 1000 : null,
     }));
+    if (west && v.trip?.tripId) addTrip(out[out.length - 1], agency, v.trip.tripId, tripUpdates.get(v.trip.tripId), west, now);
   }
   return out;
 }
@@ -449,19 +490,19 @@ export const SOURCES = [
   {
     id: "caltrain", agencies: ["caltrain"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
-    parse: (buf) => gtfsVehicles("caltrain", buf, { route: (v) => v.trip?.routeId || "Caltrain" }),
+    parse: async (buf) => gtfsVehicles("caltrain", buf, { route: (v) => v.trip?.routeId || "Caltrain", west: (await loadWest()).caltrain }),
   },
   {
     id: "smart", agencies: ["smart"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
     // The feed also lists parked and non-revenue cars; only ones on a trip are
     // running. Labels are car numbers, not train numbers, so none is shown.
-    parse: (buf) => gtfsVehicles("smart", buf, { keep: (v) => Boolean(v.trip?.tripId), route: () => "SMART", number: () => null }),
+    parse: async (buf) => gtfsVehicles("smart", buf, { keep: (v) => Boolean(v.trip?.tripId), route: () => "SMART", number: () => null, west: (await loadWest()).smart }),
   },
   {
     id: "metrolink", agencies: ["metrolink"], format: "pb", interval: 30, relay: true, needsKey: "METROLINK_API_KEY",
     credit: { label: "Metrolink", href: "https://metrolinktrains.com/about/gtfs/" },
-    parse: (buf) => gtfsVehicles("metrolink", buf, { route: (v) => v.trip?.routeId }),
+    parse: async (buf) => gtfsVehicles("metrolink", buf, { route: (v) => v.trip?.routeId, west: (await loadWest()).metrolink }),
   },
 ];
 
