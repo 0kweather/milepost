@@ -1269,14 +1269,6 @@ function renderStation() {
   }
   rows.sort((x, y) => x.sort - y.sort);
 
-  // Other trains close by, for railroads whose feeds don't say where trains stop.
-  const nearby = trains
-    .filter((t) => !listed.has(t.id) && st.agencies.includes(t.agency))
-    .map((t) => ({ t, d: meters(st, targetOf(t)) }))
-    .filter((x) => x.d < 25000)
-    .sort((x, y) => x.d - y.d)
-    .slice(0, 6);
-
   const loading = st.agencies.includes("mbta") && state.predictions === null;
   const lines = st.members.map((m) => {
     const a = AGENCIES[m.agency];
@@ -1300,15 +1292,7 @@ function renderStation() {
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
         : `<p class="empty">${loading ? "Loading live departures…" : "No live trains are reporting a stop here right now."}</p>`}
     </div>
-    ${nearby.length ? `<h3 class="section-title">Nearby trains</h3><div class="deps">${nearby.map(({ t, d }) => {
-      const a = AGENCIES[t.agency];
-      return `<button class="dep" data-select="${esc(t.id)}">
-        <span class="when"><strong>${distanceParts(d).value}</strong><span>${distanceParts(d).unit} away</span></span>
-        ${plate(t.number || a.short, a.color, "sm")}
-        <span class="what"><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><span class="sub">${esc([a.short, t.route].filter(Boolean).join(" · "))}</span></span>
-        <span></span></button>`;
-    }).join("")}</div>` : ""}
-    <p class="estimate-note">Times are live predictions from each railroad. Trains on railroads whose feeds don't list stops appear under “Nearby trains”.</p>`;
+    <p class="estimate-note">Times are live predictions from each railroad.</p>`;
 }
 
 // ---------- Tracked trains ----------
