@@ -1250,7 +1250,7 @@ function renderStation() {
       sort: d.time ?? Date.now(),
       html: departureRow({
         id: t.id, color: a.color, badge: t.number || a.short,
-        title: d.terminates && t.origin ? `from ${t.origin}` : t.destination ? `to ${t.destination}` : trainTitle(t),
+        title: d.terminates ? (t.origin ? `from ${t.origin}` : "Terminates here") : t.destination ? `to ${t.destination}` : trainTitle(t),
         sub: [d.terminates && "Arriving", a.short, t.route].filter(Boolean).join(" · "),
         time: d.time, tz: d.tz, status: late.text, statusCls: late.cls, inferred: Boolean(t.inferred) && !d.here,
       }),
