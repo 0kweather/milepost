@@ -7,7 +7,10 @@
 // few seconds so heavy traffic doesn't multiply upstream requests.
 //
 //   GET /status      -> { feeds: { septa: true, metra: false, ... } }
-//   GET /feed/:id    -> the upstream feed, byte for byte
+//   GET /feed/:id    -> the upstream feed, byte for byte. For railroads that
+//                       publish positions and predicted stop times as two
+//                       GTFS-realtime feeds, both, back to back: concatenated
+//                       protobuf messages read as one feed with every entity.
 
 const CACHE_SECONDS = 15;
 
@@ -23,21 +26,34 @@ const FEEDS = {
     env.METRA_API_TOKEN && {
       url: `https://gtfspublic.metrarr.com/gtfs/public/positions?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`,
     },
-  caltrain: (env) =>
-    env.API_511_KEY && {
-      url: `https://api.511.org/transit/vehiclepositions?agency=CT&api_key=${encodeURIComponent(env.API_511_KEY)}`,
-    },
-  smart: (env) =>
-    env.API_511_KEY && {
-      url: `https://api.511.org/transit/vehiclepositions?agency=SA&api_key=${encodeURIComponent(env.API_511_KEY)}`,
-    },
+  caltrain: (env) => env.API_511_KEY && feed511("CT", env),
+  smart: (env) => env.API_511_KEY && feed511("SA", env),
   metrolink: (env) =>
     env.METROLINK_API_KEY && {
       url: "https://metrolink-gtfsrt.gbsdigital.us/feed/gtfsrt-vehicles",
+      // Predicted stop times; the first of these paths that answers is used.
+      also: ["gtfsrt-trips", "gtfsrt-tripupdates", "gtfsrt-trip-updates"].map((p) => `https://metrolink-gtfsrt.gbsdigital.us/feed/${p}`),
       headers: { "X-Api-Key": env.METROLINK_API_KEY },
     },
   njt: (env) => env.NJT_USERNAME && env.NJT_PASSWORD && { njt: true },
 };
+
+// 511 SF Bay: positions plus predicted stop times for one operator.
+function feed511(agency, env) {
+  const q = `agency=${agency}&api_key=${encodeURIComponent(env.API_511_KEY)}`;
+  return { url: `https://api.511.org/transit/vehiclepositions?${q}`, also: [`https://api.511.org/transit/tripupdates?${q}`] };
+}
+
+// The first of several candidate URLs that answers, as bytes (or none).
+async function firstOk(urls, headers) {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.ok) return new Uint8Array(await res.arrayBuffer());
+    } catch {}
+  }
+  return null;
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -84,17 +100,24 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
+    const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
     try {
-      upstream = spec.njt
-        ? await fetchNjt(env)
-        : await fetch(spec.url, { headers: { "User-Agent": "Trainsheet relay", ...spec.headers } });
+      upstream = spec.njt ? await fetchNjt(env) : await fetch(spec.url, { headers });
     } catch (err) {
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
     }
     if (!upstream.ok) return new Response(`Upstream HTTP ${upstream.status}`, { status: 502, headers: CORS });
 
-    const response = new Response(upstream.body, {
+    // Positions, then the predicted stop times if they're available.
+    let body = upstream.body;
+    if (spec.also) {
+      const first = new Uint8Array(await upstream.arrayBuffer());
+      const extra = await firstOk(spec.also, headers);
+      body = extra ? new Blob([first, extra]) : first;
+    }
+
+    const response = new Response(body, {
       headers: {
         ...CORS,
         "Content-Type": upstream.headers.get("Content-Type") || "application/octet-stream",
