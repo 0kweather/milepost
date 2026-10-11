@@ -454,7 +454,9 @@ export const SOURCES = [
   {
     id: "smart", agencies: ["smart"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
-    parse: (buf) => gtfsVehicles("smart", buf, { route: () => "SMART" }),
+    // The feed also lists parked and non-revenue cars; only ones on a trip are
+    // running. Labels are car numbers, not train numbers, so none is shown.
+    parse: (buf) => gtfsVehicles("smart", buf, { keep: (v) => Boolean(v.trip?.tripId), route: () => "SMART", number: () => null }),
   },
   {
     id: "metrolink", agencies: ["metrolink"], format: "pb", interval: 30, relay: true, needsKey: "METROLINK_API_KEY",
