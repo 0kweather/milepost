@@ -1,4 +1,4 @@
-// Milepost relay — a Cloudflare Worker that fetches the train feeds a
+// Trainsheet relay — a Cloudflare Worker that fetches the train feeds a
 // browser can't read directly (no CORS headers, or an API key is required)
 // and passes them through with CORS enabled.
 //
@@ -88,7 +88,7 @@ export default {
     try {
       upstream = spec.njt
         ? await fetchNjt(env)
-        : await fetch(spec.url, { headers: { "User-Agent": "Milepost relay", ...spec.headers } });
+        : await fetch(spec.url, { headers: { "User-Agent": "Trainsheet relay", ...spec.headers } });
     } catch (err) {
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
     }

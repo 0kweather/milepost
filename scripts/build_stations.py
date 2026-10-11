@@ -42,7 +42,7 @@ GTFS = {
 
 
 def get(url, timeout=180):
-    req = urllib.request.Request(url, headers={"User-Agent": "milepost-build"})
+    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 

@@ -7,7 +7,7 @@ import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
-  window.MILEPOST_RELAY || "").trim();
+  window.TRAINSHEET_RELAY || "").trim();
 const STYLES = {
   light: "https://tiles.openfreemap.org/styles/positron",
   dark: "https://tiles.openfreemap.org/styles/dark",
@@ -20,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 // cached page) must never stop the trains from loading.
 const on = (id, type, fn) => $(id)?.addEventListener(type, fn);
 const setChecked = (id, value) => { const el = $(id); if (el) el.checked = value; };
-// Milepost plate: a train's number on a white sign, railroad color on top.
+// Number plate: a train's number on a white sign, railroad color on top.
 const plate = (text, color, size = "") => `<span class="plate ${size}" style="--c:${color}"><span>${esc(text)}</span></span>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const store = {
@@ -167,7 +167,7 @@ function tagImage(fill) {
   };
 }
 
-// Each train's label on the map: a small milepost plate like the one in the
+// Each train's label on the map: a small number plate like the one in the
 // panel, white with a black outline and the railroad's color across the top.
 // It stretches sideways to fit the number.
 function plateImage(color) {
@@ -829,7 +829,7 @@ function applyInference() {
 // ---------- Feeds ----------
 
 function sourceAvailability(src) {
-  if (!src.relay || (window.MILEPOST_FEEDS || {})[src.id]) return { ok: true };
+  if (!src.relay || (window.TRAINSHEET_FEEDS || {})[src.id]) return { ok: true };
   if (!RELAY) return { ok: false, reason: "Needs the relay (see README)" };
   if (state.relayFeeds && !state.relayFeeds[src.id]) {
     return { ok: false, reason: src.needsKey ? "Needs a free API key" : "Not enabled on relay" };
@@ -1177,9 +1177,9 @@ function renderDetail() {
   el.scrollTop = keepScroll;
 }
 
-const INFERRED_TITLE = "Worked out by Milepost from GPS; not yet reported by the railroad";
+const INFERRED_TITLE = "Worked out by Trainsheet from GPS; not yet reported by the railroad";
 
-// Why Milepost thinks the train is later than its railroad says.
+// Why Trainsheet thinks the train is later than its railroad says.
 function inferredNote(t) {
   const n = t.inferred;
   if (!n) return "";
@@ -1976,6 +1976,6 @@ if (wanted) {
 }
 
 // Handy for poking at the live state from the browser console.
-window.milepost = { state, map, checkTracked };
+window.trainsheet = { state, map, checkTracked };
 
 start();

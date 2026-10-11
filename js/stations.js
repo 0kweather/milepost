@@ -115,7 +115,7 @@ export function trainsDue(station, trains, now = Date.now()) {
       if (!stop || stop.status === "past") continue;
       const time = Date.parse(stop.time);
       if (Number.isNaN(time) || time < now - 5 * 60000) continue;
-      // Without a timetable time (LIRR, Metro-North), a delay Milepost spotted
+      // Without a timetable time (LIRR, Metro-North), a delay Trainsheet spotted
       // still shows.
       const lateMin = stop.scheduled ? Math.round((time - Date.parse(stop.scheduled)) / 60000) : t.inferred ? t.delayMin : null;
       due.push({

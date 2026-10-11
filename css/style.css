@@ -631,7 +631,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 /* Status and the Track button share one line. */
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); }
 
-/* Milepost plate: the train's number on a white sign, railroad color on top. */
+/* Number plate: the train's number on a white sign, railroad color on top. */
 .plate {
   display: inline-flex;
   flex-direction: column;
@@ -677,7 +677,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .pill.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .pill.bad { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
 .pill.neutral { background: var(--hover); color: var(--muted); }
-/* A delay Milepost worked out from GPS that the railroad hasn't posted. */
+/* A delay Trainsheet worked out from GPS that the railroad hasn't posted. */
 .pill.inferred, .status.inferred { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-thickness: 1.5px; cursor: help; }
 .inferred-note { margin: var(--s3) 0 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); }
 .inferred-note strong { color: var(--text); font-weight: 600; }
