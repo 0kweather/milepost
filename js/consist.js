@@ -253,6 +253,7 @@ export function consistOf(t) {
 // Outlines and running gear use currentColor (--car-ink), so they follow the
 // theme; everything else is flat color in the railroad's livery.
 
+const FT_X = 118 / 85.33;          // px per foot along the train
 const FT_Y = 2.2;                  // px per foot of height
 const RAIL = 46;                   // top of the rail
 const HEAD = 6;                    // room above y=0 for pantographs and tall cars
@@ -333,16 +334,27 @@ function doorX(c, d) {
 }
 
 // A two-axle truck: wheels behind the side frame, journal boxes, and the
-// bolster springs up to the body. Third-rail cars carry contact shoes.
-function truck(cx, wb = 11.8, { shoe = false, top = SILL } = {}) {
-  const a = cx - wb / 2, b = cx + wb / 2;
-  let s = `<circle cx="${r1(a)}" cy="43.4" r="2.6" fill="${INK}"/><circle cx="${r1(b)}" cy="43.4" r="2.6" fill="${INK}"/>`;
-  s += rect(cx - 2, top, 4, 41.4 - top, INK, 'opacity="0.55"');
-  s += rect(a - 3, 41.3, wb + 6, 2.3, INK, 'rx="1.1"');
-  s += rect(a - 0.8, 41.8, 1.6, 1.3, STEEL_DARK) + rect(b - 0.8, 41.8, 1.6, 1.3, STEEL_DARK);
-  if (shoe) s += rect(a - 5.6, 44.1, 3, 0.9, INK) + rect(b + 2.6, 44.1, 3, 0.9, INK);
+// bolster springs up to the body. Wheels are sized from their real diameter
+// (36 in under cars, 40-49 in under locomotives), and locomotive trucks have
+// deep side frames. Third-rail cars carry contact shoes.
+function truck(cx, { wb = 11.8, d = 36, shoe = false, top = SILL, heavy = false } = {}) {
+  const r = (d / 24) * 1.8, cy = RAIL - r, a = cx - wb / 2, b = cx + wb / 2;
+  const fy = heavy ? cy - r - 0.2 : cy - 1.3, fh = heavy ? r + 0.6 : 2.4;
+  let s = `<circle cx="${r1(a)}" cy="${r1(cy)}" r="${r1(r)}" fill="${INK}"/><circle cx="${r1(b)}" cy="${r1(cy)}" r="${r1(r)}" fill="${INK}"/>`;
+  if (fy > top) s += rect(cx - 2, top, 4, fy - top, INK, 'opacity="0.55"');
+  s += rect(a - r - 0.4, fy, wb + 2 * r + 0.8, fh, INK, 'rx="1.1"');
+  s += rect(a - 0.8, cy - 0.7, 1.6, 1.4, STEEL_DARK) + rect(b - 0.8, cy - 0.7, 1.6, 1.4, STEEL_DARK);
+  if (shoe) s += rect(a - r - 3, RAIL - 1.9, 3, 0.9, INK) + rect(b + r, RAIL - 1.9, 3, 0.9, INK);
   return s;
 }
+
+// A locomotive's pair of trucks, from the real distance between truck
+// centers (ft) and wheel diameter (in).
+const locoTrucks = (L, centersFt, d, shoe = false) => {
+  const half = (centersFt * FT_X) / 2;
+  return truck(L / 2 - half, { wb: 12.4, d, shoe, top: LOCO_SILL, heavy: true }) +
+    truck(L / 2 + half, { wb: 12.4, d, shoe, top: LOCO_SILL, heavy: true });
+};
 
 // A single-arm pantograph, raised (or folded down on the roof).
 function pantograph(cx, roof, up = true) {
@@ -362,13 +374,13 @@ function louvers(x, y, w, h, fill = "rgba(0,0,0,0.18)") {
   return s;
 }
 
-// Car ends: the rubber diaphragm between coupled cars (the strip has no gap,
-// so neighbors' diaphragms meet) and the coupler.
+// Car ends: the rubber diaphragm between coupled cars. The strip has no gap,
+// so neighbors' diaphragms meet; the couplers are hidden behind them.
 function ends(c, a, b, diaphragm = true) {
   let s = "";
   if (c.coupledL && diaphragm) s += rect(0, a, 2, b - a, INK, 'opacity="0.55" rx="0.5"');
   if (c.coupledR && diaphragm) s += rect(c.L - 2, a, 2, b - a, INK, 'opacity="0.55" rx="0.5"');
-  return s + rect(0, 39.5, 2.8, 1.4, INK) + rect(c.L - 2.8, 39.5, 2.8, 1.4, INK);
+  return s;
 }
 
 // x for a point measured from one end of the car, so cab details can be
@@ -486,7 +498,7 @@ function emuCar(c, s) {
   if (s.plug) o += rect(L / 2 - 2.6, T + 2.8, 5.2, B - T - 3.4, "none", `stroke="${INK}" stroke-width="0.5" rx="0.4"`) + rect(L / 2 - 1.4, T + 4.6, 2.8, 4.4, GLASS, 'rx="0.4"');
   for (const side of ["l", "r"]) if (side === "l" ? c.cabL : c.cabR) o += emuCab(c, side, T, B, s);
   if (c.pan) o += pantograph(L * (s.panAt ?? 0.72), roof);
-  o += truck(17.9, 11.8, { shoe: s.shoe }) + truck(L - 17.9, 11.8, { shoe: s.shoe });
+  o += truck(17.9, { shoe: s.shoe }) + truck(L - 17.9, { shoe: s.shoe });
   o += outline(d);
   return o + ends(c, T + 3, B - 1);
 }
@@ -565,7 +577,7 @@ function genesis(c, s) {
   o += louvers(x1 - 23, T + 8.4, 13, 4.8) + louvers(x0 + 36, T + 8.8, 6, 4);
   o += roofBox(x1 - 25, T, 20, 1.5) + roofBox(L * 0.5, T, 2.2, 1.8);
   o += rect(34, B, 28, 2.6, INK, 'opacity="0.45" rx="1"');
-  o += truck(22.5, 12.4, { shoe: s.shoe, top: B }) + truck(L - 22.5, 12.4, { shoe: s.shoe, top: B });
+  o += locoTrucks(L, 43.2, 40, s.shoe); // 43 ft 2.5 in between truck centers, 40 in wheels
   if (c.lead) o += `<ellipse cx="${r1(x0 + 3.5)}" cy="${r1(T + 13)}" rx="0.9" ry="0.6" fill="${LAMP}"/>` + lamp(x0 + 1.9, B - 1.6, 0.8);
   o += outline(d);
   return o + ends(c, T + 4, B - 1);
@@ -574,7 +586,7 @@ function genesis(c, s) {
 // Siemens Charger (SC-44, ALC-42): a steeply raked windshield over an
 // upright nose, big radiator louvers high on the rear sides.
 function charger(c, s) {
-  const { x0, x1, L } = c, T = yAt(14.1), B = LOCO_SILL;
+  const { x0, x1, L } = c, T = yAt(14.4), B = LOCO_SILL;
   const d = pd`M${x0 + 11.8} ${T}H${x1 - 1.6}Q${x1} ${T} ${x1} ${T + 1.6}V${B}H${x0 + 0.8}V${B - 3}L${x0 + 2.4} ${B - 6}L${x0 + 2.6} ${T + 10}L${x0 + 4.2} ${T + 8.6}L${x0 + 10.4} ${T + 1}Q${x0 + 10.9} ${T} ${x0 + 11.8} ${T}Z`;
   const phase7 = c.agency === "amtrak" && s.phase7;
   let o = path(d, phase7 ? AMTRAK_LIVERY.sky : c.color);
@@ -594,7 +606,7 @@ function charger(c, s) {
   o += louvers(x1 - 27, T + 1.8, 20, 7);
   o += roofBox(x1 - 28, T, 22, 1.4);
   o += rect(36, B, 28, 2.6, INK, 'opacity="0.45" rx="1"');
-  o += truck(23, 12.4, { top: B }) + truck(L - 23, 12.4, { top: B });
+  o += locoTrucks(L, 44, 49); // 49 in wheels (new); truck centers estimated
   if (c.lead) o += lamp(x0 + 2.2, B - 7.4) + lamp(x0 + 1.6, B - 1.8, 0.8);
   o += outline(d);
   return o + ends(c, T + 4, B - 1);
@@ -603,7 +615,7 @@ function charger(c, s) {
 // Twin-cab electrics (ACS-64, ALP-46): a raked cab at each end, pantographs
 // on the roof, equipment boxes slung between the trucks.
 function twinElectric(c, s) {
-  const { x0, x1, L } = c, T = yAt(s.ft ?? 14.1), B = LOCO_SILL;
+  const { x0, x1, L } = c, T = yAt(s.ft ?? 12.5), B = LOCO_SILL; // ACS-64: 3,810 mm to the roof
   const k = s.boxy ? 0.55 : 1; // how far the windshields rake back
   const d = pd`M${x0 + 4 + 5.6 * k} ${T}H${x1 - 4 - 5.6 * k}Q${x1 - 3.2 - 5.2 * k} ${T} ${x1 - 3 - 4.9 * k} ${T + 1}L${x1 - 3.4} ${T + 9}L${x1 - 1.4} ${B - 5.5}V${B}H${x0 + 1.4}V${B - 5.5}L${x0 + 3.4} ${T + 9}L${x0 + 3 + 4.9 * k} ${T + 1}Q${x0 + 3.2 + 5.2 * k} ${T} ${x0 + 4 + 5.6 * k} ${T}Z`;
   const amtrak = c.agency === "amtrak";
@@ -621,7 +633,7 @@ function twinElectric(c, s) {
   o += roofBox(L * 0.44, T, L * 0.12, 1.6);
   o += pantograph(L * 0.68, T) + pantograph(L * 0.3, T, false);
   o += rect(33, B, L - 66, 2.4, INK, 'opacity="0.4" rx="1"');
-  o += truck(22.5, 12.6, { top: B }) + truck(L - 22.5, 12.6, { top: B });
+  o += locoTrucks(L, 32.5, 44); // ACS-64: 9.9 m between truck centers, 44 in wheels
   if (c.lead) o += lamp(x0 + 2.3, B - 4.4) + lamp(x0 + 2, B - 1.6, 0.8);
   o += outline(d);
   return o + ends(c, T + 4, B - 1);
@@ -639,7 +651,7 @@ function acelaPower(c) {
   o += louvers(x0 + 36, T + 6.4, 10, 5.4) + louvers(x0 + 50, T + 6.4, 10, 5.4) + louvers(x0 + 64, T + 6.4, 10, 5.4);
   o += roofBox(L * 0.42, T, 12, 1.6) + pantograph(L * 0.72, T);
   o += rect(34, B, 28, 2.4, INK, 'opacity="0.4" rx="1"');
-  o += truck(23, 12.4, { top: B }) + truck(L - 23, 12.4, { top: B });
+  o += locoTrucks(L, 40, 40); // truck centers estimated
   if (c.lead) o += lamp(x0 + 3.2, T + 15.6) + lamp(x0 + 2, B - 1.6, 0.8);
   o += outline(d);
   return o + ends(c, T + 4, B - 1);
@@ -663,7 +675,7 @@ function cabUnit(c, s) {
   o += rect(x0 + g + 4.6, T + 2.4, 4, 4.4, "#4c5661", 'rx="0.5"');
   o += louvers(x1 - 24, T + 2.4, 18, 5.4) + roofBox(x1 - 24, T, 18, 1.5) + roofBox(L * 0.5, T, 2.2, 1.8);
   o += rect(32, B, L - 64, 2.6, INK, 'opacity="0.45" rx="1"');
-  o += truck(21, 12, { shoe: s.shoe, top: B }) + truck(L - 21, 12, { shoe: s.shoe, top: B });
+  o += locoTrucks(L, (L - 38) / FT_X, 40, s.shoe);
   if (c.lead) o += lamp(x0 + 2.2, T + 11.6) + lamp(x0 + 1.9, B - 1.6, 0.8);
   o += outline(d);
   return o + ends(c, T + 4, B - 1);
@@ -719,7 +731,7 @@ function gtwCar(c) {
     if (c.lead) o += lamp(x0 + 1.6, T + 12.4) + lamp(x0 + 1.4, hi - 2.4, 0.8);
   }
   o += roofBox(x0 + 30, T, 18, 1.4);
-  o += truck(14);
+  o += truck(14, { wb: 11 });
   o += outline(d);
   return o + ends({ ...c, coupledL: c.coupledL && !cab }, T + 3, hi - 1);
 }
@@ -734,7 +746,7 @@ function gtwPower(c) {
   o += rect(L / 2 - 2.2, T + 3.2, 4.4, 6.2, GLASS, 'rx="0.6"');
   o += rect(x0 + 0.7, T + 13, x1 - x0 - 1.4, 1.9, c.color);
   o += roofBox(x0 + 3, T, x1 - x0 - 6, 2.2);
-  o += truck(L / 2, 10.4);
+  o += truck(L / 2, { wb: 10.4 });
   o += outline(d, 0.8);
   return o + ends(c, T + 3, B - 1);
 }
@@ -758,9 +770,9 @@ const GALLERY = { draw: bilevelCar, ft: 15.7, upper: { dy: 4, h: 4, w: 5.6, pitc
   doors: [{ at: "c", w: 6.4, dbl: true }] };
 const MULTILEVEL = { draw: bilevelCar, ft: 15.9, upper: { dy: 3.6, h: 5, w: 7, pitch: 8.6 }, lower: { dy: 17, h: 4.6, w: 7, pitch: 8.6 },
   doors: [{ at: "l", inset: 2.6, w: 4.6 }, { at: "r", inset: 2.6, w: 4.6 }], doorTop: 11.6 };
-const M7 = { draw: emuCar, ft: 12.92, rt: 2.8, rtCab: 3.6, hvac: true, shoe: true,
+const M7 = { draw: emuCar, ft: 13.25, rt: 2.8, rtCab: 3.6, hvac: true, shoe: true,
   win: { dy: 4.6, h: 6, w: 6.6, pitch: 8.2 }, doors: [{ at: 0.25, w: 5.8, dbl: true }, { at: 0.75, w: 5.8, dbl: true }] };
-const SILVERLINER = { draw: emuCar, ft: 12.75 };
+const SILVERLINER = { draw: emuCar, ft: 13.3 }; // Silverliner IV: 14 ft 5 in over the roof hump
 
 const DRAW = {
   // Locomotives
