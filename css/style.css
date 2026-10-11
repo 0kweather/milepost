@@ -627,7 +627,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .consist-sum { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; }
 .consist-strip {
   display: flex;
-  gap: 3px;
+  gap: 0; /* cars draw their own diaphragms and couplers, which meet */
   overflow-x: auto;
   padding-bottom: var(--s1);
   scrollbar-width: thin;
