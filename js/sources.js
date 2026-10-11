@@ -310,10 +310,11 @@ export function advanceEstimated(t) {
 
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
-// Caltrain, SMART and Metrolink timetables: stop and trip lookups
-// (scripts/build_west.py).
-let westStatic = null;
-const loadWest = () => (westStatic ??= fetch("data/west.json?v=dev").then((r) => r.json()));
+// Stop and trip lookups from the timetables of railroads whose realtime feeds
+// carry only IDs (scripts/build_trips.py).
+const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago" };
+let tripsStatic = null;
+const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r) => r.json()));
 
 // Fills in a train's upcoming stops, next stop, destination and delay from its
 // trip's predicted stop times (GTFS-realtime trip updates) and the railroad's
@@ -331,7 +332,7 @@ function addTrip(t, agency, tripId, tu, west, now) {
   t.stops = list.map((s, i) => ({
     key: `${agency}:${west.stops[s.stopId][3]}`,
     name: west.stops[s.stopId][0],
-    tz: "America/Los_Angeles",
+    tz: TIME_ZONES[agency] || "America/Los_Angeles",
     time: iso(evTime(s)),
     arr: iso(s.arrival?.time), dep: iso(s.departure?.time),
     status: i === nextIdx ? "next" : nextIdx < 0 || i < nextIdx ? "past" : "future",
@@ -348,7 +349,7 @@ function addTrip(t, agency, tripId, tu, west, now) {
   }
 }
 
-function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination, west } = {}) {
+function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination, west: lookup, zeroHeading = false } = {}) {
   const feed = decodeFeed(buf);
   const now = nowSec();
   const tripUpdates = new Map(feed.tripUpdates.filter((u) => u.trip?.tripId).map((u) => [u.trip.tripId, u]));
@@ -367,13 +368,14 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
       number: number ? number(v) : v.vehicle?.label || v.vehicle?.id || null,
       route: route ? route(v) : v.trip?.routeId || null,
       lat: p.lat, lon: p.lon,
-      bearing: p.bearing || null,
+      // Most feeds send 0 when they don't know the heading; Tri-Rail's 0 is due north.
+      bearing: p.bearing || (zeroHeading && p.bearing === 0 ? 0 : null),
       speedMph: mps2mph(p.speed),
       destination: destination ? destination(v) : null,
       updated: (v.timestamp || feed.timestamp || now) * 1000,
-      fixAt: west && v.timestamp ? v.timestamp * 1000 : null,
+      fixAt: lookup && v.timestamp ? v.timestamp * 1000 : null,
     }));
-    if (west && v.trip?.tripId) addTrip(out[out.length - 1], agency, v.trip.tripId, tripUpdates.get(v.trip.tripId), west, now);
+    if (lookup && v.trip?.tripId) addTrip(out[out.length - 1], agency, v.trip.tripId, tripUpdates.get(v.trip.tripId), lookup, now);
   }
   return out;
 }
@@ -439,10 +441,11 @@ export const SOURCES = [
   {
     id: "rtd", agencies: ["rtd"], format: "pb", interval: 30, relay: true,
     credit: { label: "RTD", href: "https://www.rtd-denver.com/open-records/open-spatial-information/real-time-feeds" },
-    parse: (buf) => gtfsVehicles("rtd", buf, {
+    parse: async (buf) => gtfsVehicles("rtd", buf, {
       keep: (v) => v.trip?.routeId in RTD_LINES,
       route: (v) => RTD_LINES[v.trip.routeId],
       number: () => null, // the feed has no public train numbers
+      west: (await loadTrips()).rtd,
     }),
   },
   {
@@ -458,10 +461,11 @@ export const SOURCES = [
   {
     id: "capmetro", agencies: ["capmetro"], format: "pb", interval: 30, relay: true,
     credit: { label: "CapMetro", href: "https://data.texas.gov" },
-    parse: (buf) => gtfsVehicles("capmetro", buf, {
+    parse: async (buf) => gtfsVehicles("capmetro", buf, {
       keep: (v) => v.trip?.routeId === "550",
       route: () => "Red Line",
       number: () => null,
+      west: (await loadTrips()).capmetro,
     }),
   },
   {
@@ -469,6 +473,7 @@ export const SOURCES = [
     credit: { label: "Tri-Rail", href: "https://www.tri-rail.com" },
     parse: (buf) => gtfsVehicles("trirail", buf, {
       route: () => "Tri-Rail",
+      zeroHeading: true,
       number: (v) => (v.vehicle?.label || "").replace(/^P/, "") || null, // "P625" is train 625
     }),
   },
@@ -490,19 +495,19 @@ export const SOURCES = [
   {
     id: "caltrain", agencies: ["caltrain"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
-    parse: async (buf) => gtfsVehicles("caltrain", buf, { route: (v) => v.trip?.routeId || "Caltrain", west: (await loadWest()).caltrain }),
+    parse: async (buf) => gtfsVehicles("caltrain", buf, { route: (v) => v.trip?.routeId || "Caltrain", west: (await loadTrips()).caltrain }),
   },
   {
     id: "smart", agencies: ["smart"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
     // The feed also lists parked and non-revenue cars; only ones on a trip are
     // running. Labels are car numbers, not train numbers, so none is shown.
-    parse: async (buf) => gtfsVehicles("smart", buf, { keep: (v) => Boolean(v.trip?.tripId), route: () => "SMART", number: () => null, west: (await loadWest()).smart }),
+    parse: async (buf) => gtfsVehicles("smart", buf, { keep: (v) => Boolean(v.trip?.tripId), route: () => "SMART", number: () => null, west: (await loadTrips()).smart }),
   },
   {
     id: "metrolink", agencies: ["metrolink"], format: "pb", interval: 30, relay: true, needsKey: "METROLINK_API_KEY",
     credit: { label: "Metrolink", href: "https://metrolinktrains.com/about/gtfs/" },
-    parse: async (buf) => gtfsVehicles("metrolink", buf, { route: (v) => v.trip?.routeId, west: (await loadWest()).metrolink }),
+    parse: async (buf) => gtfsVehicles("metrolink", buf, { route: (v) => v.trip?.routeId, west: (await loadTrips()).metrolink }),
   },
 ];
 
