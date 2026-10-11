@@ -636,6 +636,16 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .consist .car svg { display: block; color: var(--car-ink); }
 .consist .car figcaption { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .consist .estimate-note { margin-top: var(--s1); }
+.typical-tag {
+  margin-left: var(--s2);
+  padding: 1px 6px;
+  border: 1px dashed var(--faint);
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  vertical-align: 1px;
+}
 
 .hero, .meta, .estimate-note, .consist { flex: none; }
 .hero { padding: 6px 0 var(--s4); border-bottom: 1px solid var(--line); }

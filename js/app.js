@@ -1195,16 +1195,20 @@ function inferredNote(t) {
     so it can’t get there before ${fmtTime(new Date(n.earliest).toISOString(), n.tz)}. The railroad hasn’t reported this yet; the times below include it.</p>`;
 }
 
-// The train's cars, drawn from the car numbers its railroad reports.
+// The train's cars: live where the railroad reports them, otherwise what
+// typically runs on the route, labeled as typical.
 function consistSection(t) {
   const c = consistOf(t);
   if (!c) return "";
   const a = AGENCIES[t.agency];
-  return `<section class="consist">
-    <h3 class="section-title">Consist</h3>
+  const note = !c.typical ? ""
+    : c.reported ? `${esc(a.short)}’s feed names one car of this train, ${esc(c.reported.number)} (${esc(c.reported.name)}). The rest shows what typically runs on this line.`
+    : `${esc(a.short)} doesn’t report which cars this train has. This is what typically runs on this route.`;
+  return `<section class="consist${c.typical ? " typical" : ""}">
+    <h3 class="section-title">Consist${c.typical ? '<span class="typical-tag">Typical</span>' : ""}</h3>
     <p class="consist-sum">${esc(c.summary)}</p>
     <div class="consist-strip">${consistHtml(c, a.color)}</div>
-    ${c.complete ? "" : `<p class="estimate-note">${esc(a.short)}’s feed names one car of this train, so the rest isn’t shown.</p>`}
+    ${note ? `<p class="estimate-note">${note}</p>` : ""}
   </section>`;
 }
 
