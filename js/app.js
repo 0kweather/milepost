@@ -239,9 +239,22 @@ function themeColors() {
         stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1, stateBorder: "rgba(90,100,115,0.35)" };
 }
 
-// The selected train's white rim: a hair larger than the marker's body, so the
-// heading arrow starts at its edge and points out past it at every zoom.
-// Mirrors the marker's icon-size.
+// Train markers by zoom. Intercity trains draw a little larger than commuter
+// trains, and the selected and tracked trains larger still: the whole marker,
+// heading arrow included, grows rather than gaining a halo. Their plates sit
+// a little further out to clear it.
+const SELECTED_SCALE = 1.4;
+function trainIconSize(highlighted = false) {
+  const sized = (v) => ["*", ["case", ["get", "intercity"], 1.12, 1], ["case", highlighted, SELECTED_SCALE, 1], v];
+  return ["interpolate", ["linear"], ["zoom"], 2, sized(0.5), 5, sized(0.68), 8, sized(0.85), 12, sized(1)];
+}
+const PLATE_OFFSET = ["left", [1.55, 0], "right", [-1.55, 0], "top", [0, 1.7], "bottom", [0, -1.45]];
+const PLATE_OFFSET_SELECTED = ["left", [1.95, 0], "right", [-1.95, 0], "top", [0, 2.1], "bottom", [0, -1.85]];
+function plateOffset(highlighted = false) {
+  return ["case", highlighted, ["literal", PLATE_OFFSET_SELECTED], ["literal", PLATE_OFFSET]];
+}
+
+// A marker's radius by zoom, for the ping rings and the selected station's disc.
 const DISC_STOPS = [[2, 0.5], [5, 0.68], [8, 0.85], [12, 1]].map(([z, k]) => [z, 7.5 * k * 1.12 + 1.5]);
 function discRadius(extra = 0) {
   return ["interpolate", ["linear"], ["zoom"], ...DISC_STOPS.flatMap(([z, r]) => [z, r + extra])];
@@ -455,12 +468,7 @@ function addLayers() {
 
   map.addSource("trains", { type: "geojson", data: featureCollection() });
 
-  // Intercity trains draw a little larger than commuter trains.
-  const sized = (v) => ["*", ["case", ["get", "intercity"], 1.12, 1], v];
-  const iconSize = ["interpolate", ["linear"], ["zoom"], 2, sized(0.5), 5, sized(0.68), 8, sized(0.85), 12, sized(1)];
-
-  // Selected train: a ping, a soft shadow and a white disc ringed in its
-  // railroad's color under the marker, so it looks lifted off the map.
+  // Selected and tracked trains: a ping ring under an enlarged marker.
   const trainSel = ["==", ["get", "id"], ""];
   map.addLayer({
     id: "tt-ping",
@@ -469,25 +477,6 @@ function addLayers() {
     filter: trainSel,
     paint: { "circle-radius": 12, "circle-color": "transparent", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": 0 },
   });
-  map.addLayer({
-    id: "tt-halo-shadow",
-    type: "circle",
-    source: "trains",
-    filter: trainSel,
-    paint: { "circle-radius": discRadius(2.5), "circle-color": "#000", "circle-opacity": 0.25, "circle-blur": 0.9, "circle-translate": [0, 1.5] },
-  });
-  map.addLayer({
-    id: "tt-halo",
-    type: "circle",
-    source: "trains",
-    filter: trainSel,
-    paint: {
-      "circle-radius": discRadius(),
-      "circle-color": "#ffffff",
-      "circle-stroke-color": ["get", "color"],
-      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 2, 1.5, 12, 2],
-    },
-  });
 
   map.addLayer({
     id: "tt-trains",
@@ -495,7 +484,7 @@ function addLayers() {
     source: "trains",
     layout: {
       "icon-image": ["concat", "tt-", ["get", "agency"], ["case", ["get", "hasBearing"], "-arrow", "-dot"]],
-      "icon-size": iconSize,
+      "icon-size": trainIconSize(),
       "icon-rotate": ["get", "bearing"],
       "icon-rotation-alignment": "map",
       "icon-allow-overlap": true,
@@ -520,7 +509,7 @@ function addLayers() {
       "text-font": ["Noto Sans Bold"],
       "text-size": ["interpolate", ["linear"], ["zoom"], 8, 11, 12, 12],
       // Beside the marker, clear of the white rim; the first one that fits wins.
-      "text-variable-anchor-offset": ["literal", ["left", [1.55, 0], "right", [-1.55, 0], "top", [0, 1.7], "bottom", [0, -1.45]]],
+      "text-variable-anchor-offset": plateOffset(),
       "icon-image": ["concat", "tt-plate-", ["get", "agency"]], // fitted around the number
       "icon-text-fit": "both",
       "icon-text-fit-padding": [0.5, 3, 0.5, 3],
@@ -1499,13 +1488,16 @@ function renderAll() {
 // ---------- Selection ----------
 
 function applySelectionFilter() {
-  if (!map.getLayer("tt-halo")) return;
+  if (!map.getLayer("tt-trains")) return;
   const id = state.selected || "", sid = state.station || "";
-  // The selected train and every tracked train get the highlight (rim and
-  // ping), and their plates win any collision and show at every zoom.
+  // The selected train and every tracked train get the highlight (a larger
+  // marker and a ping), and their plates win any collision and show at every
+  // zoom.
   const ids = [...new Set([id, ...state.tracked.map((r) => r.id)].filter(Boolean))];
   const highlighted = ["in", ["get", "id"], ["literal", ids]];
-  for (const l of ["tt-ping", "tt-halo-shadow", "tt-halo"]) map.setFilter(l, highlighted);
+  map.setFilter("tt-ping", highlighted);
+  map.setLayoutProperty("tt-trains", "icon-size", trainIconSize(highlighted));
+  map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(highlighted));
   map.setFilter("tt-labels", ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
   for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-station-selected-label", "tt-footprint-selected"]) {
@@ -1524,10 +1516,11 @@ function ping(on) {
   cancelAnimationFrame(pingRaf);
   const layers = ["tt-ping", "tt-station-ping"].filter((l) => map.getLayer(l));
   if (!on || !layers.length) return;
-  const base = () => discRadiusAt(map.getZoom());
+  // Rings start at the marker's edge; a selected train's marker is enlarged.
+  const base = (l) => discRadiusAt(map.getZoom()) * (l === "tt-ping" ? SELECTED_SCALE : 1);
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     for (const l of layers) {
-      map.setPaintProperty(l, "circle-radius", base() + 6);
+      map.setPaintProperty(l, "circle-radius", base(l) + 6);
       map.setPaintProperty(l, "circle-stroke-opacity", 0.45);
     }
     return;
@@ -1541,7 +1534,7 @@ function ping(on) {
       const grow = 1 - (1 - k) ** 3; // ease out
       const opacity = t > PING_MS ? 0 : 0.7 * Math.min(1, k / 0.15) * (1 - k);
       for (const l of layers) {
-        map.setPaintProperty(l, "circle-radius", base() + 2 + grow * 18);
+        map.setPaintProperty(l, "circle-radius", base(l) + 2 + grow * 18);
         map.setPaintProperty(l, "circle-stroke-opacity", opacity);
       }
     }
