@@ -152,7 +152,11 @@ export function acs64(c) {
 // --- GE Genesis P42DC (and P32AC-DM): 69 ft long, 14 ft 4 in tall, trucks
 // 43 ft 2.5 in apart on 40 in wheels. A sloped nose from the windshield to the
 // pilot, upper sides that taper in above a crease, radiator fans at the back.
-// Phase V: light gray, blue top with a wavy lower edge, red sill stripe.
+// Phase V (most P42s): platinum, the roof and the band above the crease blue,
+// sweeping down over the cab to headlight height at the nose; red sill
+// stripe; the name over the travelmark, big and blue, behind the cab.
+// The P32AC-DMs (rebuilt 2018-21) wear the heritage scheme instead: silver,
+// a black nose and cab, red, white and blue stripes along the side.
 export function genesis(c, s0 = {}) {
   const { L } = c, sill = 4.4, roof = 14.33;
   const d = poly([[2.1, sill], [L - 1.0, sill], [L - 1.0, roof - 1.3], ["q", L - 1.0, roof, L - 2.3, roof], [8.2, roof], ["q", 7.0, roof, 6.5, 12.7],
@@ -165,7 +169,7 @@ export function genesis(c, s0 = {}) {
   s += path(poly([[17.5, sill], [51.5, sill], [51.5, 2.4], ["q", 51.5, 1.5, 50.6, 1.5], [18.4, 1.5], ["q", 17.5, 1.5, 17.5, 2.4]]), "currentColor", 0, 'opacity="0.82"');
   s += rect(33, 2.9, 2.5, 0.9, C.steelDark, 0, 'opacity="0.8"'); // fuel gauge and filler
   s += truck(L / 2 - 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe }) + truck(L / 2 + 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe });
-  const mnr = c.agency === "mnr";
+  const mnr = c.agency === "mnr", heritage = amtrak && s0.shoe;
   let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : mnr ? "#c3c8ce" : c.color);
   if (mnr) {
     // Metro-North's P32AC-DMs: a blue cab and nose, silver hood over a blue
@@ -173,9 +177,15 @@ export function genesis(c, s0 = {}) {
     liv += rect(0, 0, 12.6, roof + 1, "#1f4fbf") + rect(0, sill, L, 3.0, "#1f4fbf") +
       path(`M12.6 ${sill + 3.0}L${L} ${sill + 3.4}L${L} ${sill + 3.75}L12.6 ${sill + 3.35}Z`, AMTRAK.red);
   }
-  if (amtrak) {
-    // The blue top's lower edge waves gently from the cab to the back.
-    liv += path(`M0 ${roof + 1}L0 10.1L5.8 10.1C16 10.0 22 11.0 32 10.75S48 10.1 56 10.55S66 11.2 ${L} 11.0L${L} ${roof + 1}Z`, AMTRAK.blue);
+  if (heritage) {
+    // Black over the nose and cab, its edge rising behind the cab windows to
+    // the roof at the crew door; red over white over blue stripes; a black sill.
+    liv += path(`M0 ${roof + 1}L0 8.4L4.5 8.4Q11.5 8.6 13.4 ${roof + 0.1}L13.4 ${roof + 1}Z`, C.black);
+    liv += rect(0, 7.7, L, 0.6, AMTRAK.red) + rect(0, 6.9, L, 0.8, "#ffffff") + rect(0, 6.4, L, 0.5, AMTRAK.blue);
+    liv += rect(0, sill, L, 0.35, C.black);
+  } else if (amtrak) {
+    // Blue above the crease, sweeping down past the cab to the nose.
+    liv += path(`M0 ${roof + 1}L0 6.5L1.5 6.6C8 7.4 12 9.0 15 10.9S17.5 12.25 20 12.25L${L} 12.25L${L} ${roof + 1}Z`, AMTRAK.blue);
     liv += rect(0, sill + 0.25, L, 0.26, AMTRAK.red);
   }
   liv += line(7.6, 12.25, L - 1.0, 12.25, "rgba(0,0,0,0.28)", 0.6);           // crease where the sides taper in
@@ -184,15 +194,18 @@ export function genesis(c, s0 = {}) {
   liv += win(7.8, 10.4, 2.6, 1.7, 0.2) + win(10.7, 10.4, 1.6, 1.7, 0.2);       // cab side windows
   s += path(d, amtrak ? AMTRAK.platinum : c.color) + clipped(d, liv);
   s += door(12.8, sill + 0.4, 2.2, 6.8, { glassY: 0.6, glassH: 0.2 });          // crew door
-  // Radiator air intakes low at the back, a smaller one forward, louvers up high.
-  for (const [x, w, y, h] of [[44.5, 14, 5.3, 2.9], [27.5, 4.5, 5.3, 2.9], [47, 10, 11.0, 1.0]]) {
+  // Radiator air intakes low at the back, a small grille under the cab
+  // window, louvers up under the crease behind the cab and near the back.
+  for (const [x, w, y, h] of [[44.5, 14, 5.3, 2.9], [7.4, 2.0, 5.9, 1.1], [16.6, 3.6, 10.5, 1.6], [20.6, 3.6, 10.5, 1.6], [24.6, 3.6, 10.5, 1.6], [46.5, 3.0, 10.8, 1.3]]) {
     s += rect(x, y, w, h, "rgba(0,0,0,0.22)", 0.4);
     s += slats(x, y, w, h);
   }
   // Roof: dynamic brake hatch, exhaust, two radiator fans at the back.
   s += rect(28, roof, 9, 0.3, C.steelDark, 0.4) + rect(41.5, roof, 1.6, 0.55, "currentColor") + rect(52, roof, 14, 0.25, C.steelDark, 0.4);
   for (const x of [55.5, 62]) s += path(`M${x - 2.4} ${roof + 0.25}Q${x} ${roof + 0.95} ${x + 2.4} ${roof + 0.25}Z`, C.steelDark, 0.4);
-  s += mnr ? badge(c, 17.5, 10.2, 1.6) : badge(c, 55, 9.3, 1.6);    // MTA disc behind the cab; Amtrak toward the rear
+  // MTA disc behind the cab; Phase V: name over travelmark behind the cab;
+  // heritage: the small travelmark and name toward the back, above the stripes.
+  s += mnr ? badge(c, 17.5, 10.2, 1.6) : heritage ? badge(c, 48, 9.3, 0.75) : badge(c, 21.8, 8.3, 3.9, { logo: "amtrak-stack" });
   s += outlineOf(d);
   return s;
 }
@@ -200,50 +213,68 @@ export const p32 = (c) => genesis(c, { shoe: true });
 
 // --- Budd Amfleet: 85 ft 4 in, 12 ft 8 in tall, the tube-shaped body of the
 // Metroliner with a rounded roof and corrugated lower sides; low, wide
-// windows (18 in tall on the Amfleet I, 22 in on the II). The I has a
-// vestibule at each end, the II at one. Phase VI: blue window band, red
-// sill stripe.
-// Class colors of the Phase VII wedge: green coach, light blue business; the
-// cafe car has none.
+// windows (18 in tall on the Amfleet I, 22 in on the II), nine a side. The
+// I has a vestibule at each end, the II and the cafe car one, at the A end.
+// The cafe car's counter is mid-car: three windows toward the door, a blank
+// stretch, four toward the far end.
+// Class colors of the Phase VII band ends: green coach, light blue business;
+// the cafe car has none.
 const AMFLEET_CLASS = { coach: "#3fae49", business: "#5ec4ea", cafe: null };
 function amfleet(c, { two = false, cab = false, cls = "coach" } = {}) {
   const { L } = c, x0 = 1.0, x1 = L - 1.0, sill = 4.05, roof = 12.67;
+  const cafe = cls === "cafe", oneDoor = two || cafe;
   const d = bodyOutline(x0, x1, sill, roof, { endR: 2.0, endRL: cab && c.cabL ? 3.2 : 2.0 });
-  const winH = two ? 1.83 : 1.5, winY = two ? 7.35 : 7.55;
+  const winH = two ? 1.83 : 1.5, winY = two ? 7.35 : 7.55, winW = two ? 5.6 : 5.3;
+  // Window left edges and where the mid-car swoosh crosses the band
+  // (bottom, top), measured from photos.
+  const [wins, mid] = two ? [[...seq(13.8, 6.95, 4), ...seq(43.6, 6.95, 5)], [40.8, 44.9]]
+    : cafe ? [[...seq(16.0, 7.0, 3), ...seq(52.0, 7.0, 4)], [41.6, 45.6]]
+    : [[...seq(9.6, 6.85, 5), ...seq(45.95, 6.85, 4)], [42.6, 46.6]];
   let s = underframe(19, L - 19, sill, { boxes: 3 });
   s += truck(L / 2 - 29.75, { wb: 8.5, d: 36, kind: "pioneer", top: sill }) + truck(L / 2 + 29.75, { wb: 8.5, d: 36, kind: "pioneer", top: sill });
   let liv = rect(0, 0, L, roof + 1, C.steel);
   liv += rect(0, 11.05, L, 2, C.steelShade);                         // rounded roof
   liv += flutes(x0, x1, sill + 0.35, 6.75);                          // corrugated lower sides
-  // Phase VII: a window band, dark blue from the A end to a white slash a
-  // third of the way along, lighter blue past it, a second white slash near
-  // the B end. Only the A end carries the class-color wedge, with the logo
-  // just behind it. A red line low on the side.
+  // Phase VII: a window band, dark blue from the A end to a white swoosh
+  // near mid-car, lighter blue past it. At each door the band ends in the
+  // class color behind a long white slash (wide at the top); a plain slash
+  // where there is no door. A red line low on the side.
   const b0 = winY - 0.55, b1 = winY + winH + 0.6;
-  const a = two ? x0 : x0 + 4.4;                                     // past the A-end door (Amfleet I)
-  const slashAt = (f) => x0 + (x1 - x0) * f;
-  // lean: 1 for "/", -1 for "\" (the two slashes lean opposite ways).
-  const slashPath = (x, lean) => path(poly([[x - 0.7 * lean - 0.18, b0], [x - 0.7 * lean + 0.18, b0], [x + 0.7 * lean + 0.18, b1], [x + 0.7 * lean - 0.18, b1]]), "#ffffff");
-  const mid = slashAt(0.37);
-  liv += rect(x0, b0, x1 - x0, b1 - b0, AMTRAK.navy) + path(poly([[mid - 0.7, b0], [x1, b0], [x1, b1], [mid + 0.7, b1]]), AMTRAK.sky);
-  liv += slashPath(mid, 1) + slashPath(slashAt(0.92), -1);
+  const a = x0 + 3.5, b = oneDoor ? x1 - 0.15 : x1 - 3.6;           // band ends, clear of the doors
+  // A white slash from (xb, bottom) to (xt, top), bowed a little.
+  const slash = (xb, xt, w = 0.4) => {
+    const cx = xb + (xt - xb) * 0.65, cy = (b0 + b1) / 2;
+    return path(`M${xb - w / 2} ${b0}Q${cx - w / 2} ${cy} ${xt - w / 2} ${b1}L${xt + w / 2} ${b1}Q${cx + w / 2} ${cy} ${xb + w / 2} ${b0}Z`, "#ffffff");
+  };
   const wedge = AMFLEET_CLASS[cls];
-  if (wedge && !(cab && c.cabL)) liv += path(poly([[a, b0], [a + 2.4, b0], [a + 1.2, b1], [a, b1]]), wedge);
+  liv += rect(a, b0, b - a, b1 - b0, AMTRAK.navy) + path(poly([[mid[0], b0], [b, b0], [b, b1], [mid[1], b1]]), AMTRAK.sky);
+  liv += slash(mid[0], mid[1]);
+  // A end: the class color (coach and business) behind the slash; plain
+  // blue behind a long slash on the cafe car and at a cab.
+  const [la, lb] = cafe ? [a + 0.4, a + 7.6] : two ? [a + 1.0, a + 5.5] : [a + 0.8, a + 4.8];
+  if (wedge && !(cab && c.cabL)) liv += path(poly([[a, b0], [la, b0], [lb, b1], [a, b1]]), wedge);
+  liv += slash(la, lb);
+  // B end: the class color at an Amfleet I's second door; a plain slash at
+  // a blind end.
+  const [ra, rb] = oneDoor ? [b - 0.8, b - 4.6] : [b - 0.5, b - 4.9];
+  if (wedge && !oneDoor) liv += path(poly([[ra, b0], [b, b0], [b, b1], [rb, b1]]), wedge);
+  liv += slash(ra, rb);
   liv += rect(x0, sill + 0.2, x1 - x0, 0.22, AMTRAK.red);
   s += path(d, C.steel) + clipped(d, liv);
-  // Doors: both ends on the Amfleet I, the B end only on the II.
-  const doors = two ? [x1 - 4.4] : [x0 + 1.8, x1 - 4.4];
-  for (const x of doors) {
-    s += door(x, sill + 0.15, 2.6, 6.55, { glassY: 0.55, glassH: 0.32 });
+  for (const x of oneDoor ? [x0 + 0.6] : [x0 + 0.6, x1 - 3.2]) s += door(x, sill + 0.15, 2.6, 6.55, { glassY: 0.55, glassH: 0.32 });
+  for (const x of wins) s += win(x, winY, winW, winH, 0.55);
+  if (cafe) {
+    // Small oval window and a "FOOD SERVICE CAR" plate over the band by the door.
+    s += win(a + 0.3, b1 + 0.25, 1.3, 0.55, 0.27) + rect(a + 1.9, b1 + 0.2, 5.6, 0.62, "#e6e9ec", 0.4);
   }
-  const gaps = doors.map((x) => [x - 1.2, x + 3.8]);
-  gaps.push([a, a + 8.2]);                                           // wedge and logo
-  if (cab && c.cabL) gaps.push([x0, x0 + 6.5]);
-  s += windowRow(x0 + 4.2, x1 - 4.2, winY, two ? 5.6 : 5.3, winH, two ? 6.9 : 6.5, { r: 0.55, skip: gaps });
   if (cab && c.cabL) {
-    s += path(poly([[x0 + 0.35, 8.4], [x0 + 1.4, 10.6], [x0 + 3.8, 10.6], [x0 + 3.8, 8.4]]), C.black) + win(x0 + 1.5, 8.6, 2.0, 1.8, 0.3);
+    // Cab end: a cluster of horns and a beacon on the roof over the flat front.
+    s += rect(x0 + 3.2, roof - 0.05, 1.5, 0.5, "currentColor", 0, 'rx="0.22"') + rect(x0 + 5.0, roof - 0.05, 0.5, 0.65, "#e8a33a", 0.4, 'rx="0.15"');
   }
-  s += badge(c, a + 5.0, winY + winH / 2, 2.1, { dark: true, logo: "amtrak-stack" }); // white, in the band behind the wedge
+  // The name over the travelmark, white in the band: behind the wedge on the
+  // II, past the slash on the cafe car, by the B-end slash on the I.
+  const logoX = two ? a + 8.0 : cafe ? a + 9.6 : b - 6.9;
+  s += badge(c, logoX, winY + winH / 2, 1.5, { dark: true, logo: "amtrak-stack" });
   s += outlineOf(d) + carEnds(c);
   return s;
 }
@@ -305,8 +336,9 @@ export function coachCar(c, spec) {
 // windshield over an upright nose; radiator intakes high on the rear sides.
 // Brightline's SCB-40 hides its coupler behind a removable nose cone. Siemens
 // gives 40.8 ft between truck centers and 44 in wheels.
-// Phase VII (ALC-42): two blues split by a curved white stripe, black around
-// the cab glass flanked by white and red, red and white sill stripes.
+// Phase VII (ALC-42): dark blue, the rear lighter blue behind a white swoosh
+// rising from mid-side to the roof; a red cap over the cab edged in white,
+// the white running on along the roof edge; a red sill band.
 // A stripe framing a Charger's cab glass, as seen from the side: up the lower
 // nose and as a cap over the cab roof (VIA yellow, Cascades tan).
 const noseStripe = (color) =>
@@ -324,7 +356,7 @@ export function charger(c, { phase7 = false } = {}) {
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
     : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
-  const base = { phase7: AMTRAK.sky, brightline: "#d9dde2", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
+  const base = { phase7: AMTRAK.navy, brightline: "#d9dde2", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
     cascades: "#1d4a45" }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
@@ -341,11 +373,13 @@ export function charger(c, { phase7 = false } = {}) {
   let liv = rect(0, 0, L, roof + 1, base);
   switch (scheme) {
     case "cascades":
-      // Amtrak Cascades (Airo ALC-42E): teal green with a big cream panel
-      // along the side, brown and white sill stripes, tan edging the cab glass.
-      liv += path("M16.5 7.4Q16.5 4.9 19 4.9L58 4.9L58 13.3L19 13.3Q16.5 13.3 16.5 10.8Z", "#efe9dc");
-      liv += rect(0, sill, L, 0.45, "#5a3a2c") + rect(0, sill + 0.45, L, 0.2, "#f4f1ea");
-      liv += noseStripe("#b08a5a");
+      // Amtrak Cascades (Airo ALC-42E): evergreen with a big cream panel from
+      // behind the cab to the rear, its front edge sweeping forward at the
+      // bottom; a white line and a copper band low on the side; copper,
+      // edged in white, over the cab roof.
+      liv += path(`M22 12.7Q17 11.5 16.2 7.6Q16 5.8 18.5 5.8L${L} 5.8L${L} 12.7Z`, "#efe9dc");
+      liv += rect(0, 5.15, L, 0.4, "#7a4e34") + rect(0, 4.75, L, 0.2, "#f4f1ea");
+      liv += path(poly([[4.95, 13.25], [5.7, 14.5], [12.5, 14.5], [12.5, 13.6], [5.6, 13.6]]), "#b08a5a") + rect(5.6, 13.4, 6.9, 0.2, "#f4f1ea");
       break;
     case "mnr":
       // Metro-North: a blue cab and nose; silver behind, over a blue band edged in red.
@@ -353,12 +387,12 @@ export function charger(c, { phase7 = false } = {}) {
       liv += rect(0, sill, 14, roof + 1, "#1f4fbf") + rect(0, sill, L, 0.35, "#1d1f22");
       break;
     case "phase7": {
-      // Two blues split by a curved white stripe, a red nose, red and white sill stripes.
-      const curve = `M14 ${sill + 0.6}C26 ${sill + 0.4} 44 ${roof - 4.5} ${L} ${roof - 3.4}`;
-      liv += path(`${curve}L${L} ${roof + 1}L14 ${roof + 1}Z`, AMTRAK.navy);
-      liv += path(curve, "none", 0, 'stroke="#ffffff" stroke-width="0.45"');
-      liv += path(`M0 ${sill}L3.2 ${sill}L3.2 9.0L0 9.0Z`, AMTRAK.red);
-      liv += rect(0, sill + 0.55, L, 0.22, AMTRAK.red) + rect(0, sill + 0.25, L, 0.2, "#ffffff");
+      // The lighter blue behind the swoosh; light gray roof over a white
+      // roof-edge line; a red sill band under a thin white line.
+      const swoosh = `M43 ${sill}Q45.5 11.5 54.5 13.85`;
+      liv += path(`${swoosh}L${L} 13.85L${L} ${sill}Z`, AMTRAK.sky) + path(swoosh, "none", 0, 'stroke="#ffffff" stroke-width="0.5"');
+      liv += rect(0, 13.85, L, 1.5, "#cfd4da") + rect(0, 13.7, L, 0.3, "#ffffff");
+      liv += rect(0, sill, L, 0.5, AMTRAK.red) + rect(0, sill + 0.55, L, 0.13, "#ffffff");
       break;
     }
     case "brightline":
@@ -393,10 +427,22 @@ export function charger(c, { phase7 = false } = {}) {
     default:
       liv += rect(0, sill + 1.0, L, 0.35, "#ffffff", 0, 'opacity="0.85"');
   }
-  // Cab glass in a black surround (flanked by white and red on Phase VII).
+  // Cab glass in a black surround.
   liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
-  if (p7) liv += rect(11.0, 8.6, 0.35, 5.2, "#ffffff") + rect(11.5, 8.6, 0.45, 5.2, AMTRAK.red);
   liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
+  if (phase7) {
+    // ALC-42 cab: the windshield wraps back to about 7 ft; behind it the
+    // body color, a narrow side window and the mirror ahead of the door.
+    // Phase VII: the red cap over the cab, edged in white.
+    const side = scheme === "cascades" ? base : AMTRAK.navy;
+    liv += rect(5.6, 8.4, 5.6, 4.85, side) + path(poly([[2.6, 9.35], [4.85, 12.95], [7.0, 12.95], [7.0, 9.5]]), C.glass);
+    if (p7) {
+      const cap = "M0.5 9.0L2.2 9.0Q6.5 9.3 8.6 11.2Q11.8 13.75 16 13.75";
+      liv += path(`${cap}L16 ${roof + 1}L0 ${roof + 1}Z`, AMTRAK.red) + path(cap, "none", 0, 'stroke="#ffffff" stroke-width="0.3"');
+      liv += path(poly([[2.6, 9.35], [4.85, 12.95], [7.0, 12.95], [7.0, 9.5]]), C.glass);
+    }
+    liv += win(10.0, 8.9, 1.15, 2.4, 0.25) + rect(11.35, 10.2, 0.5, 1.5, "#c9cdd2", 0, 'rx="0.15"');
+  }
   liv += line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
   s += path(d, base) + clipped(d, liv);
   s += door(12.3, sill + 0.4, 2.3, 7.4, { glassY: 0.68, glassH: 0.2 });
@@ -414,7 +460,7 @@ export function charger(c, { phase7 = false } = {}) {
   // state-supported services: their own logos mid-side on the gray; Cascades:
   // its name in white high behind the cab.
   const mark = {
-    phase7: { x: 20, y: 9.2, h: 3.6, dark: true, logo: "amtrak-stack" },
+    phase7: { x: 20.5, y: 8.2, h: 3.9, dark: true, logo: "amtrak-stack" },
     brightline: { x: 42, y: 8.8, h: 2.6 },
     via: { x: 39, y: 8.3, h: 5.0, logo: "via-mark" },
     mnr: { x: 16.5, y: 8.2, h: 1.7 },
@@ -1345,49 +1391,68 @@ export const renaissanceDiner = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 
 
 // ===================== Acela =====================
 // Alstom Avelia Liberty (Amtrak 2100-2155 power cars): a power car at each
-// end of nine articulated coaches, 698 ft in all. The power car: a short
-// rounded nose under a raked windshield, white with a blue roof that fades in
-// a halftone toward the coaches, red on the sill and the pantograph.
-// Coaches: blue above and below a white window band, sharing a truck at each
-// joint (Jakobs articulation): each coach draws half of the shared truck at
-// either end and its neighbor draws the other half.
+// end of nine articulated coaches, 676 ft in all. The power car: a long
+// pointed nose rising under a raked windshield to a louvered roof hood,
+// the crew door near mid-car, trucks 30 ft apart. White, with the hood and
+// the band above the windows blue; a deep red skirt; at the back a blue
+// lower band that dissolves forward in a halftone; the nose skirt charcoal.
+// Coaches: blue above and below a white window band, red skirt; seven big
+// windows and a door at one end; a truck shared at each joint (Jakobs
+// articulation): each coach draws half of the shared truck at either end
+// and its neighbor draws the other half.
 export function acelaPower(c) {
-  const { L } = c, sill = 4.4, roof = 14.17;
-  const d = poly([[3.6, sill], [L - 0.6, sill], [L - 0.6, roof - 0.6], ["q", L - 0.6, roof, L - 1.2, roof], [11.5, roof],
-    ["q", 8.6, roof, 6.6, 12.4], [3.4, 9.6], ["q", 1.2, 8.0, 0.9, 6.3], ["q", 0.9, 4.5, 3.6, sill]]);
-  // The nose's white skirt sweeps down over the coupler almost to the rail.
-  let s = path(poly([[3.6, sill + 0.1], ["q", 1.3, 4.1, 1.2, 2.2], ["q", 1.2, 1.0, 2.4, 1.0], [7.0, 1.0], [7.0, sill + 0.1]]), "#e9ecef", 0.6);
-  for (const x of [L / 2 - 17.6 + 6, L / 2 + 17.6 - 6]) s += truck(x, { wb: 9.33, d: 40, kind: "loco", top: sill });
-  // The halftone: rows of dots growing toward the rear until they merge into solid blue.
-  let liv = rect(0, 0, L, 16, "#f1f2f4") + rect(0, 12.3, L, 4, "#2f5fa6") + path(`M0 16L0 12.3L6.6 12.3L11.5 16Z`, "#2f5fa6");
+  const { L } = c, sill = 2.7, roof = 14.17, back = 13.3;
+  const d = poly([[1.6, 1.7], [11, 1.8], [15.5, 3.2], [25.5, 3.2], [27, sill], [L - 0.6, sill], [L - 0.6, back - 0.6], ["q", L - 0.6, back, L - 1.2, back],
+    [49.6, back], [48.9, roof], [27, roof], ["q", 22, roof, 18.5, 13.3], ["q", 15, 12.2, 12.5, 10.6], [5.3, 6.4], ["q", 1.3, 5.5, 0.4, 4.6],
+    ["q", 0, 3.4, 0.4, 2.3], ["q", 0.7, 1.75, 1.6, 1.7]]);
+  let s = "";
+  for (const x of [20.4, 50.7]) s += truck(x, { wb: 9.33, d: 40, kind: "loco", top: 3.6 });
+  let liv = rect(0, 0, L, 16, "#f1f2f4") + rect(0, 10.6, L, 6, "#2f5fa6");
+  // Light gray sweeping down the nose under the cab; the charcoal nose skirt;
+  // the red skirt from the door back.
+  liv += path("M0 0L0 5.2Q9 6.4 17.5 8.2Q24 6.0 28.5 4.0L28.5 0Z", "#dfe3e8");
+  liv += path("M0 0L0 2.6Q13 3.0 26.8 4.0L26.8 0Z", "#3f444b") + rect(26.8, 0, L, 4.0, "#c8102e");
+  // At the back, blue below the white band, dissolving forward in dots.
   let dots = "";
-  for (let x = L - 24; x < L - 8; x += 0.9) for (let y = 5.4; y < 12.3; y += 0.9) {
-    const r = Math.min(0.5, 0.06 + ((x - (L - 24)) / 16) * 0.46);
+  for (let x = L - 20; x < L - 7; x += 0.7) for (let y = 4.35; y < 7.0; y += 0.7) {
+    const r = Math.min(0.36, 0.04 + ((x - (L - 20)) / 13) * 0.32);
     dots += `M${(x - r).toFixed(2)} ${y.toFixed(2)}a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(2 * r).toFixed(2)} 0a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(-2 * r).toFixed(2)} 0`;
   }
-  liv += path(dots, "#2f5fa6") + rect(L - 8.3, 5.0, 8.3, 7.3, "#2f5fa6") + rect(0, 4.4, L, 0.6, "#c8102e");
-  liv += path(poly([[3.1, 9.3], [6.4, 12.2], [8.9, 12.2], [8.9, 10.2], [5.0, 9.0]]), "#17191c");
+  liv += path(dots, "#2f5fa6") + rect(L - 7.2, 4.0, 7.2, 2.6, "#2f5fa6");
+  // The raked windshield, blue above it.
+  liv += path(poly([[4.0, 5.9], [13.5, 11.4], [14.6, 10.3], [6.1, 5.5]]), C.black);
   s += path(d, "#f1f2f4") + clipped(d, liv);
-  s += door(10.6, sill + 0.3, 2.1, 7.3, { glassY: 0.62, glassH: 0.25 }) + win(13.8, 9.6, 1.4, 1.8, 0.3);
-  s += rect(20, roof - 0.05, 22, 0.55, "#9aa1a9", 0.4) + slats(20, roof - 0.05, 22, 0.55, 0.45, "rgba(0,0,0,0.3)");
-  s += pantograph(L - 15, roof + 0.4, { up: true, facing: -1 }).replace(/currentColor/g, "#c8102e");
-  s += outlineOf(d) + carEnds(c, { floor: sill, top: 12.8 });
-  s += badge(c, 22, 8.8, 3.8, { logo: "acela" });                    // the Acela logo, behind the cab door
+  s += path(poly([[19.4, 8.2], [23.0, 8.0], [23.0, 10.2], [20.3, 10.2]]), C.glass, 0.5);         // cab side window
+  s += door(26.7, 4.1, 2.4, 6.2, { glass: false });                                           // crew door
+  // Louvered hood along the roof; the pantograph in the well behind it.
+  for (const x of [25.5, 31.0, 36.5, 42.0]) s += rect(x, 11.3, 5.0, 2.3, "rgba(0,0,0,0.16)", 0.4) + slats(x, 11.3, 5.0, 2.3, 0.4, "rgba(0,0,0,0.3)");
+  s += pantograph(52.0, back, { up: true, facing: -1 }).replace(/currentColor/g, "#c8102e");
+  s += outlineOf(d) + carEnds(c, { floor: 4.0, top: 12.6 });
+  s += badge(c, 40, 7.3, 3.0, { logo: "acela" });                    // the Acela logo, behind the crew door
   return s;
 }
 export function acelaCoach(c) {
   const { L } = c, sill = 4.0, roof = 14.0, x0 = 0.3, x1 = L - 0.3;
-  const d = bodyOutline(x0, x1, sill, roof, { endR: 1.2 });
-  let s = "";
   // Shared trucks at the joints; the coaches next to the power cars have their own truck at that end.
   const first = c.index === 1, last = c.count != null && c.index === c.count - 2;
+  // The red skirt hangs below the floor between the trucks.
+  const d = bodyOutline(x0, x1, sill, roof, { endR: 1.2, drop: { a: first ? 13.5 : 8.0, b: last ? L - 13.5 : L - 8.0, y: 2.0 } });
+  let s = "";
   s += first ? truck(6.0, { wb: 9.0, d: 36, kind: "car", top: sill }) : truck(0, { wb: 9.0, d: 36, kind: "car", top: sill });
   s += last ? truck(L - 6.0, { wb: 9.0, d: 36, kind: "car", top: sill }) : truck(L, { wb: 9.0, d: 36, kind: "car", top: sill });
-  let liv = rect(0, 0, L, 16, "#2f5fa6") + rect(0, 6.8, L, 3.3, "#f4f5f7") + rect(0, 4.0, L, 0.45, "#c8102e");
+  let liv = rect(0, 0, L, 16, "#2f5fa6") + rect(0, 6.5, L, 4.75, "#f4f5f7") + rect(0, 0, L, 4.0, "#c8102e");
+  // The white door, blue dots scattered along the band toward it.
+  liv += rect(x1 - 3.6, 4.0, 3.0, 7.25, "#f4f5f7");
+  let dots = "";
+  for (let x = x1 - 13; x < x1 - 3.8; x += 0.6) for (let y = 6.8; y < 11.0; y += 0.6) {
+    const r = 0.03 + ((x - (x1 - 13)) / 9.2) * 0.2 * (1 - (y - 6.8) / 5);
+    dots += `M${(x - r).toFixed(2)} ${y.toFixed(2)}a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(2 * r).toFixed(2)} 0a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(-2 * r).toFixed(2)} 0`;
+  }
+  liv += path(dots, "#2f5fa6");
   s += path(d, "#2f5fa6") + clipped(d, liv);
-  for (let x = 6.2; x < L - 8; x += 3.6) s += win(x, 7.15, 2.9, 2.6, 0.3);
-  s += door(1.4, 4.2, 2.7, 7.0, { glassY: 0.55, glassH: 0.3, grabs: false });
-  s += badge(c, 5.2, 12.4, 0.8, { logo: "amtrak-mark", dark: true });  // small travelmark high at the end
+  for (let i = 0; i < 7; i++) s += win(4.6 + i * 6.15, 7.3, 4.85, 3.0, 0.45);
+  s += door(x1 - 3.4, 4.15, 2.6, 7.0, { glassY: 0.55, glassH: 0.3, grabs: false });
+  s += badge(c, 2.6, 12.5, 0.8, { logo: "amtrak-mark", dark: true });  // small travelmark high at the end
   s += outlineOf(d) + carEnds(c, { floor: 4.25, top: 12.6 });
   return s;
 }
