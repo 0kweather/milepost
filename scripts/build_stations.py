@@ -88,6 +88,12 @@ def gtfs_stations(url, keep, line_name):
     return out
 
 
+# Amtraker positions known to be off, as (lat, lon): Newark Airport is placed
+# about 1 km southeast of the station, which kept it from merging with NJ
+# Transit's stop there.
+AMTRAK_FIXES = {"EWR": (40.70441, -74.19072)}
+
+
 def intercity_stations():
     ntad = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Amtrak_Stations/"
             "FeatureServer/0/query?" + urllib.parse.urlencode(
@@ -109,7 +115,8 @@ def intercity_stations():
         else:
             continue  # announced but unserved stops (e.g., Iowa) aren't stations yet
         place = ", ".join(x for x in (s.get("city"), s.get("state")) if x and x.strip())
-        out[agency].append([code, s["name"].strip(), round(s["lat"], 5), round(s["lon"], 5), [], place,
+        lat, lon = AMTRAK_FIXES.get(code, (s["lat"], s["lon"])) if agency == "amtrak" else (s["lat"], s["lon"])
+        out[agency].append([code, s["name"].strip(), round(lat, 5), round(lon, 5), [], place,
                             code, len(s.get("trains") or [])])
     # Amtraker also gives VIA codes to a few US stations Amtrak already covers
     # (e.g., New York Penn for the Adirondack); drop those duplicates.
