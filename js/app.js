@@ -1222,8 +1222,8 @@ function inferredNote(t) {
 
 // The train's cars, drawn right under its status: live where the railroad
 // reports them; otherwise what typically runs on the route, marked with an
-// eye icon whose tip says the count and types may not be accurate.
-const EYE_ICON = `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.6 10Q10 4.9 15.4 10Q10 15.1 4.6 10Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="10" r="1.9" fill="currentColor"/></svg>`;
+// "i" icon at the top left whose tip says the count and types may not be accurate.
+const INFO_ICON = `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="6.1" r="1.15" fill="currentColor"/><path d="M10 9v5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 function consistSection(t) {
   const c = consistOf(t);
   if (!c) return "";
@@ -1231,10 +1231,10 @@ function consistSection(t) {
   const why = !c.typical ? ""
     : c.reported ? `${a.short}’s feed names one car, ${c.reported.number} (${c.reported.name}); the rest is what typically runs on this line.`
     : `${a.short} doesn’t report this train’s cars; this is what typically runs on this route.`;
-  const eye = c.typical
-    ? `<button type="button" class="consist-eye" aria-label="Car count and type may not be accurate">${EYE_ICON}<span class="tip" aria-hidden="true"><strong>Car count and type may not be accurate.</strong> ${esc(why)}</span></button>`
+  const info = c.typical
+    ? `<button type="button" class="consist-info" aria-label="Car count and type may not be accurate">${INFO_ICON}<span class="tip" aria-hidden="true"><strong>Car count and type may not be accurate.</strong> ${esc(why)}</span></button>`
     : "";
-  return `<div class="consist"><div class="consist-strip">${consistHtml(c, a.color)}</div>${eye}</div>`;
+  return `<div class="consist">${info}<div class="consist-strip">${consistHtml(c, a.color)}</div></div>`;
 }
 
 function fmtIn(ms) {
