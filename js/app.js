@@ -57,8 +57,9 @@ const state = {
   // Trains the viewer is following (saved in the browser):
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
   tracked: store.get("tt-tracked", []),
-  // Service notices folded down to their heading (remembered across trains).
-  noticesCollapsed: store.get("tt-notices-collapsed", false),
+  // Service notices folded down to their heading until opened (remembered
+  // across trains).
+  noticesCollapsed: store.get("tt-notices-collapsed", true),
   trackPicker: null,     // train id whose "where are you headed?" picker is open
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   trackQuery: "",        // what's typed in the picker's station search
