@@ -1,6 +1,7 @@
 // Side-view drawings of passenger rail equipment, built from each model's
 // real dimensions. Trainsheet's own artwork: hand-written geometry from
-// published measurements and descriptions, nothing traced or copied.
+// published measurements and descriptions, nothing traced or copied. The
+// railroads' logos on them are their own (see js/emblems.js).
 //
 // Units are feet, measured from the top of the rail (y up) and from the car's
 // left coupler face (x). Every drawing shares one scale, so cars and
@@ -135,7 +136,7 @@ export function truck(cx, { wb = 8.5, d = 36, kind = "car", shoe = false, top = 
   } else {
     // Bolster and its springs in the frame window; damper beside them.
     s += coil(cx - 0.6, fb - 0.15, ft - 0.25, 0.75) + coil(cx + 0.6, fb - 0.15, ft - 0.25, 0.75);
-    s += rect(cx - 1.9, ft - 0.25, 3.8, 0.55, "currentColor") + rect(cx - 1.1, ft + 0.3, 2.2, top - ft - 0.3, "currentColor", 0, 'opacity="0.75"');
+    s += rect(cx - 1.9, ft - 0.25, 3.8, 0.55, "currentColor") + rect(cx - 1.1, ft + 0.3, 2.2, Math.max(0, top - ft - 0.3), "currentColor", 0, 'opacity="0.75"');
     s += line(cx + 1.45, fb + 0.15, cx + 1.45, ft - 0.3, C.steelDark, 1);
   }
   if (shoe) {
@@ -172,6 +173,22 @@ export function pantograph(cx, roof, { up = true, facing = 1 } = {}) {
 // Between coupled cars: the rubber bellows diaphragm around the end door
 // (its pleats run vertically, seen from the side), and below it the end sill
 // and coupler, one dark mass bridging the gap to the next car.
+// A locomotive's coupled end: no gangway, just the coupler run out to the
+// coupler face (knuckle at the face), with the air hoses and multiple-unit
+// cable hanging below it. xFace: the coupler face; side: -1 left, 1 right;
+// reach: how far in from the face the coupler starts (the body end).
+export function locoCoupler(xFace, side, { reach = 2.4, coupler = 2.85 } = {}) {
+  const x0 = side < 0 ? xFace : xFace - reach;
+  const knuckle = side < 0 ? xFace : xFace - 0.45;
+  const hang = (dx) => xFace - side * dx;
+  let s = rect(x0, coupler - 0.32, reach, 0.64, "currentColor", 0, 'opacity="0.9"');
+  s += rect(knuckle, coupler - 0.6, 0.45, 1.2, "currentColor", 0, 'rx="0.12"');
+  // Hoses and cable: short loops dropping from the end sill toward the face.
+  s += path(`M${n(hang(1.9))} ${n(coupler + 0.5)}Q${n(hang(1.2))} ${n(coupler - 1.3)} ${n(hang(0.25))} ${n(coupler - 0.9)}`, "none", 0, 'stroke="#2a2d31" stroke-width="0.9" vector-effect="non-scaling-stroke" stroke-linecap="round"');
+  s += path(`M${n(hang(2.2))} ${n(coupler + 0.9)}Q${n(hang(1.4))} ${n(coupler + 0.1)} ${n(hang(0.3))} ${n(coupler + 0.2)}`, "none", 0, 'stroke="#2a2d31" stroke-width="0.7" vector-effect="non-scaling-stroke" stroke-linecap="round"');
+  return s;
+}
+
 export function coupledEnd(xFace, side, { floor = 4, top = 11.5, coupler = 2.85 } = {}) {
   const w = 1.0, x = side < 0 ? xFace : xFace - w;
   let s = rect(x, floor + 0.2, w, top - floor - 0.4, C.rubber, 0, 'rx="0.2"');

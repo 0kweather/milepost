@@ -1,5 +1,5 @@
 import { MODELS } from "./carmodels.js?v=dev";
-import { PX_PER_FT, HEIGHT_FT } from "./carart.js?v=dev";
+import { PX_PER_FT, HEIGHT_FT, locoCoupler } from "./carart.js?v=dev";
 
 // What a train is made of.
 //   - Live, from the car numbers a railroad reports: SEPTA lists every car in
@@ -289,7 +289,7 @@ export function consistHtml(c, color) {
     // then mirrored.
     const flip = model.oneEnd && i > 0 && i === n - 1;
     const ctx = {
-      L, color, agency: c.agency, lead, cabL: flip ? false : cabL, cabR: flip ? false : cabR,
+      L, color, agency: c.agency, lead, cabL: flip ? false : cabL, cabR: flip ? false : cabR, mirrored: flip,
       // Multiple units share a pantograph between each pair of cars.
       pan: multipleUnit && t.pan && i % 2 === 0,
       pair: pairOf(i), index: i, count: n, route: c.route,
@@ -305,6 +305,12 @@ export function consistHtml(c, color) {
       const id = `${uid}-${drawn.size}`;
       drawn.set(sig, id);
       drawing = model.draw(ctx);
+      // Locomotives draw no gangway: where one is coupled to the next unit,
+      // draw its coupler out to the face so the two visibly connect.
+      if (LOCOMOTIVE.has(t.kind)) {
+        if (ctx.coupledL) drawing += locoCoupler(0, -1);
+        if (ctx.coupledR) drawing += locoCoupler(L, 1);
+      }
       if (flip) drawing = `<g transform="matrix(-1 0 0 1 ${L} 0)">${drawing}</g>`;
       drawing = `<g id="${id}">${drawing}</g>`;
     }

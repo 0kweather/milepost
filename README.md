@@ -88,4 +88,4 @@ Deploys run through `.github/workflows/pages.yml`, which stamps every file refer
 
 Refresh the static data occasionally with `python3 scripts/build_static.py`, `python3 scripts/build_stations.py`, then `python3 scripts/build_rail.py` (it uses the stations), and `python3 scripts/build_trips.py` (stop and trip lookups for Caltrain, SMART, Metrolink, RTD and CapMetro; it uses the stations too).
 
-Map data © OpenStreetMap contributors, tiles by OpenFreeMap. Train data from the agencies listed above. Rail lines from the USDOT/BTS National Transportation Atlas Database.
+Map data © OpenStreetMap contributors, tiles by OpenFreeMap. Train data from the agencies listed above. Rail lines from the USDOT/BTS National Transportation Atlas Database. Railroad logos on the train drawings (`img/logos/`) are the railroads' trademarks, from the public-domain versions on Wikimedia Commons.
