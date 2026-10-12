@@ -149,6 +149,14 @@ TARGETED_FILLS = [
     ("new-orleans", "amtrak", '["operator"="Amtrak"]', "29.88,-90.2,30.03,-89.95"),
     # The CapeFLYER (run by the Cape Cod Regional Transit Authority) to Hyannis.
     ("capeflyer", "mbta", '["ref"~"CapeFlyer",i]', "41.6,-71.0,41.95,-70.2"),
+    # Tri-Rail's Downtown Miami Link: the short curve off its own line onto
+    # the track to MiamiCentral. A junction curve runs close beside both lines
+    # it joins, so count track as drawn only when it's right on top, and keep
+    # short runs.
+    ("miami-link", "trirail", '["network"="Tri-Rail"]["to"~"MiamiCentral|Metrorail"]', "25.82,-80.28,25.87,-80.18",
+     {"min_run": 80, "covered_m": 15}),
+    # The spur Amtrak trains back into Tampa Union Station on.
+    ("tampa", "amtrak", '["operator"="Amtrak"]', "27.93,-82.47,27.98,-82.42", {"min_run": 80, "covered_m": 15}),
 ]
 COVERED_M = 50      # OSM track within this distance of existing track is already drawn
 STATION_M = 500     # an operator-track run that ends this close to a station reaches it
@@ -213,13 +221,13 @@ class Coverage:
                 for gy in range(int(min(a[1], b[1]) // self.CELL), int(max(a[1], b[1]) // self.CELL) + 1):
                     self.grid.setdefault((gx, gy), []).append((k, i))
 
-    def nearest(self, p, max_m, exclude=None):
+    def nearest(self, p, max_m, exclude=None, keep=None):
         best = None
         gx, gy = int(p[0] // self.CELL), int(p[1] // self.CELL)
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 for k, i in self.grid.get((gx + dx, gy + dy), ()):
-                    if k == exclude:
+                    if k == exclude or (isinstance(exclude, set) and k in exclude) or (keep and not keep(k)):
                         continue
                     c = self.segs[k][1]
                     a, b = c[i], c[i + 1]
@@ -299,13 +307,13 @@ def near_station(p, pts):
     return any(meters(p, q) <= STATION_M for q in pts)
 
 
-def add_uncovered(segs, net, elements):
+def add_uncovered(segs, net, elements, min_run=MIN_RUN_M, covered_m=COVERED_M):
     """Add the stretches of these OSM ways that existing track doesn't cover."""
     cov = Coverage(segs)
     cuts, added_m = [], 0
     for line in chains(elements):
         line = densify(line)
-        near = [cov.nearest(p, COVERED_M) for p in line]
+        near = [cov.nearest(p, covered_m) for p in line]
         i = 0
         while i < len(line):
             if near[i]:
@@ -317,7 +325,7 @@ def add_uncovered(segs, net, elements):
             run = line[max(0, i - 1):min(len(line), j + 1)]
             length = sum(meters(a, b) for a, b in zip(run, run[1:]))
             hits = [near[idx] if 0 <= idx < len(line) else None for idx in (i - 1, j)]
-            if length >= MIN_RUN_M:
+            if length >= min_run:
                 run = [list(p) for p in run]
                 # Join each end to the track it touches.
                 for end, hit in zip((0, -1), hits):
@@ -329,7 +337,7 @@ def add_uncovered(segs, net, elements):
                 cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
                 added_m += length
                 # Later ways may now be covered by this run.
-                near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
+                near = [n or cov.nearest(p, covered_m) for n, p in zip(near, line)]
             i = j
     split_segments(segs, cuts)
     return added_m
@@ -434,7 +442,7 @@ out geom;""", f"track-{net}", attempts=TRACK_ATTEMPTS)
 
     # Targeted fills: specific places the broad search misses, limited to track
     # inside the area (the routes themselves run much farther).
-    for name, net, routes, bbox in TARGETED_FILLS:
+    for name, net, routes, bbox, *opts in TARGETED_FILLS:
         elements = overpass(f"""[out:json][timeout:240];
 relation["route"="train"]{routes}({bbox});
 way(r)["railway"="rail"]({bbox});
@@ -442,7 +450,7 @@ out geom;""", f"targeted-{name}")
         if elements is None:
             print(f"  {name}: skipped, OpenStreetMap unavailable")
             continue
-        print(f"  {name}: +{add_uncovered(segs, net, elements) / 1000:.1f} km from OpenStreetMap")
+        print(f"  {name}: +{add_uncovered(segs, net, elements, **(opts[0] if opts else {})) / 1000:.1f} km from OpenStreetMap")
         time.sleep(2)
 
 
@@ -456,7 +464,7 @@ fill_gaps(segments)
 # the routing graph disconnected. Join each dead end to the nearest other
 # line within HEAL_M.
 HEAL_M = 60
-HEAL_SAME_M = 150  # when the nearby line is the same railroad
+HEAL_SAME_M = 250  # when the nearby line is the same railroad (VIA's Thompson branch)
 
 
 def heal_dead_ends(segs):
@@ -474,10 +482,9 @@ def heal_dead_ends(segs):
                 continue
             hit = cov.nearest(tuple(c[end]), HEAL_M, exclude=k)
             if not hit:
-                # A bit farther is fine when it's the same railroad's track.
-                far = cov.nearest(tuple(c[end]), HEAL_SAME_M, exclude=k)
-                if far and set(segs[far[1]][0]) & set(nets):
-                    hit = far
+                # A bit farther is fine when it's the same railroad's track
+                # (the nearest such, even if another railroad's is closer).
+                hit = cov.nearest(tuple(c[end]), HEAL_SAME_M, exclude=k, keep=lambda j: bool(set(segs[j][0]) & set(nets)))
             if hit and hit[0] > 0.5:
                 _d, k2, i, t, q = hit
                 c[end] = list(q)
@@ -625,23 +632,27 @@ def key(pt):
 # A hidden stretch still carries trains through the routing graph, but trains
 # snap onto the drawn line beside it. Where the two don't share a junction
 # (Metra Electric beside the Amtrak line into Chicago), the drawn line would
-# lead nowhere, so tie each loose end of a hidden stretch to the drawn track
-# alongside with a short routing-only link.
+# lead nowhere, so tie each end of a hidden stretch to the drawn track
+# alongside with a short routing-only link, even where the end also meets
+# its own railroad's drawn track (that track doesn't reach the line beside).
 def tie_hidden_ends(segs, hidden):
-    drawn_ends = set()
-    for k, (_n, c) in enumerate(segs):
-        if k not in hidden:
-            drawn_ends.update((key(c[0]), key(c[-1])))
     drawn_idx = [k for k in range(len(segs)) if k not in hidden]
+    touching = defaultdict(set)  # node -> drawn pieces (Coverage indexes) ending there
+    for j, k in enumerate(drawn_idx):
+        c = segs[k][1]
+        touching[key(c[0])].add(j)
+        touching[key(c[-1])].add(j)
     cov = Coverage([segs[k] for k in drawn_idx])
     cuts, links, done = [], [], set()
     for k in sorted(hidden):
         nets, c = segs[k]
         for end in (c[0], c[-1]):
-            if key(end) in drawn_ends or key(end) in done:
+            if key(end) in done:
                 continue
-            hit = cov.nearest(tuple(end), PARALLEL_M)
-            if not hit:
+            hit = cov.nearest(tuple(end), PARALLEL_M, exclude=touching.get(key(end), set()))
+            # Only the line it runs alongside (which took on its railroads when
+            # it was hidden), not some other line crossing nearby.
+            if not hit or hit[0] < 1.0 or not set(segs[drawn_idx[hit[1]]][0]) & set(nets):
                 continue
             _d, j, i, t, q = hit
             done.add(key(end))
@@ -656,6 +667,111 @@ def tie_hidden_ends(segs, hidden):
 
 
 tie_hidden_ends(segments, hidden)
+
+
+# Two drawn lines of a railroad can share a corridor for miles and then split
+# (the Cardinal's and the Lynchburg trains' routes, Orange to Charlottesville),
+# each drawn whole, meeting only where the corridor starts. A train at the
+# split sits on one of them and would have to go back to that start to reach
+# the other. Add a junction wherever two such lines stop running together.
+SHARED_M = 40      # lines this close are running together
+SPLIT_STEP_M = 250
+SHARED_RUN = 3     # for at least this many steps (not just crossing)
+
+
+def join_splits(segs, hidden):
+    drawn_idx = [k for k in range(len(segs)) if k not in hidden]
+    cov = Coverage([segs[k] for k in drawn_idx])
+    ends = defaultdict(set)
+    for j, k in enumerate(drawn_idx):
+        c = segs[k][1]
+        ends[key(c[0])].add(j)
+        ends[key(c[-1])].add(j)
+    cuts, links, made = [], [], []
+    for j, k in enumerate(drawn_idx):
+        nets, c = segs[k]
+        same = lambda x: x != j and bool(set(segs[drawn_idx[x]][0]) & set(nets))
+        # Samples along the line, with where each lies on it.
+        samples = []
+        for i, (a, b) in enumerate(zip(c, c[1:])):
+            n = max(1, int(meters(a, b) // SPLIT_STEP_M))
+            for m in range(n):
+                t = m / n
+                samples.append(((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), i, t))
+        prev, run = None, 0
+        for p, i, t in samples:
+            hit = cov.nearest(p, SHARED_M, keep=same)
+            other = hit[1] if hit else None
+            if prev and prev[3] is not None and prev[3] != other and run >= SHARED_RUN:
+                # Leaving the line we were running beside: join them here,
+                # unless they already meet nearby.
+                pp, pi, pt, pj, ph = prev
+                near_existing = any(pj in ends[e] and j in ends[e] and meters(pp, e) < 2000 for e in ends)
+                if not near_existing and all(meters(pp, m) > 2000 for m in made):
+                    _d, _j, si, st, q = ph
+                    here = (round(pp[0], 5), round(pp[1], 5))
+                    cuts.append((k, pi, pt, here))
+                    cuts.append((drawn_idx[pj], si, st, q))
+                    if key(here) != key(q):
+                        links.append((order(tuple(nets)), [list(here), list(q)]))
+                    made.append(pp)
+            run = run + 1 if prev and other is not None and other == prev[3] else (1 if other is not None else 0)
+            prev = (p, i, t, other, hit)
+    split_segments(segs, cuts)
+    for link in links:
+        segs.append(link)
+        hidden.add(len(segs) - 1)
+    print(f"joined {len(made)} places where lines sharing a corridor split")
+
+
+join_splits(segments, hidden)
+
+
+# Where two of a railroad's lines both pass one of its stations, its trains
+# change between them there (Charlottesville: the Lynchburg line and the
+# Cardinal's cross at the station, meeting otherwise only 50 km away). Join
+# them at the station unless they already meet nearby.
+AT_STATION_M = 150
+
+
+def join_at_stations(segs, hidden):
+    drawn_idx = [k for k in range(len(segs)) if k not in hidden]
+    cov = Coverage([segs[k] for k in drawn_idx])
+    ends = defaultdict(set)
+    for j, k in enumerate(drawn_idx):
+        c = segs[k][1]
+        ends[key(c[0])].add(j)
+        ends[key(c[-1])].add(j)
+    cuts, links, joined = [], [], 0
+    for agency, rows in stations.items():
+        for _id, _name, lat, lon, *_ in rows:
+            p = (lon, lat)
+            hits, seen = [], set()
+            while len(hits) < 4:
+                hit = cov.nearest(p, AT_STATION_M, exclude=seen, keep=lambda j: agency in segs[drawn_idx[j]][0])
+                if not hit:
+                    break
+                seen.add(hit[1])
+                hits.append(hit)
+            for x in range(len(hits)):
+                for y in range(x + 1, len(hits)):
+                    hx, hy = hits[x], hits[y]
+                    jx, jy = hx[1], hy[1]
+                    if any(jx in ends[e] and jy in ends[e] and meters(p, e) < 1000 for e in ends if abs(e[1] - lat) < 0.02):
+                        continue
+                    cuts.append((drawn_idx[jx], hx[2], hx[3], hx[4]))
+                    cuts.append((drawn_idx[jy], hy[2], hy[3], hy[4]))
+                    if key(hx[4]) != key(hy[4]):
+                        links.append(((agency,), [list(hx[4]), list(hy[4])]))
+                    joined += 1
+    split_segments(segs, cuts)
+    for link in links:
+        segs.append(link)
+        hidden.add(len(segs) - 1)
+    print(f"joined {joined} pairs of lines at stations they both pass")
+
+
+join_at_stations(segments, hidden)
 
 
 # Chain segments that meet end to end (at nodes where exactly two segments

@@ -166,19 +166,23 @@ export class RailIndex {
     const La = this.length(a.line), Lb = this.length(b.line);
     const lineB = this.lines[b.line];
     const straight = dist(this.at(a.line, a.along).point, this.at(b.line, b.along).point);
-    const maxCost = straight * 3 + 5000;
-    const cost = new Map(), prev = new Map(); // node -> cost, node -> [fromNode, line]
+    // The detour allowed is measured in real track length: a train running
+    // entirely on another railroad's track (VIA on GO and CN lines) costs 4x
+    // but is still a sensible route.
+    const maxLength = straight * 3 + 5000;
+    const cost = new Map(), length = new Map(), prev = new Map(); // node -> cost, track length, [fromNode, line]
     const heap = new MinHeap();
-    const push = (n, c, from, line) => {
-      if (c < (cost.get(n) ?? Infinity) && c <= maxCost) {
+    const push = (n, c, len, from, line) => {
+      if (c < (cost.get(n) ?? Infinity) && len <= maxLength) {
         cost.set(n, c);
+        length.set(n, len);
         prev.set(n, [from, line]);
         heap.push(c, n);
       }
     };
     const lineA = this.lines[a.line];
-    push(lineA.n0, a.along, -1, a.line);
-    push(lineA.n1, La - a.along, -1, a.line);
+    push(lineA.n0, a.along, a.along, -1, a.line);
+    push(lineA.n1, La - a.along, La - a.along, -1, a.line);
     let best = Infinity, bestEnd = null;
     while (heap.size) {
       const [c, n] = heap.pop();
@@ -189,8 +193,8 @@ export class RailIndex {
       for (const li of this.adj[n]) {
         if (li === a.line || li === b.line) continue;
         const l = this.lines[li];
-        const w = this.length(li) * (!net || l.nets.includes(net) ? 1 : 4);
-        push(l.n0 === n ? l.n1 : l.n0, c + w, n, li);
+        const len = this.length(li);
+        push(l.n0 === n ? l.n1 : l.n0, c + len * (!net || l.nets.includes(net) ? 1 : 4), length.get(n) + len, n, li);
       }
     }
     if (bestEnd == null) return null;
