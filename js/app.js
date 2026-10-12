@@ -1550,14 +1550,15 @@ function renderAll() {
 function applySelectionFilter() {
   if (!map.getLayer("tt-trains")) return;
   const id = state.selected || "", sid = state.station || "";
-  // The selected train and every tracked train get the highlight (a larger
-  // marker and a ping), and their plates win any collision and show at every
-  // zoom.
+  // The selected train and every tracked train get a ping, and their plates
+  // win any collision and show at every zoom. Only the selected train's
+  // marker is enlarged; tracked trains keep their normal size.
   const ids = [...new Set([id, ...state.tracked.map((r) => r.id)].filter(Boolean))];
   const highlighted = ["in", ["get", "id"], ["literal", ids]];
+  const selected = ["==", ["get", "id"], id];
   map.setFilter("tt-ping", highlighted);
-  map.setLayoutProperty("tt-trains", "icon-size", trainIconSize(highlighted));
-  map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(highlighted));
+  map.setLayoutProperty("tt-trains", "icon-size", trainIconSize(selected));
+  map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(selected));
   map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
   for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-station-selected-label", "tt-footprint-selected"]) {
@@ -1578,11 +1579,14 @@ function ping(on) {
   cancelAnimationFrame(pingRaf);
   const layers = ["tt-ping", "tt-station-ping"].filter((l) => map.getLayer(l));
   if (!on || !layers.length) return;
-  // Rings start at the marker's edge; a selected train's marker is enlarged.
-  const base = (l) => discRadiusAt(map.getZoom()) * (l === "tt-ping" ? SELECTED_SCALE : 1);
+  // Pings start at the marker's edge; the selected train's marker is enlarged.
+  const disc = () => discRadiusAt(map.getZoom());
+  const radius = (l, extra) => l === "tt-ping"
+    ? ["case", ["==", ["get", "id"], state.selected || ""], disc() * SELECTED_SCALE + extra, disc() + extra]
+    : disc() + extra;
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     for (const l of layers) {
-      map.setPaintProperty(l, "circle-radius", base(l) + 6);
+      map.setPaintProperty(l, "circle-radius", radius(l, 6));
       map.setPaintProperty(l, "circle-opacity", 0.25);
     }
     return;
@@ -1597,7 +1601,7 @@ function ping(on) {
       const grow = 1 - (1 - k) ** 3; // ease out
       const opacity = resting ? 0 : 0.4 * (1 - k) ** 1.5;
       for (const l of layers) {
-        map.setPaintProperty(l, "circle-radius", base(l) + grow * 18);
+        map.setPaintProperty(l, "circle-radius", radius(l, grow * 18));
         map.setPaintProperty(l, "circle-opacity", opacity);
       }
     }
