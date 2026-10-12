@@ -318,7 +318,7 @@ export function advanceEstimated(t) {
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
 // carry only IDs (scripts/build_trips.py).
-const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago" };
+const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago" };
 let tripsStatic = null;
 const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r) => r.json()));
 
@@ -487,12 +487,15 @@ export const SOURCES = [
   {
     id: "metra", agencies: ["metra"], format: "pb", interval: 30, relay: true, needsKey: "METRA_API_TOKEN",
     credit: { label: "Metra", href: "https://metra.com/developers" },
-    parse: (buf) => gtfsVehicles("metra", buf, {
+    parse: async (buf) => gtfsVehicles("metra", buf, {
       // The feed also lists equipment laid up in the yards, with no trip.
       keep: (v) => !!v.trip?.tripId,
       route: (v) => v.trip?.routeId,
       // Metra trip ids look like "UP-N_UN303_V3_A"; the train number is in the middle.
       number: (v) => (v.trip?.tripId || "").split("_")[1]?.replace(/^\D+/, "") || v.vehicle?.label,
+      // Destination from the timetable; stops and times from the trip updates
+      // the relay appends.
+      west: (await loadTrips()).metra,
     }),
   },
   {

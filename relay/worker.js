@@ -34,6 +34,8 @@ const FEEDS = {
   metra: (env) =>
     env.METRA_API_TOKEN && {
       url: `https://gtfspublic.metrarr.com/gtfs/public/positions?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`,
+      // Predicted stop times, for each train's upcoming stops.
+      also: [`https://gtfspublic.metrarr.com/gtfs/public/tripupdates?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`],
     },
   caltrain: (env) => env.API_511_KEY && feed511("CT", env),
   smart: (env) => env.API_511_KEY && feed511("SA", env),

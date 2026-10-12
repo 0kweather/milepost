@@ -1,6 +1,6 @@
 """Build data/trips.json: stop and trip lookups for railroads whose realtime
-feeds (through the relay) carry only IDs: Caltrain, SMART, Metrolink, RTD
-and CapMetro.
+feeds (through the relay) carry only IDs: Caltrain, SMART, Metrolink, RTD,
+CapMetro and Metra.
 
 Their realtime feeds (through the relay) carry only stop and trip IDs, so the
 map needs each railroad's static GTFS to name stops, match them to the
@@ -24,12 +24,15 @@ FEEDS = {
     "metrolink": (MDB.format("mdb-96"), None),
     "rtd": (MDB.format("mdb-178"), {"A", "113B", "113G", "117N"}),
     "capmetro": (MDB.format("mdb-150"), {"550"}),
+    "metra": ("https://schedules.metrarail.com/gtfs/schedule.zip", None),
 }
 
 
 def rows(zf, name):
+    # Some feeds (Metra) put a space after every comma.
     with zf.open(name) as f:
-        yield from csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"))
+        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"), skipinitialspace=True):
+            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
 
 
 def headsign(h):
