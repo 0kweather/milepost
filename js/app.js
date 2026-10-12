@@ -1952,14 +1952,30 @@ const TIME_ZONE_CHOICES = [
   ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona"],
   ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"], ["UTC", "UTC"],
 ];
+// The listed zone that keeps the same clock as `zone` (America/Detroit ->
+// Eastern), judged by its offsets in winter and summer; or null.
+function listedZone(zone) {
+  const clock = (z, m) => new Date(Date.UTC(new Date().getUTCFullYear(), m, 15, 12)).toLocaleString("en-US", { timeZone: z, hour: "numeric", minute: "numeric", hourCycle: "h23" });
+  try {
+    return TIME_ZONE_CHOICES.find(([v]) => v === zone)?.[0] ||
+      TIME_ZONE_CHOICES.find(([v]) => v !== "station" && v !== "UTC" && clock(v, 0) === clock(zone, 0) && clock(v, 6) === clock(zone, 6))?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+// Until a zone is picked, times follow the device and the menu checks the
+// listed zone that matches it; a device zone that matches none of them gets
+// its own entry at the top.
 function initTimeZones() {
   const select = $("tz-choice");
   if (!select) return;
   const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const opts = [["", `Your time zone${own ? ` (${own.split("/").pop().replace(/_/g, " ")})` : ""}`], ...TIME_ZONE_CHOICES];
+  const match = own ? listedZone(own) : null;
+  const opts = match ? TIME_ZONE_CHOICES
+    : [["", `Your time zone${own ? ` (${own.split("/").pop().replace(/_/g, " ")})` : ""}`], ...TIME_ZONE_CHOICES];
   select.innerHTML = opts.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join("");
-  if (!opts.some(([v]) => v === state.timeZone)) state.timeZone = "";
-  select.value = state.timeZone;
+  if (state.timeZone && !opts.some(([v]) => v === state.timeZone)) state.timeZone = "";
+  select.value = state.timeZone || match || "";
 }
 on("tz-choice", "change", (e) => {
   state.timeZone = e.target.value;
