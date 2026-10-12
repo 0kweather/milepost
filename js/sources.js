@@ -314,6 +314,102 @@ export function advanceEstimated(t) {
   return true;
 }
 
+// ---------- NJ Transit (DepartureVision, through the relay) ----------
+
+// The relay scrapes NJ Transit's DepartureVision: each running train's line,
+// destination and stop list with predicted times and which stops it has left
+// ({ at, trains: [{ id, line, abbr, color, dest, stops: [{ name, time,
+// departed, status }] }] }). There are no GPS positions, so trains are placed
+// between stations from those times.
+const NJT_LINES = [[/Atl/i, "Atlantic City Rail Line"], [/Gladstone/i, "Gladstone Branch"], [/Morris|M&E|Morristown/i, "Morris & Essex Line"],
+  [/Montclair|Boonton/i, "Montclair-Boonton Line"], [/Bergen|Main/i, "Main/Bergen County Line"], [/Northeast|NEC/i, "Northeast Corridor"],
+  [/Coast/i, "North Jersey Coast Line"], [/Pascack/i, "Pascack Valley Line"], [/Princeton/i, "Princeton Shuttle"],
+  [/Raritan/i, "Raritan Valley Line"], [/Port Jervis/i, "Port Jervis Line"], [/Meadowlands/i, "Meadowlands Rail Line"]];
+// DepartureVision stop names that don't match the timetable's station names.
+const NJT_ALIASES = { broadwayfairlawn: "25", radburnfairlawn: "126", montclairstateu: "38081", newarkairport: "37953",
+  princetonjunction: "125", ramseymain: "128", secaucuslowerlvl: "38174", secaucusupperlvl: "38187", trenton: "148", wayneroute23: "39635" };
+const nameKey = (s) => String(s || "").toLowerCase().replace(/\b(station|sta|st|street|ave|avenue)\b/g, "").replace(/[^a-z0-9]/g, "");
+let njtLookup = null;
+const loadNjtStations = () => (njtLookup ??= fetch("data/stations.json?v=dev").then((r) => r.json()).then((d) => {
+  const byId = {}, byName = {};
+  for (const [id, name, lat, lon] of d.njt || []) { byId[id] = [name, lat, lon]; byName[nameKey(name)] = id; }
+  return { byId, idOf: (name) => NJT_ALIASES[nameKey(name)] || byName[nameKey(name)] || null };
+}));
+
+// Minutes past midnight in New York at epoch second `sec`.
+const nyClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" });
+function nyMinutes(sec) {
+  const p = Object.fromEntries(nyClock.formatToParts(new Date(sec * 1000)).map((x) => [x.type, +x.value || 0]));
+  return p.hour * 60 + p.minute + p.second / 60;
+}
+// "5:41 PM" in New York as epoch seconds: the occurrence within 12 hours of
+// `ref`, and not before `after` (times run on past midnight).
+function njtTime(text, ref, after = 0) {
+  const m = /^(\d{1,2}):(\d{2})\s*([AP])M$/i.exec(String(text || "").trim());
+  if (!m) return null;
+  const mins = (+m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0)) * 60 + +m[2];
+  let t = Math.round(ref + (mins - nyMinutes(ref)) * 60);
+  if (t - ref > 43200) t -= 86400;
+  else if (ref - t > 43200) t += 86400;
+  while (after && t < after - 3600) t += 86400;
+  return t;
+}
+
+async function parseNjt(json) {
+  const { byId, idOf } = await loadNjtStations();
+  const now = nowSec(), at = (json.at || Date.now()) / 1000;
+  const out = [];
+  for (const tr of json.trains || []) {
+    const line = NJT_LINES.find(([re]) => re.test(`${tr.line} ${tr.abbr}`))?.[1];
+    if (!line || !tr.stops?.length) continue;   // SEPTA and Amtrak trains on the boards
+    // Predicted times as a trip's stop times, held to what the board says: a
+    // stop it has left can't be in the future, and one it hasn't reached can't
+    // be in the past (a late train is still on its way to it).
+    let prev = 0, rawPrev = 0, reached = false;
+    const stops = [];
+    for (const s of tr.stops) {
+      const id = idOf(s.name);
+      const raw = njtTime(s.time, at, rawPrev);
+      if (!id || !byId[id] || raw == null) continue;
+      rawPrev = raw;
+      let t = raw;
+      if (s.departed) t = Math.min(t, at);
+      else { t = Math.max(t, prev ? prev + 60 : 0, reached ? 0 : at + 30); reached = true; }
+      prev = t;
+      stops.push({ stopId: id, arrival: { time: t }, departure: { time: t }, raw });
+    }
+    // Done: every stop but the last one left, and its arrival time passed.
+    const end = stops[stops.length - 1];
+    if (!end || (tr.stops.slice(0, -1).every((x) => x.departed) && end.raw < at - 120)) continue;
+    const prog = tripProgress(stops, now, byId);
+    if (!prog) continue;
+    const first = prog.list[0], last = prog.list[prog.list.length - 1];
+    const nextStop = prog.dwelling ? prog.at : prog.next;
+    const name = (st) => byId[st.stopId][0];
+    out.push(train({
+      id: `njt:${tr.id}`,
+      agency: "njt",
+      number: tr.id,
+      route: line,
+      routeColor: tr.color || null,
+      lat: prog.lat,
+      lon: prog.lon,
+      bearing: prog.bearing ?? null,
+      origin: name(first),
+      destination: name(last),
+      nextStop: name(nextStop),
+      statusText: prog.dwelling && prog.at === first ? `At ${name(first)}` : prog.dwelling ? `At ${name(prog.at)}` : null,
+      updated: at * 1000,
+      estimated: true,
+      leg: prog.leg || null,
+      stops: mtaStops("njt", prog.list, byId, now, nextStop, prog.dwelling ? prog.at : null),
+      // Kept so estimated positions can be advanced between refreshes.
+      _progress: { stops, lookup: byId },
+    }));
+  }
+  return out;
+}
+
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
@@ -499,9 +595,10 @@ export const SOURCES = [
     }),
   },
   {
-    id: "njt", agencies: ["njt"], format: "pb", interval: 30, relay: true, needsKey: "NJT_USERNAME",
-    credit: { label: "NJ Transit", href: "https://developer.njtransit.com" },
-    parse: (buf) => gtfsVehicles("njt", buf),
+    // Scraped from DepartureVision by the relay; no key needed.
+    id: "njt", agencies: ["njt"], format: "json", interval: 30, relay: true,
+    credit: { label: "NJ Transit DepartureVision", href: "https://www.njtransit.com/dv-to" },
+    parse: parseNjt,
   },
   {
     id: "caltrain", agencies: ["caltrain"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",

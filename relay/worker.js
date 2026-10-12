@@ -29,6 +29,8 @@ const FEEDS = {
     routes: ["550"],
   }),
   trirail: () => ({ url: "https://gtfsr.tri-rail.com/download.aspx?file=position_updates.pb" }),
+  // NJ Transit: scraped from DepartureVision (below); no key needed.
+  njt: () => ({ njtDv: true }),
 
   // Keyed feeds: set the secrets with `npx wrangler secret put NAME`.
   metra: (env) =>
@@ -46,7 +48,6 @@ const FEEDS = {
       also: ["gtfsrt-trips", "gtfsrt-tripupdates", "gtfsrt-trip-updates"].map((p) => `https://metrolink-gtfsrt.gbsdigital.us/feed/${p}`),
       headers: { "X-Api-Key": env.METROLINK_API_KEY },
     },
-  njt: (env) => env.NJT_USERNAME && env.NJT_PASSWORD && { njt: true },
 };
 
 // 511 SF Bay: positions plus predicted stop times for one operator.
@@ -112,25 +113,96 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
-// NJ Transit hands out a session token that is good for a day; reuse it.
-let njtToken = null;
-async function fetchNjt(env) {
-  const base = "https://raildata.njtransit.com/api/GTFSRT";
-  const post = (path, fields) => {
-    const form = new FormData();
-    for (const [k, v] of Object.entries(fields)) form.append(k, v);
-    return fetch(`${base}/${path}`, { method: "POST", body: form });
-  };
-  if (!njtToken) {
-    const auth = await (await post("getToken", { username: env.NJT_USERNAME, password: env.NJT_PASSWORD })).json();
-    njtToken = auth.UserToken;
+// ---------- NJ Transit DepartureVision ----------
+// NJ Transit's DepartureVision pages read a public GraphQL API: a departure
+// board per station, and each train's stop list with predicted times and the
+// stops it has left. Each scrape reads a few boards to find running trains
+// (two hubs and four other stations, in rotation) and refreshes the stop
+// lists of the trains it knows, stalest first, so it stays well under the
+// Workers subrequest limit and light on NJ Transit's site. What it has
+// learned is kept in the Worker's memory between requests (and in the edge
+// cache, where there is one: not on workers.dev), and requests within 15
+// seconds of a scrape get its result.
+const NJT_GQL = "https://www.njtransit.com/api/graphql/graphql";
+const NJT_HUBS = ["NY", "NP", "HB", "SE", "ND", "TR"];
+const NJT_STATIONS = ("PH AM AB AZ AH AS AN AP AO AC AV BI BH MC BS BY BV BM BN BK BB BU BW BF CB CM CY IF CN XC DL DV DO DN EO ED " +
+  "EH EL EZ EN EX NA FW FH GD GW GI GL GG GK RS HQ HL HN RM HW HZ HG HI HD UF HB JA HP ON LP LI LW FA LS LB LN LY MA MZ SQ MW XU MED " +
+  "MP MU MI MD MB GO MK HS UV ZM MX MR HV OL TB MS ML MT MV MH NN NT NE NH NB NV NY ND NP OR NZ OD OG OS PV PS RN PC PQ PN PE PF PL " +
+  "PP PO PJ PR FZ RH RY 17 RA RB RW RG RL RF CW TS SE RT XG SM CH SO LA SV SG SF ST TE TO TR TC US UM WK WA WG WT 23 WM WF WW WH WR WB WL").split(" ");
+const NJT_STOP_LISTS = 28;            // per request
+const NJT_FRESH_MS = 45 * 1000;       // a stop list younger than this is skipped
+const NJT_LATER_MS = 5 * 60 * 1000;   // ...or this, for a train not leaving soon
+const NJT_STATE = "https://relay.trainsheet.invalid/njt-state";
+const BOARD_Q = "query($s:String!){getTrainDepartureScreens(station:$s){items{trainID line lineAbbreviation background destination status}}}";
+const STOPS_Q = "query($t:String!){getTrainStopList(train:$t){name time departed status}}";
+
+async function njtGql(query, variables) {
+  const res = await fetch(NJT_GQL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": "Trainsheet relay (https://trainsheet.com)" },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error(`NJ Transit HTTP ${res.status}`);
+  return (await res.json()).data;
+}
+
+// Minutes from now (New York time) until "5:41 PM", between -12 and +12 hours.
+const nyClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "numeric", hourCycle: "h23" });
+function minutesUntil(text, now) {
+  const m = /^(\d{1,2}):(\d{2})\s*([AP])M$/i.exec(String(text || "").trim());
+  if (!m) return null;
+  const p = Object.fromEntries(nyClock.formatToParts(new Date(now)).map((x) => [x.type, +x.value || 0]));
+  const d = (+m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0)) * 60 + +m[2] - (p.hour * 60 + p.minute);
+  return ((d + 720) % 1440 + 1440) % 1440 - 720;
+}
+
+let njtMem = null; // { st, at, json }
+
+async function fetchNjtDv(ctx) {
+  const now = Date.now();
+  if (njtMem && now - njtMem.at < 15 * 1000) return Response.json(njtMem.json);
+  const cache = caches.default, key = new Request(NJT_STATE);
+  let st = njtMem?.st;
+  if (!st) {
+    const hit = await cache.match(key).catch(() => null);
+    st = hit ? await hit.json() : { turn: 0, trains: {} };
   }
-  let res = await post("getVehiclePositions", { token: njtToken });
-  if (res.status === 401 || res.status === 403) {
-    njtToken = null;
-    return fetchNjt(env);
+  const turn = st.turn++;
+
+  const boards = [NJT_HUBS[(turn * 2) % NJT_HUBS.length], NJT_HUBS[(turn * 2 + 1) % NJT_HUBS.length],
+    ...[0, 1, 2, 3].map((i) => NJT_STATIONS[(turn * 4 + i) % NJT_STATIONS.length])];
+  for (const r of await Promise.allSettled(boards.map((s) => njtGql(BOARD_Q, { s })))) {
+    for (const it of r.value?.getTrainDepartureScreens?.items || []) {
+      if (!it.trainID) continue;
+      const t = (st.trains[it.trainID] ||= { id: it.trainID });
+      Object.assign(t, { line: it.line, abbr: it.lineAbbreviation, color: it.background, dest: it.destination, cancelled: it.status === "CANCELLED", seen: now });
+    }
   }
-  return res;
+
+  // Stop lists: trains never read first, then the stalest. A train that
+  // won't leave for a while is read less often.
+  const due = Object.values(st.trains).filter((t) => {
+    if (t.cancelled) return false;
+    const leaves = t.stops && !t.stops.some((s) => s.departed) ? minutesUntil(t.stops[0]?.time, now) : null;
+    return !t.fetched || now - t.fetched > (leaves != null && leaves > 20 ? NJT_LATER_MS : NJT_FRESH_MS);
+  }).sort((a, b) => (a.fetched || 0) - (b.fetched || 0)).slice(0, NJT_STOP_LISTS);
+  const lists = await Promise.allSettled(due.map((t) => njtGql(STOPS_Q, { t: t.id })));
+  due.forEach((t, i) => {
+    const l = lists[i].value?.getTrainStopList;
+    if (Array.isArray(l) && l.length) Object.assign(t, { stops: l, fetched: now });
+  });
+
+  // Forget trains that have arrived (every stop but the last left, its time
+  // 20 minutes past) or that no board has listed for four hours.
+  for (const [id, t] of Object.entries(st.trains)) {
+    const s = t.stops || [];
+    const arrived = s.length > 1 && s.slice(0, -1).every((x) => x.departed) && minutesUntil(s[s.length - 1].time, now) < -20;
+    if (arrived || t.cancelled || now - t.seen > 4 * 3600 * 1000) delete st.trains[id];
+  }
+  ctx.waitUntil(cache.put(key, new Response(JSON.stringify(st), { headers: { "Cache-Control": "max-age=86400" } })).catch(() => {}));
+  const trains = Object.values(st.trains).filter((t) => t.stops).map(({ id, line, abbr, color, dest, stops }) => ({ id, line, abbr, color, dest, stops }));
+  njtMem = { st, at: now, json: { at: now, trains } };
+  return Response.json(njtMem.json);
 }
 
 export default {
@@ -155,7 +227,7 @@ export default {
     const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
     try {
-      upstream = spec.njt ? await fetchNjt(env) : await fetch(spec.url, { headers });
+      upstream = spec.njtDv ? await fetchNjtDv(ctx) : await fetch(spec.url, { headers });
     } catch (err) {
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
     }

@@ -18,7 +18,7 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | CapMetro Rail | Austin | CapMetro GTFS-realtime | relay |
 | Tri-Rail | South Florida | Tri-Rail GTFS-realtime | relay |
 | Metra | Chicago | Metra GTFS-realtime | relay + free key |
-| NJ Transit Rail | New Jersey | NJT GTFS-realtime | relay + free account |
+| NJ Transit Rail | New Jersey | NJ Transit DepartureVision (scraped; positions estimated from predicted times) | relay |
 | Caltrain, SMART | Bay Area | 511 SF Bay | relay + free key |
 | Metrolink | Los Angeles | Metrolink GTFS-realtime | relay + free key |
 
@@ -59,7 +59,6 @@ then open http://localhost:8000. To try the relay feeds locally, run `python3 sc
    - `METRA_API_TOKEN`: https://metra.com/developers
    - `API_511_KEY`: https://511.org/open-data/token (Caltrain + SMART)
    - `METROLINK_API_KEY`: https://metrolinktrains.com/about/gtfs/
-   - `NJT_USERNAME` and `NJT_PASSWORD`: https://developer.njtransit.com
 4. Put the Worker's URL in `config.js` (`window.TRAINSHEET_RELAY = "https://trainsheet-relay.<you>.workers.dev"`) and push.
 
 The relay only serves the feeds listed in `relay/worker.js` (it is not an open proxy) and caches each one for 15 seconds.
