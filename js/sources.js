@@ -182,7 +182,34 @@ async function mbtaTrips() {
 }
 const iso = (t) => (t ? new Date(t).toISOString() : null);
 
-function parseMbta(json, trips = new Map()) {
+// Each running trip's full timetable, for the stops a train has already left
+// (predictions cover only what's ahead). Timetables don't change, so each is
+// read once, in one request for all the trips not yet seen.
+const mbtaTimetables = new Map();
+async function loadMbtaTimetables(tripIds) {
+  const missing = tripIds.filter((id) => !mbtaTimetables.has(id));
+  if (missing.length) {
+    const url = `https://api-v3.mbta.com/schedules?filter%5Btrip%5D=${missing.map(encodeURIComponent).join(",")}` +
+      "&include=stop&fields%5Bschedule%5D=arrival_time,departure_time,stop_sequence&fields%5Bstop%5D=name,parent_station";
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`MBTA schedules HTTP ${res.status}`);
+    const json = await res.json();
+    const inc = new Map((json.included || []).map((x) => [`stop:${x.id}`, x]));
+    for (const id of missing) mbtaTimetables.set(id, []);
+    for (const sc of json.data || []) {
+      const stop = inc.get(`stop:${sc.relationships.stop?.data?.id}`), a = sc.attributes;
+      const list = mbtaTimetables.get(sc.relationships.trip?.data?.id);
+      if (!stop || !list || !(a.departure_time || a.arrival_time)) continue;
+      list.push({ seq: a.stop_sequence, name: stop.attributes.name, place: stop.relationships?.parent_station?.data?.id || stop.id, time: a.departure_time || a.arrival_time });
+    }
+    for (const id of missing) mbtaTimetables.get(id).sort((x, y) => x.seq - y.seq);
+  }
+  // Forget trips no longer running.
+  for (const id of mbtaTimetables.keys()) if (!tripIds.includes(id)) mbtaTimetables.delete(id);
+  return mbtaTimetables;
+}
+
+function parseMbta(json, trips = new Map(), timetables = new Map()) {
   const included = new Map((json.included || []).map((x) => [`${x.type}:${x.id}`, x]));
   const out = [];
   for (const v of json.data) {
@@ -197,6 +224,9 @@ function parseMbta(json, trips = new Map()) {
     // Its upcoming stops: the first is the one it's at or heading to.
     const ahead = trips.get(tripId) || [];
     const next = ahead[0];
+    // Before it, the stops it has left, at their scheduled times.
+    const upTo = next?.seq ?? a.current_stop_sequence ?? -1;
+    const behind = (timetables.get(tripId) || []).filter((s) => s.seq < upTo);
     const delayMin = next?.scheduled ? (Date.parse(next.time) - Date.parse(next.scheduled)) / 60000 : null;
     out.push(train({
       id: `mbta:${v.id}`,
@@ -213,19 +243,23 @@ function parseMbta(json, trips = new Map()) {
       lat: a.latitude, lon: a.longitude,
       bearing: a.bearing,
       speedMph: mps2mph(a.speed),
+      origin: (timetables.get(tripId) || [])[0]?.name || null,
       destination: trip?.attributes?.headsign || null,
       nextStop: stopName || next?.name || null,
       delayMin,
       statusText: stopped && stopName ? `Stopped at ${stopName}` : delayText(delayMin),
       updated: Date.parse(a.updated_at) || Date.now(),
-      stops: ahead.length ? ahead.map((s, i) => ({
-        key: `mbta:${s.place}`,
-        name: s.name,
-        tz: "America/New_York",
-        time: iso(s.time), arr: iso(s.arr), dep: iso(s.dep), scheduled: iso(s.scheduled),
-        status: i === 0 ? "next" : "future",
-        here: i === 0 && stopped,
-      })) : null,
+      stops: ahead.length || behind.length ? [
+        ...behind.map((s) => ({ key: `mbta:${s.place}`, name: s.name, tz: "America/New_York", time: iso(s.time), status: "past" })),
+        ...ahead.map((s, i) => ({
+          key: `mbta:${s.place}`,
+          name: s.name,
+          tz: "America/New_York",
+          time: iso(s.time), arr: iso(s.arr), dep: iso(s.dep), scheduled: iso(s.scheduled),
+          status: i === 0 ? "next" : "future",
+          here: i === 0 && stopped,
+        })),
+      ] : null,
     }));
   }
   return out;
@@ -565,9 +599,16 @@ export const SOURCES = [
     id: "mbta", agencies: ["mbta"], format: "json", interval: 20,
     url: "https://api-v3.mbta.com/vehicles?filter%5Broute_type%5D=2&include=trip,stop",
     credit: { label: "MBTA V3 API", href: "https://www.mbta.com/developers" },
-    // Positions, then every trip's upcoming stops (if that request fails,
-    // trains still show, without stops).
-    parse: async (json) => parseMbta(json, await mbtaTrips().catch((err) => (console.warn("MBTA predictions", err), new Map()))),
+    // Positions, then every trip's upcoming stops and the timetables of the
+    // stops behind them (if those requests fail, trains still show).
+    parse: async (json) => {
+      const tripIds = [...new Set(json.data.map((v) => v.relationships.trip?.data?.id).filter(Boolean))];
+      const [trips, timetables] = await Promise.all([
+        mbtaTrips().catch((err) => (console.warn("MBTA predictions", err), new Map())),
+        loadMbtaTimetables(tripIds).catch((err) => (console.warn("MBTA schedules", err), new Map())),
+      ]);
+      return parseMbta(json, trips, timetables);
+    },
   },
   {
     id: "lirr", agencies: ["lirr"], format: "pb", interval: 30,
