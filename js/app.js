@@ -1116,15 +1116,11 @@ function fmtAgo(ms) {
 
 const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
-// Speed and distance in the chosen units.
+// Speed in the chosen units.
 const KM_PER_MI = 1.609344;
 const speedText = (mph) => state.units === "km"
   ? `<strong>${Math.round(mph * KM_PER_MI)}</strong> km/h`
   : `<strong>${Math.round(mph)}</strong> mph`;
-function distanceParts(meters) {
-  const v = state.units === "km" ? meters / 1000 : meters / (KM_PER_MI * 1000);
-  return { value: v.toFixed(v < 10 ? 1 : 0), unit: state.units === "km" ? "km" : "mi" };
-}
 
 // ---------- Service notices ----------
 
@@ -1201,7 +1197,6 @@ function renderDetail() {
         ${trackButton(t)}
       </div>
       ${consistSection(t)}
-      ${inferredNote(t)}
     </div>
     ${state.trackPicker === t.id ? trackPicker(t) : ""}
     ${noticesHtml(t)}
@@ -1213,21 +1208,6 @@ function renderDetail() {
 }
 
 const INFERRED_TITLE = "Worked out by Trainsheet from GPS; not yet reported by the railroad";
-
-// Why Trainsheet thinks the train is later than its railroad says.
-function inferredNote(t) {
-  const n = t.inferred;
-  if (!n) return "";
-  const at = fmtTime(new Date(n.fix).toISOString(), n.tz);
-  const over = Math.max(1, Math.round((n.fix - n.posted) / 60000));
-  if (n.kind === "held") {
-    return `<p class="inferred-note">GPS had it still at <strong>${esc(n.stop)}</strong> at ${at}, ${over} min after its posted departure.
-      The railroad hasn’t reported this yet, so the times below include it.</p>`;
-  }
-  const d = distanceParts(n.meters);
-  return `<p class="inferred-note">GPS had it still ${d.value} ${d.unit} from <strong>${esc(n.stop)}</strong> at ${at}, ${over} min after its posted arrival,
-    so it can’t get there before ${fmtTime(new Date(n.earliest).toISOString(), n.tz)}. The railroad hasn’t reported this yet; the times below include it.</p>`;
-}
 
 // The train's cars, drawn right under its status: live where the railroad
 // reports them; otherwise what typically runs on the route, marked with an
