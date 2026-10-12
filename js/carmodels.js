@@ -144,7 +144,7 @@ export function acs64(c) {
   s += pantograph(14.5, roof, { up: false }) + pantograph(L - 14.5, roof, { up: true, facing: -1 });
   // Amtrak: travelmark and name aft of the cab door. SEPTA: its logo high
   // on the body toward the No. 2 end.
-  s += c.agency === "septa" ? badge(c, 56, 11.5, 1.6) : badge(c, L / 2 + 1, 9.15, 5.5, { logo: "amtrak-stack" }); // name over a big travelmark, mid-side
+  s += c.agency === "septa" ? badge(c, 56, 11.5, 1.6) : badge(c, L / 2 + 1, 8.65, 5.5, { logo: "amtrak-stack" }); // name over a big travelmark, mid-side
   s += outlineOf(d);
   return s;
 }
