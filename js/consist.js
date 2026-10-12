@@ -132,6 +132,19 @@ const TYPES = {
 for (const [key, type] of Object.entries(TYPES)) type.key = key;
 
 const LOCOMOTIVE = new Set(["diesel", "electric"]);
+
+// Light, nearly colorless paint (stainless, silver, white) dims in dark mode
+// by --car-neutral-dim, as it would under softer light; every livery color
+// is left exactly as painted.
+function themable(svg) {
+  return svg.replace(/(fill|stroke)="#([0-9a-f]{3}|[0-9a-f]{6})"/gi, (m, prop, hex) => {
+    const h = hex.length === 3 ? [...hex].map((x) => x + x).join("") : hex;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b);
+    if (max < 0.55 || max - Math.min(r, g, b) > 0.12) return m;
+    return `${m} style="${prop}:color-mix(in srgb, #${h}, #000 var(--car-neutral-dim, 0%))"`;
+  });
+}
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function typeOf(agency, number) {
@@ -330,7 +343,7 @@ export function consistHtml(c, color) {
     } else {
       const id = `${uid}-${drawn.size}`;
       drawn.set(sig, id);
-      drawing = model.draw(ctx);
+      drawing = themable(model.draw(ctx));
       // Locomotives draw no gangway: where one is coupled to the next unit,
       // draw its coupler out to the face so the two visibly connect.
       if (LOCOMOTIVE.has(t.kind)) {

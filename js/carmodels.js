@@ -41,10 +41,14 @@ function clipped(outline, inner) {
   const id = `ts-clip-${++clipSeq}`;
   const ys = outline.match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
   const lo = Math.min(...ys), hi = Math.max(...ys);
+  // Soft light from above: a shadow low on the side fading out by a third of
+  // the way up, a faint highlight toward the top, a slight shadow where the
+  // roof turns away. The strengths come from the page's theme (style.css).
+  const stop = (o, color, v, fallback) => `<stop offset="${o}" stop-color="${color}" stop-opacity="${fallback}" style="stop-opacity:var(${v},${fallback})"/>`;
   const shade = `<linearGradient id="${id}-s" gradientUnits="userSpaceOnUse" x1="0" y1="${lo}" x2="0" y2="${hi}">` +
-    '<stop offset="0" stop-color="#000" stop-opacity="0.24"/><stop offset="0.28" stop-color="#000" stop-opacity="0.06"/>' +
-    '<stop offset="0.58" stop-color="#fff" stop-opacity="0.08"/><stop offset="0.8" stop-color="#fff" stop-opacity="0.24"/>' +
-    '<stop offset="0.92" stop-color="#fff" stop-opacity="0.06"/><stop offset="1" stop-color="#000" stop-opacity="0.26"/></linearGradient>';
+    stop(0, "#000", "--car-shade-low", 0.16) + '<stop offset="0.36" stop-color="#000" stop-opacity="0"/>' +
+    '<stop offset="0.55" stop-color="#fff" stop-opacity="0"/>' + stop(0.8, "#fff", "--car-shade-high", 0.1) +
+    '<stop offset="0.93" stop-color="#fff" stop-opacity="0"/>' + stop(1, "#000", "--car-shade-roof", 0.08) + '</linearGradient>';
   return `<clipPath id="${id}"><path d="${outline}"/></clipPath><defs>${shade}</defs>` +
     `<g clip-path="url(#${id})">${inner}<rect x="-5" y="${lo}" width="200" height="${hi - lo}" fill="url(#${id}-s)"/></g>`;
 }

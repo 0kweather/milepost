@@ -38,7 +38,15 @@
   --warn: #b86e00;
   --bad: #c0312b;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.12);
+  /* Train drawings: the ink of running gear and outlines; how far light,
+     nearly colorless paint (stainless, silver, white) dims toward black; the
+     body shading's low shadow, highlight and roof-edge shadow. */
   --car-ink: #2b3036;
+  --car-neutral-dim: 0%;
+  --car-shade-low: 0.16;
+  --car-shade-high: 0.1;
+  --car-shade-roof: 0.08;
+  --car-logo-dim: 1;
   color-scheme: light;
 }
 
@@ -57,7 +65,13 @@
   --warn: #f0a83a;
   --bad: #ff6b62;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.45);
-  --car-ink: #8d96a1;
+  /* Running gear keeps its light-mode ink; stainless and white paint dim as
+     if under softer light, while the liveries' colors stay true. */
+  --car-neutral-dim: 20%;
+  --car-shade-low: 0.22;
+  --car-shade-high: 0.04;
+  --car-shade-roof: 0.12;
+  --car-logo-dim: 0.82;
   color-scheme: dark;
 }
 
@@ -646,6 +660,7 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 }
 .consist .car { margin: 0; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .consist .car svg { display: block; color: var(--car-ink); }
+.consist .car image { filter: brightness(var(--car-logo-dim)); }
 .consist .car figcaption { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Typical equipment: an "i" at the top left whose tip says the cars may not
    be the real ones. */
