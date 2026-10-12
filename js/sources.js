@@ -488,6 +488,8 @@ export const SOURCES = [
     id: "metra", agencies: ["metra"], format: "pb", interval: 30, relay: true, needsKey: "METRA_API_TOKEN",
     credit: { label: "Metra", href: "https://metra.com/developers" },
     parse: (buf) => gtfsVehicles("metra", buf, {
+      // The feed also lists equipment laid up in the yards, with no trip.
+      keep: (v) => !!v.trip?.tripId,
       route: (v) => v.trip?.routeId,
       // Metra trip ids look like "UP-N_UN303_V3_A"; the train number is in the middle.
       number: (v) => (v.trip?.tripId || "").split("_")[1]?.replace(/^\D+/, "") || v.vehicle?.label,
