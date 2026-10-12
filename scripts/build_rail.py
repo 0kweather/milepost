@@ -15,7 +15,7 @@ Run after scripts/build_stations.py (it uses data/stations.json):
 
     python3 scripts/build_rail.py
 """
-import json, math, pathlib, time, urllib.parse, urllib.request
+import json, math, os, pathlib, time, urllib.parse, urllib.request
 from collections import defaultdict
 
 URL = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/"
@@ -46,8 +46,16 @@ def query(where, fields):
         params = {"where": where, "outFields": ",".join(fields), "maxAllowableOffset": "0.0003",
                   "geometryPrecision": "4", "resultOffset": offset, "resultRecordCount": 2000,
                   "orderByFields": "OBJECTID", "f": "geojson"}
-        with urllib.request.urlopen(f"{URL}?{urllib.parse.urlencode(params)}", timeout=180) as r:
-            page = json.load(r)["features"]
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(f"{URL}?{urllib.parse.urlencode(params)}", timeout=180) as r:
+                    page = json.load(r)["features"]
+                break
+            except Exception as err:
+                if attempt == 4:
+                    raise
+                print(f"  NTAD retry {attempt + 1} ({err})")
+                time.sleep(15 * (attempt + 1))
         out += [f for f in page if f.get("geometry")]
         offset += len(page)
         print(f"  {offset} segments")
@@ -96,10 +104,13 @@ def networks(props, pt):
 
 print("passenger lines (US and Canada)")
 segments = []
-# Main line only (NET = 'M'): yard tracks, sidings and industrial leads are
-# what make big terminals look like a tangle. PASSNGR: A Amtrak, B Amtrak and
-# commuter, C commuter, D Alaska Railroad, V VIA Rail (Canada).
-for f in query("NET = 'M' AND COUNTRY IN ('US', 'CA') AND PASSNGR IN ('A','B','C','D','V')", ["PASSNGR"] + CODE_FIELDS):
+# Main lines, plus the few passenger links NTAD files as major industrial
+# leads (NET = 'I': Hell Gate Bridge, some station approaches) and long
+# passing sidings (which the parallel-track pass below hides). Yard tracks and
+# minor leads are left out: they're what make big terminals look like a
+# tangle. PASSNGR: A Amtrak, B Amtrak and commuter, C commuter, D Alaska
+# Railroad, V VIA Rail (Canada).
+for f in query("NET IN ('M', 'I', 'S') AND COUNTRY IN ('US', 'CA') AND PASSNGR IN ('A','B','C','D','V')", ["PASSNGR"] + CODE_FIELDS):
     for line in parts(f["geometry"]):
         if len(line) >= 2:
             segments.append((networks(f["properties"], line[len(line) // 2]), line))
@@ -113,12 +124,17 @@ for f in query("RROWNER1 = 'FEC' AND NET = 'M'", ["RROWNER1"]):
 
 # ---------- Gap filling from OpenStreetMap ----------
 # NTAD lags new construction (Brightline to Orlando, LIRR into Grand Central
-# Madison, Tri-Rail to Miami Central, Metrolink's Arrow, SMART to Windsor...)
-# and has holes (Metro-North's Waterbury Branch). For each railroad, fetch its
-# OpenStreetMap train routes and add any stretch the network doesn't already
-# cover, joined to the existing track so trains can be routed across it.
+# Madison, Tri-Rail to Miami Central, Metrolink's Arrow, SMART to Windsor,
+# Amtrak to Roanoke...) and has holes (Metro-North's Waterbury Branch). For
+# each railroad, fetch its OpenStreetMap train routes and add any stretch the
+# network doesn't already cover, joined to the existing track so trains can be
+# routed across it. Then the railroad's own track that no mapped route uses
+# yet (the LIRR's Grand Central Branch): only runs that close a gap between
+# existing track, or reach one of its stations, so freight-only branches it
+# happens to own stay off the map.
 
 OSM_OPERATORS = {
+    "amtrak": "^Amtrak$",
     "brightline": "Brightline", "lirr": "Long Island Rail Road|LIRR", "mnr": "Metro-North",
     "mbta": "MBTA|Massachusetts Bay|CapeFLYER|Keolis", "njt": "NJ Transit|New Jersey Transit",
     "septa": "SEPTA", "metra": "Metra", "metrolink": "Metrolink|Southern California Regional|SBCTA|Arrow",
@@ -135,28 +151,37 @@ TARGETED_FILLS = [
     ("capeflyer", "mbta", '["ref"~"CapeFlyer",i]', "41.6,-71.0,41.95,-70.2"),
 ]
 COVERED_M = 50      # OSM track within this distance of existing track is already drawn
+STATION_M = 500     # an operator-track run that ends this close to a station reaches it
 MIN_RUN_M = 400     # ignore shorter uncovered bits (station tracks, crossovers)
 STEP_M = 100        # densify OSM ways so gaps between far-apart nodes are noticed
 
 
 OSM_CACHE = ROOT / "scripts" / ".osm-cache"
+# The railroads' own-track queries are heavy and the public servers often
+# time out on them; OSM_TRACK_ATTEMPTS=0 uses only what's already cached.
+TRACK_ATTEMPTS = int(os.environ.get("OSM_TRACK_ATTEMPTS", "2"))
 MIRRORS = ("https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
            "https://maps.mail.ru/osm/tools/overpass/api/interpreter")
 
 
-def overpass(query, name):
+def overpass(query, name, attempts=9):
     """Run an Overpass query, caching the answer so reruns don't hammer the
     (often busy) public servers. Delete scripts/.osm-cache to refresh."""
     cached = OSM_CACHE / f"{name}.json"
     if cached.exists():
         return json.loads(cached.read_text())
-    for attempt in range(9):
+    for attempt in range(attempts):
         url = MIRRORS[attempt % len(MIRRORS)]
         try:
             req = urllib.request.Request(url, data=urllib.parse.urlencode({"data": query}).encode(),
                                          headers={"User-Agent": "trainsheet-build"})
             with urllib.request.urlopen(req, timeout=300) as r:
-                elements = json.load(r)["elements"]
+                answer = json.load(r)
+            # A query that times out or runs out of memory still answers 200,
+            # with a remark and whatever it got so far: don't cache that.
+            if "error" in answer.get("remark", ""):
+                raise RuntimeError(answer["remark"][:120])
+            elements = answer["elements"]
             OSM_CACHE.mkdir(exist_ok=True)
             cached.write_text(json.dumps(elements))
             return elements
@@ -242,10 +267,81 @@ def split_segments(segs, cuts):
         segs.extend((nets, p) for p in pieces[1:] if len(p) >= 2)
 
 
+def chains(elements):
+    """OSM ways joined end to end into longer lines (through nodes where
+    exactly two ways meet), so a run isn't judged one short way at a time."""
+    ways = [[(round(g["lon"], 5), round(g["lat"], 5)) for g in w.get("geometry", [])] for w in elements]
+    ways = [w for w in ways if len(w) >= 2]
+    ends = defaultdict(list)
+    for i, w in enumerate(ways):
+        ends[w[0]].append(i)
+        ends[w[-1]].append(i)
+    used = [False] * len(ways)
+
+    def extend(chain):
+        while True:
+            nxt = [j for j in ends[chain[-1]] if not used[j]]
+            if len(ends[chain[-1]]) != 2 or not nxt:
+                return chain
+            used[nxt[0]] = True
+            w = ways[nxt[0]]
+            chain += (w if w[0] == chain[-1] else w[::-1])[1:]
+
+    out = []
+    for i, w in enumerate(ways):
+        if not used[i]:
+            used[i] = True
+            out.append(extend(extend(list(w))[::-1]))
+    return out
+
+
+def near_station(p, pts):
+    return any(meters(p, q) <= STATION_M for q in pts)
+
+
 def add_uncovered(segs, net, elements):
     """Add the stretches of these OSM ways that existing track doesn't cover."""
     cov = Coverage(segs)
     cuts, added_m = [], 0
+    for line in chains(elements):
+        line = densify(line)
+        near = [cov.nearest(p, COVERED_M) for p in line]
+        i = 0
+        while i < len(line):
+            if near[i]:
+                i += 1
+                continue
+            j = i
+            while j < len(line) and not near[j]:
+                j += 1
+            run = line[max(0, i - 1):min(len(line), j + 1)]
+            length = sum(meters(a, b) for a, b in zip(run, run[1:]))
+            hits = [near[idx] if 0 <= idx < len(line) else None for idx in (i - 1, j)]
+            if length >= MIN_RUN_M:
+                run = [list(p) for p in run]
+                # Join each end to the track it touches.
+                for end, hit in zip((0, -1), hits):
+                    if hit:
+                        _d, k, si, t, q = hit
+                        run[end] = list(q)
+                        cuts.append((k, si, t, q))
+                segs.append(((net,), run))
+                cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
+                added_m += length
+                # Later ways may now be covered by this run.
+                near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
+            i = j
+    split_segments(segs, cuts)
+    return added_m
+
+
+def add_connecting(segs, net, elements, stations_at):
+    """Add a railroad's own uncovered track where it links up: each connected
+    stretch of uncovered OSM track (through junctions and crossovers) goes in
+    if it joins existing track in two places at least 1 km apart, or joins it
+    once and reaches one of the railroad's stations."""
+    cov = Coverage(segs)
+    runs = []  # (points, [hit at start, hit at end])
     for way in elements:
         line = densify([(round(g["lon"], 5), round(g["lat"], 5)) for g in way.get("geometry", [])])
         if len(line) < 2:
@@ -259,23 +355,47 @@ def add_uncovered(segs, net, elements):
             j = i
             while j < len(line) and not near[j]:
                 j += 1
-            run = line[max(0, i - 1):min(len(line), j + 1)]
-            length = sum(meters(a, b) for a, b in zip(run, run[1:]))
-            if length >= MIN_RUN_M:
-                run = [list(p) for p in run]
-                # Join each end to the track it touches.
-                for end, idx in ((0, i - 1), (-1, j)):
-                    hit = near[idx] if 0 <= idx < len(line) else None
-                    if hit:
-                        _d, k, si, t, q = hit
-                        run[end] = list(q)
-                        cuts.append((k, si, t, q))
-                segs.append(((net,), run))
-                cov.add(len(segs) - 1)  # so parallel tracks aren't added twice
-                added_m += length
-                # Later ways may now be covered by this run.
-                near = [n or cov.nearest(p, COVERED_M) for n, p in zip(near, line)]
+            hits = [near[idx] if 0 <= idx < len(line) else None for idx in (i - 1, j)]
+            runs.append((line[max(0, i - 1):min(len(line), j + 1)], hits))
             i = j
+    # Runs that share an end node are connected.
+    parent = list(range(len(runs)))
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    by_end = defaultdict(list)
+    for r, (pts, hits) in enumerate(runs):
+        for end, hit in zip((pts[0], pts[-1]), hits):
+            if not hit:
+                by_end[end].append(r)
+    for rs in by_end.values():
+        for r in rs[1:]:
+            parent[find(r)] = find(rs[0])
+    groups = defaultdict(list)
+    for r in range(len(runs)):
+        groups[find(r)].append(r)
+    cuts, added_m = [], 0
+    for rs in groups.values():
+        joins = [h[4] for r in rs for h in runs[r][1] if h]
+        loose = [pt for r in rs for pt, h in zip((runs[r][0][0], runs[r][0][-1]), runs[r][1]) if not h]
+        length = sum(meters(a, b) for r in rs for a, b in zip(runs[r][0], runs[r][0][1:]))
+        spread = max((meters(a, b) for a in joins for b in joins), default=0)
+        if length < MIN_RUN_M or not joins:
+            continue
+        if spread < 1000 and not any(near_station(p, stations_at) for p in loose):
+            continue
+        for r in rs:
+            pts, hits = runs[r]
+            run = [list(p) for p in pts]
+            for end, hit in zip((0, -1), hits):
+                if hit:
+                    _d, k, si, t, q = hit
+                    run[end] = list(q)
+                    cuts.append((k, si, t, q))
+            segs.append(((net,), run))
+        added_m += length
     split_segments(segs, cuts)
     return added_m
 
@@ -297,7 +417,19 @@ out geom;""", f"routes-{net}")
         if elements is None:
             print(f"  {net}: skipped, OpenStreetMap unavailable (rerun later to fill its gaps)")
             continue
-        print(f"  {net}: +{add_uncovered(segs, net, elements) / 1000:.1f} km from OpenStreetMap")
+        print(f"  {net}: +{add_uncovered(segs, net, elements) / 1000:.1f} km from OpenStreetMap routes")
+        time.sleep(2)
+        # The railroad's own main-line track outside any mapped route.
+        exact = operators.strip("^$") if operators.startswith("^") and "|" not in operators else None
+        match = f'["operator"="{exact}"]' if exact else f'["operator"~"{operators}",i]'
+        elements = overpass(f"""[out:json][timeout:600][maxsize:1073741824];
+way["railway"="rail"]{match}[!"service"]({bbox});
+out geom;""", f"track-{net}", attempts=TRACK_ATTEMPTS)
+        if elements is None:
+            print(f"  {net}: own track skipped, OpenStreetMap unavailable")
+            continue
+        added = add_connecting(segs, net, elements, [(p[0], p[1]) for p in pts])
+        print(f"  {net}: +{added / 1000:.1f} km of its own track from OpenStreetMap")
         time.sleep(2)
 
     # Targeted fills: specific places the broad search misses, limited to track
@@ -486,11 +618,49 @@ def collapse_parallel(segs):
 hidden = collapse_parallel(segments)
 
 
+def key(pt):
+    return (round(pt[0], 4), round(pt[1], 4))
+
+
+# A hidden stretch still carries trains through the routing graph, but trains
+# snap onto the drawn line beside it. Where the two don't share a junction
+# (Metra Electric beside the Amtrak line into Chicago), the drawn line would
+# lead nowhere, so tie each loose end of a hidden stretch to the drawn track
+# alongside with a short routing-only link.
+def tie_hidden_ends(segs, hidden):
+    drawn_ends = set()
+    for k, (_n, c) in enumerate(segs):
+        if k not in hidden:
+            drawn_ends.update((key(c[0]), key(c[-1])))
+    drawn_idx = [k for k in range(len(segs)) if k not in hidden]
+    cov = Coverage([segs[k] for k in drawn_idx])
+    cuts, links, done = [], [], set()
+    for k in sorted(hidden):
+        nets, c = segs[k]
+        for end in (c[0], c[-1]):
+            if key(end) in drawn_ends or key(end) in done:
+                continue
+            hit = cov.nearest(tuple(end), PARALLEL_M)
+            if not hit:
+                continue
+            _d, j, i, t, q = hit
+            done.add(key(end))
+            cuts.append((drawn_idx[j], i, t, q))
+            if key(q) != key(end):
+                links.append((nets, [list(end), list(q)]))
+    split_segments(segs, cuts)
+    for link in links:
+        segs.append(link)
+        hidden.add(len(segs) - 1)
+    print(f"tied {len(done)} ends of hidden stretches to the drawn track")
+
+
+tie_hidden_ends(segments, hidden)
+
+
 # Chain segments that meet end to end (at nodes where exactly two segments
 # with the same networks meet) into long lines, so the map's simplification
 # at low zoom doesn't break the network into dashes.
-def key(pt):
-    return (round(pt[0], 4), round(pt[1], 4))
 
 
 def merge(lines, degree):
