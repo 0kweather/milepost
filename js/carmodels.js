@@ -42,9 +42,9 @@ function clipped(outline, inner) {
   const ys = outline.match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
   const lo = Math.min(...ys), hi = Math.max(...ys);
   const shade = `<linearGradient id="${id}-s" gradientUnits="userSpaceOnUse" x1="0" y1="${lo}" x2="0" y2="${hi}">` +
-    '<stop offset="0" stop-color="#000" stop-opacity="0.13"/><stop offset="0.3" stop-color="#000" stop-opacity="0.03"/>' +
-    '<stop offset="0.6" stop-color="#fff" stop-opacity="0.05"/><stop offset="0.82" stop-color="#fff" stop-opacity="0.14"/>' +
-    '<stop offset="0.93" stop-color="#fff" stop-opacity="0.03"/><stop offset="1" stop-color="#000" stop-opacity="0.16"/></linearGradient>';
+    '<stop offset="0" stop-color="#000" stop-opacity="0.24"/><stop offset="0.28" stop-color="#000" stop-opacity="0.06"/>' +
+    '<stop offset="0.58" stop-color="#fff" stop-opacity="0.08"/><stop offset="0.8" stop-color="#fff" stop-opacity="0.24"/>' +
+    '<stop offset="0.92" stop-color="#fff" stop-opacity="0.06"/><stop offset="1" stop-color="#000" stop-opacity="0.26"/></linearGradient>';
   return `<clipPath id="${id}"><path d="${outline}"/></clipPath><defs>${shade}</defs>` +
     `<g clip-path="url(#${id})">${inner}<rect x="-5" y="${lo}" width="200" height="${hi - lo}" fill="url(#${id}-s)"/></g>`;
 }
@@ -131,19 +131,20 @@ export function acs64(c) {
   }
   liv += rect(0, sill + 0.28, L, 0.24, AMTRAK.red);
   s += path(d, bodyColor) + clipped(d, liv);
-  // Crew doors behind each cab, side panel seams, filter grilles.
+  // Crew doors behind each cab; tall louvered intake panels high on the
+  // side, under the roof band: three behind the No. 1 cab, two behind the
+  // No. 2 cab.
   for (const x of [8.4, L - 8.4 - 2.3]) s += door(x, sill + 0.35, 2.3, 7.0, { glassY: 0.74, glassH: 0.18 });
-  for (const x of [20, 28, L - 28, L - 20]) s += line(x, sill + 0.6, x, 11.2, C.steelShade, 0.5);
-  for (const x of [L / 2 - 8.5, L / 2 + 4.5]) {
-    s += rect(x, 9.6, 4, 1.6, "rgba(0,0,0,0.18)", 0.4);
-    s += slats(x, 9.6, 4, 1.6, 0.35);
+  for (const x of [11.6, 15.0, 18.4, L - 18.7, L - 15.3]) {
+    s += rect(x, 9.3, 2.9, 2.5, "rgba(0,0,0,0.13)", 0.45, 'rx="0.1"');
+    s += slats(x + 0.15, 9.45, 2.6, 2.2, 0.28, "rgba(0,0,0,0.16)");
   }
   // Roof: equipment between the pantographs; rear pantograph up.
   s += rect(L / 2 - 9, roof, 18, 0.45, C.steelDark, 0.5, 'rx="0.15"');
   s += pantograph(14.5, roof, { up: false }) + pantograph(L - 14.5, roof, { up: true, facing: -1 });
   // Amtrak: travelmark and name aft of the cab door. SEPTA: its logo high
   // on the body toward the No. 2 end.
-  s += c.agency === "septa" ? badge(c, 56, 11.5, 1.6) : badge(c, 32, 8.7, 2.1);
+  s += c.agency === "septa" ? badge(c, 56, 11.5, 1.6) : badge(c, L / 2 + 1, 9.15, 5.5, { logo: "amtrak-stack" }); // name over a big travelmark, mid-side
   s += outlineOf(d);
   return s;
 }
@@ -202,7 +203,10 @@ export const p32 = (c) => genesis(c, { shoe: true });
 // windows (18 in tall on the Amfleet I, 22 in on the II). The I has a
 // vestibule at each end, the II at one. Phase VI: blue window band, red
 // sill stripe.
-function amfleet(c, { two = false, cab = false } = {}) {
+// Class colors of the Phase VII wedge: green coach, light blue business; the
+// cafe car has none.
+const AMFLEET_CLASS = { coach: "#3fae49", business: "#5ec4ea", cafe: null };
+function amfleet(c, { two = false, cab = false, cls = "coach" } = {}) {
   const { L } = c, x0 = 1.0, x1 = L - 1.0, sill = 4.05, roof = 12.67;
   const d = bodyOutline(x0, x1, sill, roof, { endR: 2.0, endRL: cab && c.cabL ? 3.2 : 2.0 });
   const winH = two ? 1.83 : 1.5, winY = two ? 7.35 : 7.55;
@@ -211,7 +215,21 @@ function amfleet(c, { two = false, cab = false } = {}) {
   let liv = rect(0, 0, L, roof + 1, C.steel);
   liv += rect(0, 11.05, L, 2, C.steelShade);                         // rounded roof
   liv += flutes(x0, x1, sill + 0.35, 6.75);                          // corrugated lower sides
-  liv += stripes(x0, x1, [[winY - 0.5, winH + 1.0, AMTRAK.blue], [winY + winH + 0.68, 0.14, AMTRAK.red], [sill + 0.2, 0.22, AMTRAK.red]], 0);
+  // Phase VII: a window band, dark blue from the A end to a white slash a
+  // third of the way along, lighter blue past it, a second white slash near
+  // the B end. Only the A end carries the class-color wedge, with the logo
+  // just behind it. A red line low on the side.
+  const b0 = winY - 0.55, b1 = winY + winH + 0.6;
+  const a = two ? x0 : x0 + 4.4;                                     // past the A-end door (Amfleet I)
+  const slashAt = (f) => x0 + (x1 - x0) * f;
+  // lean: 1 for "/", -1 for "\" (the two slashes lean opposite ways).
+  const slashPath = (x, lean) => path(poly([[x - 0.7 * lean - 0.18, b0], [x - 0.7 * lean + 0.18, b0], [x + 0.7 * lean + 0.18, b1], [x + 0.7 * lean - 0.18, b1]]), "#ffffff");
+  const mid = slashAt(0.37);
+  liv += rect(x0, b0, x1 - x0, b1 - b0, AMTRAK.navy) + path(poly([[mid - 0.7, b0], [x1, b0], [x1, b1], [mid + 0.7, b1]]), AMTRAK.sky);
+  liv += slashPath(mid, 1) + slashPath(slashAt(0.92), -1);
+  const wedge = AMFLEET_CLASS[cls];
+  if (wedge && !(cab && c.cabL)) liv += path(poly([[a, b0], [a + 2.4, b0], [a + 1.2, b1], [a, b1]]), wedge);
+  liv += rect(x0, sill + 0.2, x1 - x0, 0.22, AMTRAK.red);
   s += path(d, C.steel) + clipped(d, liv);
   // Doors: both ends on the Amfleet I, the B end only on the II.
   const doors = two ? [x1 - 4.4] : [x0 + 1.8, x1 - 4.4];
@@ -219,18 +237,20 @@ function amfleet(c, { two = false, cab = false } = {}) {
     s += door(x, sill + 0.15, 2.6, 6.55, { glassY: 0.55, glassH: 0.32 });
   }
   const gaps = doors.map((x) => [x - 1.2, x + 3.8]);
-  gaps.push([x0 + 4.4, x0 + 14.9]);                                  // the logo
+  gaps.push([a, a + 8.2]);                                           // wedge and logo
   if (cab && c.cabL) gaps.push([x0, x0 + 6.5]);
   s += windowRow(x0 + 4.2, x1 - 4.2, winY, two ? 5.6 : 5.3, winH, two ? 6.9 : 6.5, { r: 0.55, skip: gaps });
   if (cab && c.cabL) {
     s += path(poly([[x0 + 0.35, 8.4], [x0 + 1.4, 10.6], [x0 + 3.8, 10.6], [x0 + 3.8, 8.4]]), C.black) + win(x0 + 1.5, 8.6, 2.0, 1.8, 0.3);
   }
-  s += badge(c, x0 + 9.6, winY + winH / 2, 1.0, { dark: true });   // white, in the window band by the door
+  s += badge(c, a + 5.0, winY + winH / 2, 2.1, { dark: true, logo: "amtrak-stack" }); // white, in the band behind the wedge
   s += outlineOf(d) + carEnds(c);
   return s;
 }
 export const amfleet1 = (c) => amfleet(c);
 export const amfleet2 = (c) => amfleet(c, { two: true });
+export const amfleetBusiness = (c) => amfleet(c, { cls: "business" });
+export const amfleetCafe = (c) => amfleet(c, { cls: "cafe" });
 export const metrolinerCab = (c) => amfleet(c, { cab: true });
 
 // ===================== Generic passenger cars =====================
@@ -562,7 +582,7 @@ const BOMB = {
   drop: { a: 16.6, b: 68.4, y: 1.25 }, trucks: { centers: 64, wb: 8.5, d: 33 }, chamfer: [2.4, 14.15],
   // Metrolink: the name at upper-deck level near one end. FrontRunner: the
   // name between the decks. Tri-Rail: its logo high near one end.
-  badge: (c) => ({ metrolink: { x: 7, y: 10.2, h: 1.0 }, frontrunner: { x: 24, y: 8.7, h: 0.8 }, trirail: { x: 6.5, y: 11.4, h: 1.0 } })[c.agency],
+  badge: (c) => ({ metrolink: { x: 7, y: 10.2, h: 1.0 }, frontrunner: { x: 24, y: 8.7, h: 0.8 }, trirail: { x: 44, y: 9.2, h: 1.7, logo: "trirail-onnavy" } })[c.agency],
   rows: [{ xs: seq(17.6, 5.5, 9), y: 11.6, w: 4.2, h: 2.2, r: 0.35 }, { xs: seq(28.2, 5.5, 4), y: 4.4, w: 4.2, h: 2.2, r: 0.35 },
     { xs: [1.9, 6.6, 69.2, 74.8], y: 7.0, w: 3.7, h: 1.9, r: 0.3 }],
   doors: [{ x: 20.0, w: 4.33, y0: 1.55, y1: 8.15, leaves: 2, glassY: 0.42, glassH: 0.42 }, { x: 56.1, w: 4.33, y0: 1.55, y1: 8.15, leaves: 2, glassY: 0.42, glassH: 0.42 }],
@@ -572,7 +592,26 @@ const BOMB = {
 // other. Metrolink: white with blue and green ribbons. Tri-Rail: white, blue
 // band with green and orange pinstripes. Others: white with a band in the
 // railroad's color.
+// Tri-Rail's "On Track" wrap (2023 on, on every car): navy fading to blue
+// toward the bottom; orange, green and light blue stripes slanting across
+// one end; chevrons pointing ahead near the middle and the other end.
+const TRI = { orange: "#f39a2b", green: "#8cc63f", sky: "#5bc2e7", teal: "#1f8fb8" };
+function triRailPaint(c, g) {
+  const L = g.L, id = `ts-tri-${++clipSeq}`;
+  let s = `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="2" x2="0" y2="16">` +
+    `<stop offset="0" stop-color="#1f74a8"/><stop offset="0.55" stop-color="#1d3f86"/><stop offset="1" stop-color="#1c2566"/></linearGradient></defs>`;
+  s += rect(0, 0, L, 17, `url(#${id})`);
+  [TRI.orange, TRI.green, TRI.sky].forEach((col, k) => {
+    const x = 3 + k * 2.6;
+    s += path(poly([[x, 17], [x + 2.2, 17], [x + 8.2, 0], [x + 6.0, 0]]), col);
+  });
+  const chevron = (x, w, col) => path(poly([[x, 14.5], [x + w, 14.5], [x + w + 3.6, 8.6], [x + w, 2.6], [x, 2.6], [x + 3.6, 8.6]]), col);
+  s += chevron(21.5, 1.6, TRI.green) + chevron(23.6, 1.6, TRI.sky) + path(poly([[18.5, 8.6], [20.3, 10.4], [22.1, 8.6], [20.3, 6.8]]), TRI.orange);
+  s += chevron(L - 24, 1.4, TRI.sky) + chevron(L - 21.4, 1.4, TRI.orange) + chevron(L - 18.8, 1.4, TRI.green);
+  return s;
+}
 function bombPaint(c, g) {
+  if (c.agency === "trirail") return triRailPaint(c, g);
   const L = g.L;
   let s = rect(0, 0, L, 17, "#eef0f2");
   switch (c.agency) {
@@ -609,13 +648,14 @@ export const bombardierCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint
 const ROTEM = {
   roof: 15.87, sill: 3.7, cornerR: 1.0,
   drop: { a: 16.6, b: 68.4, y: 1.25 }, trucks: { centers: 64, wb: 8.5, d: 33 },
-  badge: (c) => ({ metrolink: { x: 7, y: 10.3, h: 1.0 }, trirail: { x: 6.5, y: 11.4, h: 1.0 } })[c.agency],
+  badge: (c) => ({ metrolink: { x: 7, y: 10.3, h: 1.0 }, trirail: { x: 44, y: 9.4, h: 1.7, logo: "trirail-onnavy" } })[c.agency],
   rows: [{ xs: seq(18.9, 5.42, 9), y: 11.4, w: 4.4, h: 2.2, r: 0.4 }, { xs: seq(28.4, 5.42, 4), y: 4.6, w: 4.4, h: 2.1, r: 0.4 },
     { xs: [1.8, 6.6, 73.5, 78.6], y: 6.9, w: 4.0, h: 2.2, r: 0.4 }],
   doors: [{ x: 21.1, w: 4.67, y0: 1.55, y1: 8.1, leaves: 2, glassY: 0.42, glassH: 0.42 }, { x: 56.4, w: 4.67, y0: 1.55, y1: 8.1, leaves: 2, glassY: 0.42, glassH: 0.42 }],
   diaphragm: [4.25, 13.6],
 };
 function rotemPaint(c, g) {
+  if (c.agency === "trirail") return triRailPaint(c, g);
   const L = g.L;
   let s = rect(0, 0, L, 17, C.steel) + flutes(0, L, 2.0, 3.6, 0.3);
   if (c.agency === "metrolink") {
@@ -1586,7 +1626,7 @@ export const f125 = (c) => cabUnit(c, {
 // raked back under a chamfered brow; long louver band along the top of the
 // side; Tri-Rail's blue wrap with a green, orange and blue band behind the cab.
 export const bl36 = (c) => cabUnit(c, {
-  badge: { x: 47, y: 9.5, h: 1.6 },                                  // mid-hood
+  badge: { x: 47, y: 9.5, h: 1.6, logo: "trirail-onnavy" },         // mid-hood, white lettering on the navy
   roof: 14.67, sill: 4.55, rearR: 0.9,
   nose: [[2.2, 4.55], [1.45, 5.3], [1.55, 9.7], [1.85, 10.15], [3.45, 13.35], [4.4, 14.25], [5.6, 14.67]],
   glass: [[[2.15, 10.45], [3.4, 13.0], [4.0, 13.0], [4.0, 10.45]]],
@@ -1872,6 +1912,8 @@ export const MODELS = {
   sd70mach: M(sd70mach, 74.25, true),
   amfleet: M(amfleet1, 85.33),
   amfleet2: M(amfleet2, 85.33),
+  amfleetBusiness: M(amfleetBusiness, 85.33),
+  amfleetCafe: M(amfleetCafe, 85.33),
   metrolinerCab: M(metrolinerCab, 85.33, true),
   superlinerCoach: M(superlinerCoach, 85),
   superlinerSleeper: M(superlinerSleeper, 85),

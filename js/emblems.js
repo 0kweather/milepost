@@ -15,7 +15,7 @@ const LOGOS = {
   acela: [2.52, true], via: [2.25, true], "via-mark": [3.64, true], brightline: [4.07, true], mta: [0.91, false], mbta: [1, false],
   njt: [4.44, true], "njt-word": [4.98, true], septa: [1, true], "septa-word": [3.98, false],
   "mta-inverse": [0.91, false], metra: [3.68, true], caltrain: [1.77, false],
-  metrolink: [7.75, true], rtd: [2.2, false], capmetro: [4.14, false], trirail: [4.4, false],
+  metrolink: [7.75, true], rtd: [2.2, false], capmetro: [4.14, false], trirail: [4.4, false], "trirail-onnavy": [4.4, false],
   smart: [3.31, false], frontrunner: [12.85, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
@@ -52,7 +52,7 @@ export function logoOf(c) {
 }
 
 // How wide a logo of height h is, in feet (0 if the railroad has none).
-const COMPOSITE = { "amtrak-stack": 1.25, "amtrak-midwest": 4.2 };
+const COMPOSITE = { "amtrak-stack": 1.65, "amtrak-midwest": 4.2 };
 export const logoWidth = (c, h, key = logoOf(c)) =>
   COMPOSITE[key] ? COMPOSITE[key] * h : LETTERING[key] ? LETTERING[key].aspect * h : key ? LOGOS[key][0] * h : 0;
 
@@ -67,7 +67,7 @@ export function badge(c, x, y, h, { dark = false, logo = null, skip = [] } = {})
   const key = logo || logoOf(c);
   if (!key || skip.includes(c.agency) || !(LOGOS[key] || LETTERING[key] || COMPOSITE[key])) return "";
   const body = key === "amtrak-stack"
-    ? image("amtrak-word", 0, -h * 0.36, h * 0.2, dark) + image("amtrak-mark", 0, h * 0.14, h * 0.62, dark)
+    ? image("amtrak-word", 0, -h * 0.38, h * 0.13, dark) + image("amtrak-mark", 0, h * 0.12, h * 0.7, dark)
     : key === "amtrak-midwest"
       ? image("amtrak", 0, -h * 0.2, h * 0.45, dark) +
         `<text x="${n(h * 2.02)}" y="${n(h * 0.42)}" font-size="${n(h * 0.3)}" fill="${dark ? "#ffffff" : "#004d6e"}" text-anchor="end" letter-spacing="${n(h * 0.12)}" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="600">MIDWEST</text>`

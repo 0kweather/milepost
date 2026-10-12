@@ -85,6 +85,8 @@ const TYPES = {
   acelaCoach: { name: "Avelia Liberty coach", kind: "coach" },
   amfleet: { name: "Amfleet I coach", kind: "coach" },
   amfleet2: { name: "Amfleet II coach", kind: "coach" },
+  amfleetBusiness: { name: "Amfleet I business class car", kind: "coach" },
+  amfleetCafe: { name: "Amfleet I cafe car", kind: "coach" },
   metrolinerCab: { name: "Metroliner cab car", kind: "coach", cab: true },
   viewlinerBaggage: { name: "Viewliner baggage car", kind: "coach", baggage: true },
   viewlinerSleeper: { name: "Viewliner sleeping car", kind: "coach", rows2: true },
@@ -161,7 +163,7 @@ const SUPERLINER_SHORT = set("Charger locomotive with Superliner coaches", ["cha
 
 const AMTRAK = {
   "Acela": set("Avelia Liberty trainset (some trips still use the original Acela Express)", ["acelaPower", 1], ["acelaCoach", 9], ["acelaPower", 1]),
-  "Northeast Regional": set("ACS-64 locomotive with Amfleet coaches (diesel south of Washington)", ["acs64", 1], ["amfleet", 7]),
+  "Northeast Regional": set("ACS-64 locomotive with an Amfleet business class car, cafe and coaches (diesel south of Washington)", ["acs64", 1], ["amfleetBusiness", 1], ["amfleetCafe", 1], ["amfleet", 6]),
   "Keystone": set("ACS-64 locomotive with Amfleet coaches and a Metroliner cab car", ["acs64", 1], ["amfleet", 4], ["metrolinerCab", 1]),
   "Empire Service": EMPIRE, "Adirondack": EMPIRE, "Maple Leaf": EMPIRE, "Ethan Allen Express": EMPIRE,
   "Vermonter": DIESEL_AMFLEET, "Carolinian": DIESEL_AMFLEET, "Pennsylvanian": DIESEL_AMFLEET, "Downeaster": DIESEL_AMFLEET,
