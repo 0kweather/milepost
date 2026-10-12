@@ -73,6 +73,12 @@
       <button data-units="mi">Miles</button>
       <button data-units="km">Kilometers</button>
     </div>
+    <div class="menu-title">Train labels</div>
+    <div class="segmented" id="labels-choice">
+      <button data-labels="number">Number</button>
+      <button data-labels="line">Line</button>
+      <button data-labels="none">None</button>
+    </div>
     <div class="menu-title">Map</div>
     <label class="toggle">
       <input type="checkbox" id="stations-toggle">
@@ -84,8 +90,19 @@
       <span class="switch" aria-hidden="true"></span>
       <span class="toggle-text"><strong>Infer direction</strong><span>Point trains toward their next stop when their railroad doesn't report a heading; otherwise they show as dots</span></span>
     </label>
+    <label class="toggle">
+      <input type="checkbox" id="estimated-toggle">
+      <span class="switch" aria-hidden="true"></span>
+      <span class="toggle-text"><strong>Hide estimated trains</strong><span>Show only trains located by GPS, not ones placed from their predicted times</span></span>
+    </label>
+
     <div class="menu-title"><label for="tz-choice">Time zone</label></div>
     <select id="tz-choice" class="menu-select"></select>
+    <label class="toggle">
+      <input type="checkbox" id="clock-toggle">
+      <span class="switch" aria-hidden="true"></span>
+      <span class="toggle-text"><strong>24-hour clock</strong><span>Times like 18:05 instead of 6:05 PM</span></span>
+    </label>
     <div class="menu-title">Delays</div>
     <label class="toggle">
       <input type="checkbox" id="infer-toggle">

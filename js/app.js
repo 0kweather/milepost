@@ -47,6 +47,13 @@ const state = {
   inferDelays: store.get("tt-infer", true),
   // Point trains whose feed has no heading toward their next stop.
   inferHeading: store.get("tt-infer-heading", true),
+  // What each train's plate on the map says: "number", "line" or "none"
+  // (plates only on the selected and tracked trains).
+  labels: store.get("tt-labels", "number"),
+  // Leave out trains placed from timetables rather than GPS.
+  hideEstimated: store.get("tt-hide-estimated", false),
+  // Times as 18:05 instead of 6:05 PM.
+  clock24: store.get("tt-clock24", false),
   // Times shown in: "" the viewer's own zone, "station" each stop's local
   // time, or an IANA zone.
   timeZone: store.get("tt-tz", ""),
@@ -566,8 +573,14 @@ map.once("load", () => {
 // ---------- Train features ----------
 
 function visible(t) {
-  return !state.hidden.has(t.agency);
+  if (state.hidden.has(t.agency)) return false;
+  // Estimated trains stay visible when selected or tracked.
+  return !(state.hideEstimated && t.estimated && t.id !== state.selected && !state.tracked.some((r) => r.id === t.id));
 }
+
+// A train's line, shortened for its plate ("Northeast Corridor",
+// "Fall River/New Bedford"); its number when it has no line.
+const shortLine = (t) => (t.route || "").replace(/\s+(Line|Branch)$/i, "").trim() || t.number || AGENCIES[t.agency].short;
 
 function featureCollection() {
   const features = [];
@@ -582,7 +595,7 @@ function featureCollection() {
         id: t.id,
         agency: t.agency,
         color: AGENCIES[t.agency].color,
-        plate: t.number || AGENCIES[t.agency].short,
+        plate: state.labels === "line" ? shortLine(t) : t.number || AGENCIES[t.agency].short,
         bearing: targetOf(t).bearing ?? 0,
         hasBearing: targetOf(t).bearing != null,
         stale: Date.now() - t.updated > STALE_MS && !t.estimated,
@@ -1095,6 +1108,8 @@ function renderResults() {
 
 // ---------- Rendering: train detail ----------
 
+// 6:05 PM, or 18:05 with the 24-hour clock.
+const clockOptions = () => (state.clock24 ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit" });
 // A time in the zone chosen in Settings (tz: the stop's own zone, used when
 // that's the choice).
 function fmtTime(iso, tz) {
@@ -1103,9 +1118,9 @@ function fmtTime(iso, tz) {
   if (Number.isNaN(+d)) return "";
   const zone = state.timeZone === "station" ? tz : state.timeZone;
   try {
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: zone || undefined });
+    return d.toLocaleTimeString([], { ...clockOptions(), timeZone: zone || undefined });
   } catch {
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return d.toLocaleTimeString([], clockOptions());
   }
 }
 
@@ -1539,7 +1554,7 @@ function applySelectionFilter() {
   map.setFilter("tt-ping", highlighted);
   map.setLayoutProperty("tt-trains", "icon-size", trainIconSize(highlighted));
   map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(highlighted));
-  map.setFilter("tt-labels", ["any", highlighted, [">=", ["zoom"], 8]]);
+  map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
   for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-station-selected-label", "tt-footprint-selected"]) {
     map.setFilter(l, ["==", ["get", "id"], sid]);
@@ -1934,6 +1949,30 @@ on("units-choice", "click", (e) => {
   renderAll();
 });
 
+function applyLabels() {
+  for (const b of $("labels-choice")?.children || []) b.setAttribute("aria-pressed", String(b.dataset.labels === state.labels));
+}
+on("labels-choice", "click", (e) => {
+  const b = e.target.closest("[data-labels]");
+  if (!b) return;
+  state.labels = b.dataset.labels;
+  store.set("tt-labels", state.labels);
+  applyLabels();
+  applySelectionFilter();
+  redraw();
+});
+on("estimated-toggle", "change", (e) => {
+  state.hideEstimated = e.target.checked;
+  store.set("tt-hide-estimated", state.hideEstimated);
+  redraw();
+  renderAll();
+});
+on("clock-toggle", "change", (e) => {
+  state.clock24 = e.target.checked;
+  store.set("tt-clock24", state.clock24);
+  renderAll();
+});
+
 function setShowStations(on) {
   state.showStations = on;
   store.set("tt-stations", on);
@@ -2023,6 +2062,9 @@ map.on("movestart", () => toggleMenu(false));
 applyTheme();
 applyUnits();
 setChecked("stations-toggle", state.showStations);
+setChecked("estimated-toggle", state.hideEstimated);
+setChecked("clock-toggle", state.clock24);
+applyLabels();
 setChecked("infer-toggle", state.inferDelays);
 setChecked("heading-toggle", state.inferHeading);
 initTimeZones();
