@@ -878,25 +878,28 @@ export const rotemCoach = (c) => bilevel(c, { ...ROTEM, paint: rotemPaint });
 // --- MBTA bi-levels (Kawasaki BTC-4 and CTC-4, 1990-2006; Hyundai Rotem
 // BTC-4D and CTC-5, 2012-2024, built to the same plan): 85 ft 4 in, 15 ft
 // 6 in, stainless. Doors at the extreme ends of the car, at the end-section
-// level over the trucks, with trap steps for low platforms. A purple band
-// between the two rows of windows, stepping up to door-window height in
-// the end sections, edged in yellow.
+// level over the trucks, with trap steps for low platforms. Nine big
+// windows on each deck between the trucks; two small ones at mid level in
+// one end section. A purple band between the decks, edged in yellow, that
+// widens over the end sections (down over their windows, up to the door
+// windows) and runs across the doors.
 const MBTA_BL = {
-  roof: 15.5, sill: 3.7, cornerR: 0.9, ends: { h: 15.2, len: 14.6, ramp: 2.0 },
+  roof: 15.5, sill: 3.7, cornerR: 0.9, ends: { h: 15.2, len: 12.4, ramp: 2.0 },
   drop: { a: 17.4, b: 67.9, y: 1.3 }, trucks: { centers: 59.5, wb: 8.5, d: 33 },
-  rows: [{ xs: seq(19.2, 3.55, 14), y: 11.0, w: 2.85, h: 2.25, r: 0.35 }, { xs: seq(19.2, 3.55, 14), y: 4.1, w: 2.85, h: 2.2, r: 0.35 },
-    { xs: [12.9, 69.9], y: 12.6, w: 2.4, h: 0.8, r: 0.2 }],
-  doors: [{ x: 1.35, w: 2.6, y0: 4.25, y1: 11.6, glassY: 0.62, glassH: 0.3 }, { x: 81.38, w: 2.6, y0: 4.25, y1: 11.6, glassY: 0.62, glassH: 0.3 }],
-  roofItems: [[3.5, 9, 0.45, 15.2], [72.8, 9, 0.45, 15.2]], diaphragm: [4.25, 13.6],
-  badge: { x: 42.7, y: 8.6, h: 1.4 },                                 // in the purple band between the decks
+  rows: [{ xs: seq(18.6, 5.5, 9), y: 11.0, w: 4.4, h: 2.4, r: 0.45 }, { xs: seq(18.6, 5.5, 9), y: 4.6, w: 4.4, h: 2.2, r: 0.45 },
+    { xs: [6.6, 9.6], y: 7.3, w: 2.4, h: 2.0, r: 0.3 }],
+  doors: [{ x: 1.35, w: 2.6, y0: 4.25, y1: 12.6, glassY: 0.55, glassH: 0.36 }, { x: 81.38, w: 2.6, y0: 4.25, y1: 12.6, glassY: 0.55, glassH: 0.36 }],
+  roofItems: [[3.5, 7, 0.45, 15.2], [74.8, 7, 0.45, 15.2]], diaphragm: [4.25, 13.6],
+  badge: { x: 43, y: 9.1, h: 1.6 },                                   // in the purple band between the decks
 };
 function mbtaBand(c, g) {
   const L = g.L, P = MBTA.purple, Y = MBTA.yellow;
-  let s = rect(0, 0, L, 17, C.steel) + line(0, 7.2, L, 7.2, "rgba(0,0,0,0.12)", 0.5);
-  const band = (top, bot) => `M0 ${bot}L15.6 ${bot}L18.4 ${bot - 2.2}L${L - 18.4} ${bot - 2.2}L${L - 15.6} ${bot}L${L} ${bot}`;
-  s += path(`${band(12.3, 9.35)}L${L} 12.25L${L - 15.6} 12.25L${L - 17.8} 10.25L17.8 10.25L15.6 12.25L0 12.25Z`, P);
-  s += path(band(12.3, 9.35), "none", 0, `stroke="${Y}" stroke-width="1"`);
-  s += path(`M0 12.3L15.6 12.3L17.8 10.3L${L - 17.8} 10.3L${L - 15.6} 12.3L${L} 12.3`, "none", 0, `stroke="${Y}" stroke-width="1"`);
+  const pts = (list) => list.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y}`).join("");
+  const top = [[0, 10.9], [13.0, 10.9], [13.3, 10.45], [L - 13.3, 10.45], [L - 13.0, 10.9], [L, 10.9]];
+  const bot = [[L, 6.9], [L - 16.4, 6.9], [L - 16.7, 7.7], [16.7, 7.7], [16.4, 6.9], [0, 6.9]];
+  let s = rect(0, 0, L, 17, C.steel) + line(0, 4.2, L, 4.2, "rgba(0,0,0,0.12)", 0.5);
+  s += path(pts(top) + pts(bot).replace("M", "L") + "Z", P);
+  s += path(pts(top) + pts(bot), "none", 0, `stroke="${Y}" stroke-width="0.22"`);
   return s;
 }
 const mbtaCabEnd = (c, { x0 }) => {
@@ -940,40 +943,52 @@ export const multilevelCab = (c) => bilevel(c, { ...ML, paint: njtPaint,
 
 // --- Gallery cars (Metra: Nippon Sharyo 2002-05 and Amerail 1994-96 design):
 // 85 ft, 15 ft 10 in, fluted stainless, the upper level a pair of balconies
-// with their own row of windows over the big lower ones. Bi-parting doors in
-// the middle of the car at the low level; a blue Metra panel beside them.
+// with their own row of windows over the lower ones, column for column: six
+// each side of the bi-parting doors in the middle of the car at the low
+// level, an air-conditioning grille over the doors. Between the decks, left
+// of the doors, a long blue Metra panel with the white logo.
+const GAL_L = seq(1.8, 5.7, 6), GAL_R = seq(50.5, 5.66, 6);
 const GALLERY = {
   roof: 15.86, sill: 3.7, cornerR: 1.2,
   drop: { a: 15.5, b: 69.5, y: 1.35 }, trucks: { centers: 61, wb: 8.5, d: 33 },
-  rows: [{ xs: seq(2.2, 6.1, 4), y: 11.0, w: 4.9, h: 2.1, r: 0.45 }, { xs: seq(46.2, 6.1, 6), y: 11.0, w: 4.9, h: 2.1, r: 0.45 },
-    { xs: seq(2.2, 6.1, 6), y: 4.4, w: 4.9, h: 2.4, r: 0.45 }, { xs: seq(46.2, 6.1, 6), y: 4.4, w: 4.9, h: 2.4, r: 0.45 }],
-  doors: [{ x: 40.2, w: 4.6, y0: 1.5, y1: 8.4, leaves: 2, glassY: 0.4, glassH: 0.45 }],
-  diaphragm: [4.25, 14.0],
-  badge: { x: 33, y: 12.0, h: 1.9, dark: true }, // on the blue Metra panel
+  rows: [{ xs: [...GAL_L, ...GAL_R], y: 11.2, w: 4.4, h: 2.3, r: 0.45 }, { xs: [...GAL_L, ...GAL_R], y: 5.6, w: 4.4, h: 2.3, r: 0.45 }],
+  doors: [{ x: 40.2, w: 4.6, y0: 1.5, y1: 9.3, leaves: 2, glassY: 0.5, glassH: 0.35 }],
+  diaphragm: [4.25, 14.0], panel: [23.4, 12.2],
+  badge: { x: 29.5, y: 9.5, h: 1.35, dark: true }, // on the blue Metra panel
+  extra: (c, g) => rect(39.8, 11.3, 5.4, 2.0, "rgba(20,22,25,0.45)", 0.4) + slats(39.8, 11.3, 5.4, 2.0, 0.3, "rgba(255,255,255,0.2)"),
 };
-function galleryPaint(c, g) {
+function galleryPaint(c, g, spec = GALLERY) {
   const L = g.L;
-  let s = rect(0, 0, L, 17, C.steel) + flutes(0, L, 1.4, 4.2, 0.3) + flutes(0, L, 6.95, 10.9, 0.3) + flutes(0, L, 13.2, 14.9, 0.3);
+  let s = rect(0, 0, L, 17, C.steel) + flutes(0, L, 1.4, 5.4, 0.3) + flutes(0, L, 8.0, 11.0, 0.3) + flutes(0, L, 13.8, 14.9, 0.3);
   s += rect(0, 14.9, L, 2, C.steelShade);
-  if (c.agency === "metra") s += rect(27.6, 10.8, 10.8, 2.4, "#1f4fa3");
+  if (c.agency === "metra") s += rect(spec.panel[0], 8.5, spec.panel[1], 2.0, "#1f6fd0");
   return s;
 }
-// Metra cab ends: red and white chevrons on the end panels around the door.
+// Metra cab ends: red and white chevrons on the end panels around the door;
+// the engineer's small two-pane window high on the side.
 const galleryCab = (c, { x0 }) => {
   let s = "";
   for (let k = 0; k < 6; k++) s += rect(x0, 3.8 + k * 1.9, 0.42, 0.95, k % 2 ? "#ffffff" : "#c8102e");
-  s += win(x0 + 0.8, 11.2, 2.6, 1.9, 0.3);
+  s += win(x0 + 1.2, 11.9, 1.45, 1.8, 0.25) + win(x0 + 2.75, 11.9, 1.45, 1.8, 0.25);
   return s;
 };
+const galCabRows = [{ xs: GAL_L.slice(1).concat(GAL_R), y: 11.2, w: 4.4, h: 2.3, r: 0.45 }, GALLERY.rows[1]];
 export const gallery = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint });
-export const galleryCabCar = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint, cab: galleryCab });
-// Highliner II (Metra Electric, Nippon Sharyo 2012-16): the same gallery body
-// with motors; one single-arm pantograph per car on a lowered roof section
-// at the inner end, with no upper windows beneath it.
-export const highliner = married((c) => bilevel(c, { ...GALLERY, paint: galleryPaint, cab: galleryCab,
-  rows: [{ xs: seq(2.2, 6.1, 4), y: 11.0, w: 4.9, h: 2.1, r: 0.45 }, { xs: seq(46.2, 6.1, 4), y: 11.0, w: 4.9, h: 2.1, r: 0.45 },
-    { xs: seq(2.2, 6.1, 6), y: 4.4, w: 4.9, h: 2.4, r: 0.45 }, { xs: seq(46.2, 6.1, 6), y: 4.4, w: 4.9, h: 2.4, r: 0.45 }],
-  extra: (c, g) => rect(g.L - 15.5, 14.6, 14.6, 1.3, "rgba(0,0,0,0.18)") + pantograph(g.L - 8.6, 14.6, { up: true, facing: -1 }) }));
+export const galleryCabCar = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint, cab: galleryCab, rows: c.cabL ? galCabRows : GALLERY.rows });
+// Highliner II (Metra Electric, Nippon Sharyo 2012-16): the gallery body
+// with motors, in married pairs. From the cab: the engineer's window and
+// three balcony windows over four lower ones, the blue panel between the
+// decks, the doors a little ahead of the middle, then four balcony windows
+// over six lower ones. The single-arm pantograph sits on a lowered roof
+// section at the inner end, with no upper windows beneath it.
+const HL = { panel: [22.4, 11.0] };
+export const highliner = married((c) => bilevel(c, { ...GALLERY, ...HL, paint: (c, g) => galleryPaint(c, g, HL), cab: galleryCab,
+  rows: [{ xs: [7.1, 12.6, 18.1, 50.1, 55.9, 61.7, 67.5], y: 11.2, w: 4.3, h: 2.3, r: 0.45 },
+    { xs: [1.5, 7.1, 12.7, 18.0, 50.1, 55.9, 61.7, 67.5, 73.3, 79.1], y: 5.6, w: 4.3, h: 2.3, r: 0.45 }],
+  doors: [{ x: 37.0, w: 4.6, y0: 1.5, y1: 9.3, leaves: 2, glassY: 0.5, glassH: 0.35 }],
+  badge: { x: 27.9, y: 9.5, h: 1.35, dark: true },
+  extra: (c, g) => rect(36.6, 11.3, 5.4, 2.0, "rgba(20,22,25,0.45)", 0.4) + slats(36.6, 11.3, 5.4, 2.0, 0.3, "rgba(255,255,255,0.2)") +
+    rect(g.L - 12.6, 14.6, 11.7, 1.3, "rgba(0,0,0,0.18)") + pantograph(g.L - 7.0, 14.6, { up: true, facing: -1 }) }));
 
 // --- LIRR C3 (Kawasaki, 1997-99): 85 ft, only 14 ft 5.6 in tall. The ends
 // over the trucks have lower roofs; a single-leaf sliding door in each end
@@ -1085,20 +1100,30 @@ const cometCab = (c, { x0 }) => {
   let s = rect(x0, 6.8, 0.42, 4.6, C.black);
   return s;
 };
+// MBTA's single-level coaches and cab cars (Bombardier, Pullman and MBB
+// cars rebuilt alike): a tall purple band edged in yellow carrying twelve
+// wide windows, the first one 11 ft from the end; the band crosses the end
+// doors; a small T on the lower side mid-car.
+const MBTA_SINGLE = {
+  rows: [{ xs: seq(11.6, 5.6, 12), y: 7.75, w: 4.4, h: 2.0, r: 0.35 }],
+  doors: [{ x: 1.6, w: 2.9, y0: 3.95, y1: 11.7, glassY: 0.6, glassH: 0.3 }, { x: 80.5, w: 2.9, y0: 3.95, y1: 11.7, glassY: 0.6, glassH: 0.3 }],
+  roofItems: [[6.0, 2.6, 0.3], [76.4, 2.6, 0.3]],
+};
 const PAINT = {
-  mbta: cometPaint(MBTA.purple, { stripe: [9.85, 0.16, MBTA.yellow], pin: [6.55, 0.16, MBTA.yellow] }),
+  mbta: (c, g) => rect(0, 0, g.L, 17, "#d3d7dc") + rect(0, 11.95, g.L, 2, C.steelShade) + rect(0, 0, g.L, 4.3, "#b8bdc3") +
+    rect(0, 7.5, g.L, 3.2, MBTA.purple) + rect(0, 10.6, g.L, 0.22, MBTA.yellow) + rect(0, 7.4, g.L, 0.22, MBTA.yellow),
   septa: cometPaint(null, { stripe: [9.9, 0.45, "#1f4fa3"], pin: [9.55, 0.3, "#e0352b"] }),
   ctdot: cometPaint("#c8102e", { stripe: [10.0, 0.2, "#c8102e"] }),
 };
-const single = (paint, { center = false, cab = false } = {}) => (c) => {
-  const rows = center ? [{ ...COMET.rows[0], xs: skipAround(COMET.rows[0].xs, 39.4, 45.6) }] : COMET.rows;
+const single = (paint, { center = false, cab = false, spec = {} } = {}) => (c) => {
+  const rows = center ? [{ ...COMET.rows[0], xs: skipAround(COMET.rows[0].xs, 39.4, 45.6) }] : spec.rows ?? COMET.rows;
   const badge = {
-    mbta: { x: 10, y: 5.0, h: 1.0 },
+    mbta: { x: 45.5, y: 5.4, h: 1.1 },
   }[c.agency] ?? null;
-  return bilevel(c, { ...COMET, rows, doors: center ? [...COMET.doors, cometCenter] : COMET.doors, paint, cab: cab ? cometCab : null, cabLen: cab ? 4 : 0, badge });
+  return bilevel(c, { ...COMET, ...spec, rows, doors: center ? [...COMET.doors, cometCenter] : spec.doors ?? COMET.doors, paint, cab: cab ? cometCab : null, cabLen: cab ? 4 : 0, badge });
 };
-export const mbtaSingle = single(PAINT.mbta);
-export const mbtaSingleCab = single(PAINT.mbta, { cab: true });
+export const mbtaSingle = single(PAINT.mbta, { spec: MBTA_SINGLE });
+export const mbtaSingleCab = single(PAINT.mbta, { cab: true, spec: MBTA_SINGLE });
 export const septaCoach = single(PAINT.septa);
 export const septaCab = single(PAINT.septa, { cab: true });
 // Metro-North's Shoreliners: five big windows each side of the center door
@@ -1207,23 +1232,27 @@ export const m3 = married((c) => bilevel(c, {
 }));
 
 // --- GE Silverliner IV (SEPTA, 1974-76): 85 ft, trucks 59 ft 6 in apart,
-// fluted stainless above and below the window band. Single doors right at
-// each end with trap steps; a blanked-off plug where center doors were
-// planned; small windows in a blue-over-red band. A long resistor-grid
-// hump on the roof; the even car of a pair carries the pantograph on a
-// lowered stretch at its inner end. Flat ends with black air scoops at the
-// top corners.
+// fluted stainless above and below the window band, a smooth panel along
+// the bottom. Single doors right at each end with trap steps; a blanked-off
+// plug (with one window) where center doors were planned; eleven wide,
+// round-cornered windows filling a blue-over-red band, which carries the
+// SEPTA mark and name in white at each end. A long resistor-grid hump on
+// the roof; the even car of a pair carries the pantograph on a lowered
+// stretch at its inner end. Flat ends with black air scoops at the top
+// corners.
 export const silverliner4 = married((c) => bilevel(c, {
   roof: 13.5, sill: 3.6, cornerR: 0.8, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
-  rows: [{ xs: [6.8, 12.8, 18.8, 24.8, 30.8, 41.0, 51.2, 57.2, 63.2, 69.2, 75.2], y: 7.4, w: 3.0, h: 2.3, r: 0.3 }],
-  doors: [{ x: 1.3, w: 2.6, y0: 4.0, y1: 11.1, glassY: 0.55, glassH: 0.3 }, { x: 81.1, w: 2.6, y0: 4.0, y1: 11.1, glassY: 0.55, glassH: 0.3 }],
+  rows: [{ xs: [9.3, 14.9, 20.5, 26.1, 31.7, 40.35, 49.0, 54.6, 60.2, 65.8, 71.4], y: 8.1, w: 4.3, h: 1.9, r: 0.6 }],
+  doors: [{ x: 1.4, w: 2.8, y0: 4.1, y1: 11.9, glassY: 0.56, glassH: 0.38 }, { x: 80.8, w: 2.8, y0: 4.1, y1: 11.9, glassY: 0.56, glassH: 0.38 }],
   diaphragm: [4.25, 11.8], cabLen: 4,
-  badge: [{ x: 5.4, y: 8.6, h: 1.0, dark: true }, { x: c.L - 5.4, y: 8.6, h: 1.0, dark: true }],
+  badge: [{ x: 5.4, y: 9.05, h: 1.5, logo: "septa-mark-white" }, { x: c.L - 7.95, y: 9.05, h: 1.5, logo: "septa-mark-white" }],
   paint: (c, g) => {
     const L = g.L;
-    let s = rect(0, 0, L, 17, "#d0d4d9") + flutes(0, L, 4.0, 7.0, 0.27) + flutes(0, L, 10.2, 12.4, 0.27) + rect(0, 12.4, L, 2, C.steelShade);
-    s += rect(4.3, 8.65, L - 8.6, 1.45, "#1f4fa3") + rect(4.3, 7.2, L - 8.6, 1.45, "#e0352b") + rect(0, 0, L, 4.0, "#2a2d31");
-    s += lines([[39.6, 4.0, 39.6, 12.4], [45.4, 4.0, 45.4, 12.4]], "rgba(0,0,0,0.3)", 0.5);
+    let s = rect(0, 0, L, 17, "#d0d4d9") + flutes(0, L, 4.9, 8.0, 0.27) + flutes(0, L, 10.1, 12.6, 0.27) + rect(0, 12.6, L, 2, C.steelShade);
+    s += rect(4.3, 9.05, L - 8.6, 1.05, "#2a43b8") + rect(4.3, 8.0, L - 8.6, 1.05, "#e0352b") + rect(0, 0, L, 3.9, "#2a2d31");
+    s += lines([[39.8, 4.9, 39.8, 12.6], [45.2, 4.9, 45.2, 12.6]], "rgba(0,0,0,0.3)", 0.5);
+    // The name beside each mark.
+    for (const x of [7.85, L - 5.5]) s += `<text transform="translate(${x} 9.05) scale(${c.mirrored ? -1 : 1} -1)" y="0.29" font-size="0.8" text-anchor="middle" font-weight="700" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#ffffff">SEPTA</text>`;
     return s;
   },
   cab: (c, g) => emuEnd([[4.3, 7.6, "#3a3f45"], [7.3, 1.4, "#1f4fa3"], [6.6, 0.7, "#e0352b"]])(c, g) + path(poly([[g.x0, 12.9], [g.x0 + 1.4, 13.5], [g.x0, 13.5]]), C.black),
@@ -1896,25 +1925,34 @@ const tape = (x0, x1, y, step = 1.2) => {
   return lines(segs, "#f4f4f4", 0.9);
 };
 
-// --- MBTA: purple, black, silver and yellow. The cab is purple above a
-// yellow line, black below. Behind it a yellow-edged diagonal opens onto
-// silver with a purple band along the bottom, a white "T" disc, and a
-// gray roof. sweep: [x at the roof, x at the band]; cabEnd: where the black
-// under the cab ends; tail: x where the band steps up at the rear.
-function mbtaPaint(c, { L, roof, cabEnd, sweep, band = 7.5, sill = 5.55, tail = null, tailY = 10.6, T = null }) {
-  const { purple, yellow, black } = MBTA;
-  let s = rect(0, 0, L, roof + 1, MBTA.silver) + rect(0, roof - 0.55, L, 1, MBTA.roof);
-  s += rect(0, 0, L, sill, black) + tape(0, L, sill - 0.55);
-  s += rect(cabEnd, sill, L - cabEnd, 0.14, yellow) + rect(cabEnd, sill + 0.14, L - cabEnd, band - sill - 0.14, purple);
-  s += rect(0, 0, cabEnd, band, black);
-  s += path(poly([[0, band], [sweep[1], band], [sweep[0], roof - 0.55], [0, roof - 0.55]]), purple);
-  s += line(sweep[1], band + 0.05, sweep[0], roof - 0.6, yellow, 1.1);
-  if (tail != null) {
-    s += path(poly([[tail, band], [tail + 1.0, tailY], [L, tailY], [L, band]]), purple);
-    s += lines([[tail, band + 0.05, tail + 1.0, tailY], [tail + 1.0, tailY, L, tailY]], yellow, 1.1);
+// --- MBTA (HSP46, F40PH-3C): a yellow-edged diagonal runs from the roof
+// behind the cab down to the sill. Ahead of it the cab is purple above a
+// yellow line, black below. Behind it the hood is silver over a purple band
+// along the bottom; toward the rear the band steps up clear of the sill,
+// with silver below it. A big white "T" disc on the hood, a dark gray roof.
+//   diag: [x at the sill, x at the roof]; skirt: top of the black sill
+//   strip; band: top of the purple band; cabLine: the yellow line under
+//   the cab windows, running down to nose [x, y] at the front;
+//   rear: { up, low, top, bot }: where the band's top and bottom step up,
+//   and to what; hood: where the gray roof starts; T: [x, y, r].
+function mbtaPaint(c, { L, roof, diag, skirt, band, cabLine, nose, rear = null, hood, T = null }) {
+  const { purple: P, yellow: Y, black: K } = MBTA;
+  const xd = (y) => diag[0] + ((diag[1] - diag[0]) * (y - skirt)) / (roof - skirt);
+  const top = roof + 1, yl = (pts) => path(pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(""), "none", 0, `stroke="${Y}" stroke-width="0.24" stroke-linejoin="round"`);
+  let s = rect(0, 0, L, top, MBTA.silver) + path(poly([[xd(hood), hood], [L, hood], [L, top], [xd(top), top]]), MBTA.roof);
+  s += rect(0, skirt, L, band - skirt, P);
+  if (rear) {
+    s += path(poly([[rear.low + 0.6, skirt], [L, skirt], [L, rear.bot], [rear.low, rear.bot]]), MBTA.silver);
+    s += path(poly([[rear.up + 0.6, band], [rear.up, rear.top], [L, rear.top], [L, band]]), P);
   }
-  s += rect(0, band, L, 0.15, yellow);
-  if (T != null) s += tDisc(T, (band + roof) / 2 - 0.2, Math.min(2.5, (roof - band) / 2 - 0.9));
+  s += path(poly([[0, nose[1]], [nose[0], nose[1]], [nose[0] + 3.0, cabLine], [xd(cabLine), cabLine], [xd(top), top], [0, top]]), P);
+  s += path(poly([[0, 0], [xd(0), 0], [xd(cabLine), cabLine], [nose[0] + 3.0, cabLine], [nose[0], nose[1]], [0, nose[1]]]), K);
+  s += rect(0, 0, L, skirt, K) + tape(0, L, skirt - 0.3);
+  s += yl([[nose[0] - 0.4, nose[1] - 0.25], [nose[0], nose[1]], [nose[0] + 3.0, cabLine], [xd(cabLine), cabLine]]) + yl([[xd(skirt), skirt], [xd(top), top]]);
+  s += yl([[xd(band), band], [rear ? rear.up + 0.6 : L, band], ...(rear ? [[rear.up, rear.top], [L, rear.top]] : [])]);
+  if (rear) s += yl([[rear.low + 0.6, skirt], [rear.low, rear.bot], [L, rear.bot]]);
+  s += rect(0, skirt - 0.06, L, 0.12, Y);
+  if (T) s += tDisc(...T);
   return s;
 }
 // The MBTA "T": a white disc with a black ring and a black T.
@@ -1930,54 +1968,63 @@ export const hsp46 = (c) => cabUnit(c, {
   roof: 15.37, sill: 4.4, rearR: 1.0,
   nose: [[1.95, 4.4], [1.55, 5.3], [1.5, 10.2], [1.75, 10.55], [3.05, 13.85], ["q", 3.4, 15.37, 5.2, 15.37]],
   glass: [[[1.95, 10.75], [3.05, 13.6], [3.6, 13.6], [3.6, 10.75]]],
-  sideWin: [[4.6, 10.7, 2.3, 2.5], [7.0, 10.7, 1.5, 2.5]],
-  doors: [[9.6, 2.0, 5.0, 13.4]],
-  grilles: [[4.9, 5.0, 3.4, 2.1, 0.3], [15.0, 13.55, 3.6, 1.05, 0.35], [57.5, 8.2, 1.15, 4.6, 0.25], [59.3, 8.2, 1.15, 4.6, 0.25], [64.4, 8.2, 1.15, 4.6, 0.25]],
-  panels: [[19.0, 8.0, 3.2, 5.0]],
+  sideWin: [[4.8, 10.7, 2.4, 2.5], [7.4, 10.7, 1.8, 2.5]],
+  doors: [[10.4, 2.1, 5.0, 13.4]],
+  // Louvered box under the cab window; roof-shoulder vents behind the cab;
+  // at the rear a double door with two louvers, then a wide intake panel
+  // with two tall louvers framed in a V.
+  grilles: [[4.9, 5.4, 3.4, 1.8, 0.3], [13.6, 13.55, 3.6, 1.0, 0.35], [22.6, 13.5, 3.6, 1.0, 0.35], [26.6, 13.5, 3.6, 1.0, 0.35],
+    [59.0, 5.9, 2.2, 4.5, 0.3], [62.5, 5.9, 1.8, 4.5, 0.3], [48.3, 5.4, 4.1, 7.2, 0.3], [52.8, 5.4, 3.9, 7.2, 0.3]],
+  panels: [[19.3, 5.2, 3.0, 7.4], [58.6, 5.1, 6.2, 6.2], [47.0, 5.1, 11.2, 7.7]],
   tank: [23, 48, 1.5], reservoir: [33.5, 46],
   trucks: { centers: 45, wb: 9.33, d: 40 },
-  roofItems: [[46, 1.6, 0.45], [53, 15, 0.3]], fans: [56, 61, 66], horn: 4.2,
+  roofItems: [[46, 1.6, 0.45]], fans: [56, 61, 66], horn: 4.2,
   paint: (c, sp) => c.agency === "mbta" || !c.agency
-    ? mbtaPaint(c, { L: sp.L, roof: sp.roof, cabEnd: 12.0, sweep: [15.2, 23.6], tail: sp.L - 8.4, T: 28.5 })
-      + vee(sp.L - 10.7, 8.2, 1.9, 4.6)
+    ? mbtaPaint(c, { L: sp.L, roof: sp.roof, diag: [14.4, 21.4], skirt: 5.1, band: 8.3, cabLine: 8.3, nose: [1.6, 6.3], hood: 12.6,
+      rear: { up: 41.8, low: 46.0, top: 10.5, bot: 6.8 }, T: [30.5, 9.2, 3.5] })
     : genericPaint(c, sp),
+  extra: (c, sp) => lines([[47.2, 12.7, 52.6, 5.3], [57.9, 12.7, 52.6, 5.3]], "rgba(0,0,0,0.45)", 0.6),
 });
-// The HSP46's V-shaped intake between its upright rear intakes.
-const vee = (x, y, w, h) => path(poly([[x - w / 2, y + h], [x - w / 2 + 0.55, y + h], [x, y + 0.9], [x + w / 2 - 0.55, y + h], [x + w / 2, y + h], [x + 0.3, y], [x - 0.3, y]]), "#2a2d31");
 
 // Plain agency paint for a diesel without a researched livery.
 const genericPaint = (c, sp) => rect(0, 0, sp.L, sp.sill + 1.0, "#2a2d31") + rect(0, sp.sill + 1.0, sp.L, 0.45, c.color || "#1f5fad");
 
 // --- MotivePower MP36PH-3C (Metra 401-427, Caltrain 923-928, UTA FrontRunner
 // 1-21, MBTA 010-011): 68 ft, 15 ft 6 in, Blomberg trucks 42 ft 10 in apart,
-// 9 ft 4 in wheelbase, 40 in wheels. A rounded, bulbous nose under a four-pane
-// windshield (two front panes, two corner panes); cab door, then an
-// engine-room door; a fifth roof fan at the very rear cools the HEP genset.
+// 9 ft 4 in wheelbase, 40 in wheels. A long, bulbous nose ahead of a raked
+// windshield set well back (front and corner panes); the cab side window,
+// then the cab door 13 ft back from the nose, with a louvered box below the
+// window. Intakes high along the hood behind the dynamic brake; a fifth
+// roof fan at the very rear cools the HEP genset.
 export const mp36 = (c) => cabUnit(c, {
-  // Metra: a big white logo on the blue toward the rear. FrontRunner: the
-  // name mid-body. MBTA units carry the T disc in their paint.
-  badge: (c) => ({ metra: { x: 46.5, y: 6.8, h: 3.4, dark: true }, frontrunner: { x: 47, y: 9.3, h: 0.75 } })[c.agency],
+  // Metra: a big white logo on the blue toward the rear and a small blue one
+  // under the cab window. FrontRunner: the name small toward the rear. MBTA
+  // units carry the T disc in their paint.
+  badge: (c) => ({ metra: [{ x: 43.8, y: 7.0, h: 3.7, dark: true }, { x: 10.7, y: 7.5, h: 0.95 }], frontrunner: { x: 47, y: 9.3, h: 0.75 } })[c.agency],
   roof: 15.5, sill: 4.55, rearR: 1.1,
-  nose: [[2.25, 4.55], ["q", 1.2, 5.0, 1.2, 7.2], [1.3, 9.6], ["q", 1.45, 10.35, 2.05, 10.55], [3.85, 13.95], ["q", 4.1, 15.5, 5.8, 15.5]],
-  glass: [[[2.25, 10.8], [3.75, 13.65], [4.35, 13.65], [4.35, 10.8]], [[4.55, 10.8], [4.55, 13.65], [5.4, 13.65], [5.4, 10.8]]],
-  sideWin: [[6.1, 11.0, 2.6, 2.3]],
-  doors: [[9.6, 2.0, 5.1, 13.6], [15.6, 2.0, 5.1, 12.4]],
-  grilles: [[5.8, 5.3, 2.6, 1.9, 0.3], [44.5, 11.3, 20.5, 2.6, 0.38], [24.5, 5.5, 3.6, 1.6, 0.3]],
-  panels: [[19.5, 5.4, 3.0, 6.3], [36.0, 5.4, 3.0, 6.3]],
-  tank: [20.5, 46.5, 1.5], reservoir: [32, 45],
+  nose: [[2.0, 4.55], ["q", 0.6, 4.9, 0.6, 6.4], ["q", 0.7, 8.4, 1.9, 9.1], [3.5, 10.1], [4.7, 12.6], ["q", 5.6, 15.5, 9.5, 15.5]],
+  glass: [[[4.0, 10.4], [4.95, 12.45], [6.1, 12.45], [6.1, 10.4]], [[6.3, 10.45], [6.3, 12.45], [8.5, 12.45], [8.5, 10.6]]],
+  sideWin: [[9.8, 10.2, 2.8, 1.7]],
+  doors: [[13.3, 1.9, 5.0, 12.9]],
+  grilles: [[9.0, 5.1, 3.2, 1.3, 0.25], [27.5, 12.4, 9.8, 1.6, 0.36], [37.8, 11.9, 8.4, 2.6, 0.38], [46.6, 11.9, 7.9, 2.6, 0.38], [54.7, 11.9, 11.5, 2.6, 0.38]],
+  panels: [[8.6, 4.75, 4.0, 2.0], [29.3, 5.0, 5.9, 3.8], [53.5, 5.0, 6.6, 3.8]],
+  tank: [33.1, 48.2, 1.5], reservoir: [21.9, 32.6],
   trucks: { centers: 42.83, wb: 9.33, d: 40 },
-  roofItems: [[33, 1.6, 0.6], [45, 21, 0.3]], fans: [46.7, 51.1, 55.5, 59.9, 64.1], horn: 5.6,
+  roofItems: [[33, 1.6, 0.6]], fans: [46.7, 51.1, 55.5, 59.9, 64.1], horn: 10.6,
   paint: (c, sp) => {
     const L = sp.L;
     switch (c.agency) {
       case "metra": {
-        // Silver roof, black band through the windows, orange over a red pinstripe,
-        // silver cab sides, blue along the body, red and white chevrons on the nose.
-        let s = rect(0, 0, L, sp.roof + 1, "#c3c7cc") + rect(0, 11.0, L, 3.6, "#1d1f22");
-        s += rect(0, 10.45, L, 0.48, "#f26b21") + rect(0, 10.12, L, 0.2, "#c8102e");
-        s += path(poly([[14.2, 5.6], [14.2, 9.4], ["q", 14.4, 10.12, 15.2, 10.12], [L, 10.12], [L, 5.6]]), "#2153a3");
-        s += rect(0, 0, L, 5.6, "#1d1f22") + rect(0, 5.6, L, 0.12, "#ffffff");
-        for (let k = 0; k < 3; k++) s += path(poly([[0, 6.2 + k * 1.15], [0.6, 6.2 + k * 1.15], [3.2, 7.0 + k * 1.15], [3.2, 7.45 + k * 1.15], [0, 6.65 + k * 1.15]]), "#c8102e");
+        // Metra's current scheme: black from the windows up, an orange stripe
+        // split by a dark red pinstripe that sweeps up over the rear corner and
+        // down the nose; below it blue at the rear fading to silver over the
+        // cab; red and white chevrons on the nose; a white line at the sill.
+        const id = `ts-metra-${++clipSeq}`;
+        let s = `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="23" y1="0" x2="37" y2="0"><stop offset="0" stop-color="#d4d7db"/><stop offset="1" stop-color="#2459aa"/></linearGradient></defs>`;
+        s += rect(0, 0, L, sp.roof + 1, "#1d1f22") + rect(0, 4.8, L, 4.4, `url(#${id})`) + rect(0, 4.55, L, 0.25, "#e9eaec");
+        for (let k = 0; k < 2; k++) s += path(poly([[3.6 - k * 1.7, 9.0], [4.5 - k * 1.7, 9.0], [0, 5.9 - k * 1.5], [0, 5.0 - k * 1.5]]), "#c8102e");
+        s += path(`M${L} 14.9Q${L - 4} 11.1 ${L - 12} 10.95L14 10.2Q7 10.2 4 9.45Q1.6 8.8 0 7.6L0 6.8Q1.8 7.9 4.2 8.45Q7 8.9 10 8.9L${L} 8.9Z`, "#f26b21");
+        s += path(`M${L} 13.2Q${L - 4.5} 10.15 ${L - 12} 10.0L14 9.6Q7 9.55 4.1 8.95Q1.7 8.35 0 7.2`, "none", 0, 'stroke="#a3161f" stroke-width="0.2"');
         return s;
       }
       case "caltrain": {
@@ -2001,7 +2048,18 @@ export const mp36 = (c) => cabUnit(c, {
         let s = rect(0, 0, L, sp.roof + 1, "#eef0f2") + sw(23.0, 1, "#2463c7") + sw(48.5, -1, "#c8202f");
         return s + rect(0, 0, L, 4.9, "#1d1f22");
       }
-      case "mbta": return mbtaPaint(c, { L, roof: sp.roof, cabEnd: 12.0, sweep: [15.5, 23.5], tail: L - 8, T: 28.5 });
+      case "mbta": {
+        // MBTA 010-011: a yellow-edged line along the side at the window sills,
+        // purple above it ahead of a diagonal behind the cab, purple below it
+        // behind; a purple band along the bottom as far back as the diagonal's
+        // foot; silver elsewhere, a dark roof over the hood, a small T disc.
+        const { purple: P, yellow: Y } = MBTA, xd = (y) => 33.8 - ((y - 6.4) * 5.4) / 8.2, top = sp.roof + 1;
+        let s = rect(0, 0, L, top, MBTA.silver) + path(poly([[xd(14.4), 14.4], [L, 14.4], [L, top], [xd(top), top]]), MBTA.roof);
+        s += path(poly([[0, 4.9], [38.4, 4.9], [37.8, 6.4], [0, 6.4]]), P) + path(poly([[xd(6.4), 6.4], [L, 6.4], [L, 10.7], [xd(10.7), 10.7]]), P);
+        s += path(poly([[0, 10.7], [xd(10.7), 10.7], [xd(top), top], [0, top]]), P) + rect(0, 0, L, 4.9, MBTA.black) + tape(0, L, 4.65);
+        s += lines([[0, 10.7, L, 10.7], [0, 6.4, 37.8, 6.4], [37.8, 6.4, 38.4, 4.9], [xd(6.4), 6.4, xd(top), top], [0, 4.9, L, 4.9]], Y, 1.0);
+        return s + tDisc(24.1, 8.6, 1.0);
+      }
       default: return genericPaint(c, sp);
     }
   },
@@ -2096,14 +2154,19 @@ function f40(c, { mbta = false } = {}) {
     glass: [[[6.55, 10.35], [7.45, 14.2], [8.0, 14.2], [8.0, 10.35]]],
     sideWin: [[8.4, 11.4, 1.15, 2.6], [9.65, 11.4, 1.35, 2.6]],
     doors: [[11.15, 2.1, sill + 0.2, 14.4]],
-    grilles: [[14.3, 12.6, 8.5, 2.0, 0.32], [c.L - 16.5, 10.6, 13.5, 3.6, 0.36]],
-    panels: [[23.5, 5.2, 3.0, 7.0], [27.0, 5.2, 3.0, 7.0], [31.0, 5.2, 3.0, 7.0]],
+    // MBTA's F40PH-3Cs: a dynamic-brake vent behind the cab, then three
+    // banks of intakes high along the hood.
+    grilles: mbta ? [[16.1, 12.3, 5.2, 1.4, 0.32], [30.9, 11.7, 6.2, 2.1, 0.32], [38.6, 11.7, 13.0, 2.1, 0.36], [55.0, 11.7, 5.9, 2.1, 0.36]]
+      : [[14.3, 12.6, 8.5, 2.0, 0.32], [c.L - 16.5, 10.6, 13.5, 3.6, 0.36]],
+    panels: mbta ? [[29.3, 5.1, 2.8, 6.3], [32.3, 5.1, 2.8, 6.3], [35.3, 5.1, 2.8, 6.3]]
+      : [[23.5, 5.2, 3.0, 7.0], [27.0, 5.2, 3.0, 7.0], [31.0, 5.2, 3.0, 7.0]],
     tank: [17.5, c.L - 17.5, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
     trucks: { centers: c.L - 23.2, wb: 9.0, d: 40 },
     roofItems: [[c.L - 26, 1.6, 0.45]], fans: [c.L - 13.5, c.L - 8.3, c.L - 3.6], horn: 9.6,
     paint: (c, sp) => {
       const L = sp.L;
-      if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, cabEnd: 13.6, sweep: [16.5, 24.5], tail: null, T: 32 });
+      if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, diag: [16.6, 24.0], skirt: 5.0, band: 7.7, cabLine: 8.1, nose: [2.5, 6.4],
+        hood: 13.4, rear: { up: 43.0, low: 47.0, top: 8.9, bot: 5.75 }, T: [30.6, 8.3, 2.7] });
       if (c.agency === "via") {
         // VIA: a teal cab and upper body under a dark top, a silver lower
         // body sweeping down to the sill under the cab, yellow speed lines
@@ -2177,18 +2240,28 @@ export function gp40(c) {
   const cab = poly([[2.6, deck], [2.6, 9.0], ["q", 2.7, 9.6, 3.4, 9.7], [6.4, 10.0], [6.9, 14.8], ["q", 7.0, cabRoof, 7.8, cabRoof], [13.4, cabRoof], ["q", 14.2, cabRoof, 14.2, 14.6], [14.2, deck]]);
   const hoodD = poly([[14.2, deck], [14.2, hood - 0.5], ["q", 14.2, hood, 14.7, hood], [L - 16.5, hood], [L - 16.0, hood + 0.55], [L - 3.6, hood + 0.55], ["q", L - 3.2, hood + 0.55, L - 3.2, hood], [L - 3.2, deck]]);
   const mbta = c.agency === "mbta";
+  // MBTA: the cab purple with a yellow-edged silver band at nose height.
+  // On the hood a yellow-edged diagonal runs from the roof behind the cab
+  // down to a purple band along the middle of the hood; ahead of it purple,
+  // behind it silver, and the purple runs down to the deck as far back as
+  // a second, short diagonal. Black hood top; "MBTA" spaced out over the
+  // band, a small T disc on it.
   const paint = mbta ? (w) => {
-    let p = rect(0, 0, L, 17, MBTA.silver) + rect(0, hood - 0.7, L, 2, MBTA.black) + rect(0, cabRoof - 0.4, 15, 1, MBTA.roof);
-    p += rect(0, deck, L, 1.45, MBTA.purple) + rect(0, deck + 1.45, L, 0.14, MBTA.yellow);
-    p += path(poly([[0, deck], [17.5, deck], [22, hood - 0.7], [0, hood - 0.7]]), MBTA.purple) + line(17.5, deck + 1.6, 21.7, hood - 0.75, MBTA.yellow, 1.1);
-    p += path(poly([[L - 3, deck], [L - 9.5, deck], [L - 12, hood - 0.7], [L - 3, hood - 0.7]]), MBTA.purple);
+    const P = MBTA.purple, Y = MBTA.yellow, d = (y) => 21.5 + ((27.8 - 21.5) * (hood - y)) / (hood - 6.65);
+    let p = rect(0, 0, L, 17, MBTA.silver) + rect(14.2, 12.2, L, 5, MBTA.black);
+    p += rect(0, 6.65, L, 2.5, P) + path(poly([[0, 0], [33.4, 0], [33.4, deck], [30.9, 6.65], [0, 6.65]]), P);
+    p += path(poly([[0, 9.15], [d(9.15), 9.15], [d(12.2), 12.2], [14.2, 12.2], [14.2, 17], [0, 17]]), P);
+    p += rect(0, 7.9, 14.2, 2.1, MBTA.silver) + rect(0, 7.85, 14.2, 0.14, Y) + rect(0, 9.95, 14.2, 0.14, Y);
+    p += lines([[d(12.2), 12.2, d(6.65), 6.65], [30.9, 6.65, 33.4, deck]], Y, 1.0) + rect(d(9.15), 9.08, L, 0.14, Y) + rect(30.9, 6.58, L, 0.14, Y);
     return p + w;
   } : (w) => rect(0, 0, L, 17, c.color || "#1f5fad") + w;
   s += path(frame, C.black) + rect(1.2, 3.75, L - 2.4, 0.4, MBTA.yellow, 0, 'opacity="0.9"');
-  s += path(hoodD, MBTA.silver) + clipped(hoodD, paint(tDisc(30, (deck + hood) / 2, 1.9)));
+  s += path(hoodD, MBTA.silver) + clipped(hoodD, paint(mbta ? tDisc(32.5, 7.9, 0.62) +
+    '<text transform="translate(32.3 10.05) scale(1 -1)" font-size="1.1" text-anchor="middle" letter-spacing="0.75" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#a52a4a">MBTA</text>' : ""));
   // Hood doors, radiator grilles, dynamic brake, fans.
   for (let x = 16; x < L - 22; x += 4.2) s += rect(x, deck + 0.6, 3.6, hood - deck - 1.6, "none", 0.4, 'rx="0.1"');
-  s += rect(L - 15.8, hood - 3.4, 12.2, 3.6, "rgba(0,0,0,0.3)", 0.4) + slats(L - 15.8, hood - 3.4, 12.2, 3.6, 0.36);
+  // Dynamic-brake grille, then radiator intakes high along the rear of the hood.
+  for (const [x, y, w] of [[30.1, 12.3, 6.5], [39.4, 11.9, 11.8], [55.5, 11.9, 5.1]]) s += rect(x, y, w, hood - 0.25 - y, "rgba(0,0,0,0.3)", 0.4) + slats(x, y, w, hood - 0.25 - y, 0.36, "rgba(255,255,255,0.22)");
   s += rect(24, hood - 0.05, 6, 0.6, C.steelDark, 0.4);
   for (const x of [L - 13.5, L - 9.2, L - 5.2]) s += path(`M${x - 1.9} ${hood + 0.55}Q${x} ${hood + 1.25} ${x + 1.9} ${hood + 0.55}Z`, C.steelDark, 0.4);
   s += path(cab, MBTA.silver) + clipped(cab, paint("") + path(poly([[6.7, 10.6], [7.2, 14.4], [7.9, 14.4], [7.9, 10.6]]), C.glass) + win(8.6, 11.3, 2.0, 2.4, 0.2) + win(11.0, 11.3, 2.4, 2.4, 0.2));
@@ -2211,13 +2284,16 @@ export function gp40(c) {
 // magenta-to-orange "disco" band along the lower body, orange sill line.
 // --- Progress Rail SD70MACH (Metra 500-525, rebuilt from SD70MACs): a
 // freight hood unit, about 74 ft, on two three-axle trucks; a wide safety-nose
-// cab, a long hood with a dynamic brake blister and flared radiators over the
-// rear fans, a walkway with handrails. Metra blue with a halftone fading
-// toward the rear, red and white chevrons on the nose, white Metra logo on the
-// hood.
+// cab, a long hood with flared radiators over the rear fans, a walkway with
+// handrails. Metra's bright blue with the cab top, a tall box behind the cab
+// and the radiators in black; an orange stripe split by a red pinstripe from
+// the nose back along the hood, rising over the radiators; navy dashes
+// thickening toward the rear and a big tone-on-tone Metra logo on the hood;
+// a small logo under the cab window; red and white chevrons on the nose
+// front; a white line along the deck edge.
 export function sd70mach(c) {
   const { L } = c, deck = 5.2, cabRoof = 15.6, hood = 14.9;
-  const blue = "#1f4fa3";
+  const blue = "#2b86dc", navy = "#164f9c", K = C.black;
   let s = "";
   s += pilot(1.0, 4.0) + pilot(1.0, 4.0, L);
   // Fuel tank between the trucks.
@@ -2228,32 +2304,36 @@ export function sd70mach(c) {
     [15.0, cabRoof], ["q", 15.8, cabRoof, 15.8, 14.8], [15.8, deck]]);
   const hoodD = poly([[15.8, deck], [15.8, hood - 0.5], ["q", 15.8, hood, 16.3, hood], [L - 19, hood], [L - 18.4, hood + 0.6], [L - 3.4, hood + 0.6],
     ["q", L - 2.8, hood + 0.6, L - 2.8, hood], [L - 2.8, deck]]);
-  const dots = () => {
-    // Halftone: dots shrinking toward the front of the hood.
-    let p = "";
-    for (let x = L - 26; x < L - 3; x += 0.9) for (let y = deck + 0.6; y < hood; y += 0.9) {
-      const k = (x - (L - 26)) / 23;
-      p += circle(x, y, 0.08 + 0.3 * k, "#6f9be0");
+  const dashes = () => {
+    // Navy dashes, longer and closer together toward the rear.
+    const segs = [];
+    for (let x = 17.0, i = 0; x < L - 21; x += 0.95, i++) {
+      const k = (x - 17) / (L - 38);
+      for (let j = 0; j < 4; j++) {
+        if ((i * 7 + j * 3) % 5 > 1 + k * 3) continue;
+        const y = hood - 0.6 - ((i * 1.7 + j * 2.3) % 6.2);
+        if (y > 7.9 || y < 7.0) segs.push([x, y, x, y - 0.3 - 0.9 * k]);
+      }
     }
-    return p;
+    return lines(segs, navy, 1.0);
   };
-  const paint = (extra = "") => rect(0, 0, L, 17, blue) + rect(0, deck, L, 0.3, "#ffffff") + rect(0, deck + 0.3, L, 0.3, "#c8102e") + extra;
-  s += path(frame, C.black);
-  s += path(hoodD, blue) + clipped(hoodD, paint(dots()));
-  for (let x = 17.5; x < L - 26; x += 4.4) s += rect(x, deck + 1.0, 3.8, hood - deck - 2.2, "none", 0.4, 'rx="0.1"');
-  s += rect(L - 18.2, hood - 3.8, 14.6, 4.0, "rgba(0,0,0,0.3)", 0.4) + slats(L - 18.2, hood - 3.8, 14.6, 4.0, 0.36);
-  s += rect(26, hood - 0.05, 9, 0.7, C.steelDark, 0.4, 'rx="0.2"');                     // dynamic brake blister
+  const stripe = path(`M5.0 7.0L${L - 17.5} 7.0L${L - 13.2} 11.4L${L - 12.2} 11.4L${L - 16.6} 7.8L5.6 7.8Z`, "#f26b21") +
+    path(`M5.3 7.4L${L - 17.0} 7.4L${L - 12.7} 11.4`, "none", 0, 'stroke="#c8102e" stroke-width="0.16"');
+  const paint = (extra = "") => rect(0, 0, L, 17, blue) + extra + stripe + rect(0, deck, L, 0.3, "#f2f3f4");
+  s += path(frame, K);
+  s += path(hoodD, blue) + clipped(hoodD, paint(dashes() + rect(16.0, 11.4, 7.0, 4, K) + rect(L - 21, 11.2, 21, 5, K) +
+    `<g opacity="0.75">${badge(c, 31, 10.3, 2.4)}</g>`));
+  for (let x = 23.6; x < L - 22; x += 4.4) s += rect(x, deck + 1.0, 3.8, 10.8 - deck, "none", 0.4, 'rx="0.1"');
+  s += rect(L - 18.2, hood - 3.6, 14.6, 3.8, "rgba(0,0,0,0.3)", 0.4) + slats(L - 18.2, hood - 3.6, 14.6, 3.8, 0.36, "rgba(255,255,255,0.14)");
+  s += rect(26, hood - 0.05, 9, 0.7, C.steelDark, 0.4, 'rx="0.2"');
   for (const x of [L - 15, L - 10.2, L - 5.6]) s += path(`M${x - 2.1} ${hood + 0.6}Q${x} ${hood + 1.35} ${x + 2.1} ${hood + 0.6}Z`, C.steelDark, 0.4);
-  // Cab and nose: red and white chevrons on the nose, black around the windows.
-  const chevrons = () => {
-    let p = rect(0, 0, 8, 17, "#ffffff");
-    for (let k = 0; k < 7; k++) p += path(poly([[0, deck + k * 1.6], [7.2, deck + k * 1.6 + 2.2], [7.2, deck + k * 1.6 + 3.0], [0, deck + k * 1.6 + 0.8]]), "#c8102e");
-    return p;
-  };
-  s += path(nose, blue) + clipped(nose, paint(chevrons() + rect(7.2, 12.4, 9, 4, C.black) +
-    path(poly([[7.5, 12.7], [7.7, 15.1], [9.6, 15.1], [9.6, 12.7]]), C.glass) + win(10.3, 12.8, 2.2, 2.2, 0.2) + win(13.0, 12.8, 2.3, 2.2, 0.2)));
-  s += door(12.2, deck + 0.3, 2.1, 6.4, { glassY: 0.68, glassH: 0.2, grabs: false });
-  s += badge(c, 38, (deck + hood) / 2 + 0.3, 2.4, { dark: true });                        // the Metra logo on the hood
+  // Cab and nose: black from the window sills up; chevrons only on the front.
+  let chev = "";
+  for (let k = 0; k < 5; k++) chev += path(poly([[1.6, deck + 0.4 + k * 1.1], [2.3, deck + 0.75 + k * 1.1], [2.3, deck + 1.3 + k * 1.1], [1.6, deck + 0.95 + k * 1.1]]), "#c8102e");
+  s += path(nose, blue) + clipped(nose, paint(rect(1.6, deck, 0.7, 5.2, "#f4f4f4") + chev + rect(7.0, 11.1, 9, 5, K) +
+    path(poly([[7.5, 11.6], [7.7, 15.0], [9.6, 15.0], [9.6, 11.6]]), C.glass) + win(10.3, 12.2, 2.2, 2.4, 0.2) + win(13.0, 12.2, 2.3, 2.4, 0.2)));
+  s += rect(9.0, 5.7, 3.0, 1.1, "rgba(20,22,25,0.45)", 0.4) + slats(9.0, 5.7, 3.0, 1.1, 0.3, "rgba(255,255,255,0.18)");
+  s += badge(c, 11.4, 9.65, 1.15);                                                         // the small Metra logo on the cab
   s += outlineOf(hoodD) + outlineOf(nose) + outlineOf(frame);
   const posts = [];
   for (let x = 16.4; x < L - 3; x += 6.4) posts.push([x, deck, x, deck + 3.3]);
