@@ -67,11 +67,11 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.45);
   /* Running gear keeps its light-mode ink; stainless and white paint dim as
      if under softer light, while the liveries' colors stay true. */
-  --car-neutral-dim: 20%;
-  --car-shade-low: 0.22;
-  --car-shade-high: 0.04;
-  --car-shade-roof: 0.12;
-  --car-logo-dim: 0.82;
+  --car-neutral-dim: 12%;
+  --car-shade-low: 0.16;
+  --car-shade-high: 0.06;
+  --car-shade-roof: 0.08;
+  --car-logo-dim: 0.9;
   color-scheme: dark;
 }
 
