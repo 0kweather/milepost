@@ -20,15 +20,22 @@ const LOGOS = {
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   "via-leaf": [0.84, false],
+  // VIA's yellow letters alone, as on the side of the SCV-42 and the Venture cab car.
+  "via-word": [2.7, false],
 };
 // Lettering with no logo file: Piedmont's F59s carry "North Carolina" in
 // script on the side.
 const LETTERING = {
   "north-carolina": { text: "North Carolina", aspect: 5.6, color: "#1f3f8f",
     font: 'font-family="Georgia, Times New Roman, serif" font-style="italic"' },
-  // VIA's Venture coaches: the name spaced out along the yellow band.
-  "via-rail-canada": { text: "VIA RAIL CANADA", aspect: 16, color: "#33373c",
-    font: 'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="600" letter-spacing="0.5em"' },
+  // VIA's Venture coaches: the name widely spaced out in white along the
+  // middle of the yellow band.
+  "via-rail-canada": { text: "VIA RAIL CANADA", aspect: 34, color: "#33373c",
+    font: 'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="500" letter-spacing="1.6em"' },
+  // The Government of Canada wordmark on VIA's stainless cars: white serif
+  // letters outlined in dark gray (the flag over the last "a" left out).
+  canada: { text: "Canada", aspect: 3.0, color: "#ffffff",
+    font: 'font-family="Times New Roman, Times, serif" stroke="#2b3036" stroke-width="0.22" paint-order="stroke"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 

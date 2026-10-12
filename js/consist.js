@@ -209,7 +209,8 @@ function typicalFor(t, reported) {
   switch (t.agency) {
     case "amtrak": return AMTRAK[t.route] || set("Locomotive with coaches", ["genesis", 1], ["amfleet", 5]);
     case "via": return VIA[t.route] || VIA.Corridor;
-    case "brightline": return set("Charger locomotives with 10 Brightline coaches", ["charger", 1], ["venture", 10], ["charger", 1]);
+    // A Charger at each end of four coaches (green, red, purple, and blue Premium).
+    case "brightline": return set("Charger locomotives with Brightline coaches", ["charger", 1], ["venture", 4], ["charger", 1]);
     case "lirr": {
       const diesel = reported ? !["m7", "m9", "m3"].includes(reported)
         : /Montauk|Greenport|Oyster Bay/.test(t.route || "") || /Port Jefferson|Oyster Bay|Montauk|Greenport|Speonk/.test(dest);
