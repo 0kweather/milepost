@@ -1358,6 +1358,9 @@ export function gtwPower(c) {
 // yellow one. Airo (Phase VII): dark blue window stripe, angular
 // green shapes at the ends, red sill stripe.
 const BRIGHT = ["#1fa64a", "#e5473b", "#5b4fb8", "#38a3dc"]; // green, red, purple, blue
+// Five Smart coaches (green, red, purple in turn) behind the locomotive, then
+// the two blue Premium coaches.
+const brightColor = (c) => ((c.index ?? 1) >= 6 ? 3 : ((c.index ?? 1) + 2) % 3);
 const VENTURE = {
   roof: 14.0, sill: 3.9, cornerR: 1.4, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
   rows: [{ xs: seq(6.6, 6.0, 12), y: 7.1, w: 4.6, h: 2.85, r: 0.45 }],
@@ -1371,7 +1374,7 @@ function venturePaint(c, g) {
       // The coach's color over the whole side (each coach in a set its own),
       // a big yellow panel slanting across the middle and over onto the
       // roof, a charcoal roof and skirt.
-      const col = BRIGHT[((c.index ?? 1) + BRIGHT.length - 1) % BRIGHT.length]; // in that order behind the locomotive
+      const col = BRIGHT[brightColor(c)];
       s += rect(0, 0, L, 17, col) + rect(0, 12.9, L, 3, "#3a3d41") + rect(0, 0, L, 4.8, "#3a3d41");
       s += path(poly([[L * 0.3, 4.8], [L * 0.64, 4.8], [L * 0.72, 12.9], [L * 0.38, 12.9]]), "#ffd100") + rect(L * 0.48, 12.9, L * 0.16, 2, "#ffd100");
       return s;
@@ -2255,7 +2258,7 @@ export const MODELS = {
   gtwPower: M(gtwPower, 16.4),
   flirtCar: M(flirtCar, 71, true),
   flirtPower: M(flirtPower, 21),
-  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? c.index % BRIGHT.length : "")),
+  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? brightColor(c) : "")),
   ventureCab: M(ventureCab, 85, true),
   buddCoach: M(buddCoach, 85),
   buddSleeper: M(buddSleeper, 85),

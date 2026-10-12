@@ -209,7 +209,6 @@ function typicalFor(t, reported) {
   switch (t.agency) {
     case "amtrak": return AMTRAK[t.route] || set("Locomotive with coaches", ["genesis", 1], ["amfleet", 5]);
     case "via": return VIA[t.route] || VIA.Corridor;
-    // A Charger at each end of four coaches (green, red, purple, and blue Premium).
     // Seven coaches since the 2024–25 expansion (five Smart, two Premium).
     case "brightline": return set("Charger locomotives with 7 Brightline coaches", ["charger", 1], ["venture", 7], ["charger", 1]);
     case "lirr": {
