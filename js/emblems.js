@@ -15,7 +15,7 @@ const LOGOS = {
   acela: [2.52, true], via: [2.25, true], "via-mark": [3.64, true], brightline: [4.07, true], mta: [0.91, false], mbta: [1, false],
   njt: [4.44, true], "njt-word": [4.98, true], septa: [1, true], "septa-word": [3.98, false],
   "mta-inverse": [0.91, false], metra: [3.68, true], caltrain: [1.77, false],
-  metrolink: [7.75, true], rtd: [2.2, false], capmetro: [4.14, false], trirail: [4.4, false], "trirail-onnavy": [4.4, false],
+  metrolink: [7.75, true], "metrolink-teal": [7.75, false], rtd: [2.2, true], capmetro: [4.14, true], trirail: [4.4, false], "trirail-onnavy": [4.4, false],
   smart: [3.31, false], frontrunner: [12.85, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
