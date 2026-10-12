@@ -339,7 +339,8 @@ export function coachCar(c, spec) {
 // panel high up, a tall louvered intake, a narrow grille, the big see-through
 // X-braced grille, a louvered vent and a small window by the rear end; a dark
 // gray skirt along the bottom of the body over the fuel tank.
-// Brightline's SCB-40 hides its coupler behind a removable nose cone. Siemens
+// VIA's SCV-42 and Brightline's SCB-40 have a streamlined nose instead: a
+// rounded tip low down, the windshield raked back in one long slope. Siemens
 // gives 40.8 ft between truck centers and 44 in wheels.
 // Phase VII (ALC-42): dark blue, the rear lighter blue behind a white swoosh
 // rising from mid-side to the roof; a red cap over the cab edged in white,
@@ -353,9 +354,8 @@ const noseStripe = (color) =>
 export function charger(c, { phase7 = false } = {}) {
   const { L } = c, sill = 4.3, roof = 14.33;
   const cone = c.agency === "brightline", via = c.agency === "via";
-  // VIA's SCV-42 has its own streamlined nose, the Venture cab car's: a
-  // rounded tip low down, the windshield raked back in one long slope.
-  const d = via
+  // VIA's SCV-42 and Brightline's SCB-40: the streamlined nose.
+  const d = via || cone
     ? poly([[3.6, sill], [L - 1.0, sill], [L - 1.0, roof - 1.0], ["q", L - 1.0, roof, L - 2.0, roof], [11.1, roof], ["q", 8.7, roof, 7.3, 13.2],
       [1.7, 7.8], ["q", 0.95, 7.1, 1.0, 6.0], [1.4, 5.0]])
     : poly([[2.2, sill], [L - 1.0, sill], [L - 1.0, roof - 1.0], ["q", L - 1.0, roof, L - 2.0, roof], [7.4, roof], ["q", 5.6, roof, 5.0, 13.2],
@@ -371,10 +371,7 @@ export function charger(c, { phase7 = false } = {}) {
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
   let s = "";
-  if (cone) {
-    // Streamlined silver nose cone over the coupler, down to just above the rail.
-    s += path(poly([[2.3, sill + 0.05], [1.55, 5.0], [1.55, 3.4], ["q", 1.55, 1.0, 2.6, 0.85], [4.8, 0.75], [4.4, sill + 0.05]]), "#b9bec4", 0.6);
-  } else if (via) {
+  if (via || cone) {
     // A dark skirt over the coupler, the plow close to the rail.
     s += path(poly([[3.6, sill], [1.4, 5.0], [1.2, 2.0], ["q", 1.25, 0.8, 2.4, 0.75], [7.5, 0.75], [7.5, sill]]), "#3a3d41");
   } else {
@@ -417,16 +414,19 @@ export function charger(c, { phase7 = false } = {}) {
       // the side, crossed by a white band; gray and white slants at the cab
       // and the rear; a charcoal roof and sill band; a thin white line along
       // the side, yellow over the black nose with its yellow streaks.
-      liv += path(poly([[14.5, 12.9], [57.4, 12.9], [70.2, 5.3], [28.0, 5.3]]), "#ffd100") +
-        path(poly([[17.8, 12.9], [22.7, 12.9], [41.5, 5.3], [36.6, 5.3]]), "#f4f5f6") +
+      liv += path(poly([[19.5, 12.9], [57.4, 12.9], [70.2, 5.3], [33.0, 5.3]]), "#ffd100") +
+        path(poly([[22.8, 12.9], [27.7, 12.9], [46.5, 5.3], [41.6, 5.3]]), "#f4f5f6") +
         path(poly([[57.4, 12.9], [59.8, 12.9], [72.6, 5.3], [70.2, 5.3]]), "#9aa0a6") +
         path(poly([[59.8, 12.9], [62.8, 12.9], [75.6, 5.3], [72.6, 5.3]]), "#f4f5f6") +
-        path(poly([[9.8, 12.9], [12.2, 12.9], [17.0, 5.3], [14.6, 5.3]]), "#9aa0a6");
+        path(poly([[16.8, 12.9], [19.2, 12.9], [24.0, 5.3], [21.6, 5.3]]), "#9aa0a6");
       liv += rect(0, 12.9, L, 3, "#3a3d41") + rect(4.5, 0, L, 5.3, "#3a3d41");
       liv += line(9.6, 9.0, L - 1.0, 9.0, "#f4f5f6", 0.8);
-      liv += path(poly([[0, 0], [4.5, 0], [4.5, 5.6], [7.0, 8.6], [10.0, 12.9], [10.0, roof + 1], [0, roof + 1]]), "#1d1f22");
-      for (let k = 0; k < 4; k++) liv += path(poly([[0, 5.6 + k * 1.1], [7.6, 8.0 + k * 0.5], [7.6, 8.35 + k * 0.5], [0, 6.1 + k * 1.1]]), "#ffd100");
-      liv += path("M2.2 8.3Q4.2 9.5 6.0 8.8T9.6 9.0", "none", 0, 'stroke="#ffd100" stroke-width="0.2"');
+      // The nose: black from the windshield down to a silver lower nose that
+      // sweeps back to the sill under the cab; yellow streaks across the black.
+      liv += path(`M0 0L0 ${roof + 1}L13.4 ${roof + 1}Q11.2 10.5 9.6 ${sill}L0 ${sill}Z`, "#1d1f22");
+      for (let k = 0; k < 6; k++) liv += path(poly([[0.8 + k * 1.0, 6.4 + k * 1.05], [10.4 + k * 0.4, 9.6 + k * 0.7], [10.4 + k * 0.4, 9.9 + k * 0.7], [0.8 + k * 1.0, 6.75 + k * 1.05]]), "#ffd100");
+      liv += path(`M0 0L0 7.0Q4.5 6.6 8.2 5.2Q9.4 4.7 10.2 ${sill}L10.2 0Z`, "#c3c8cd");
+      liv += path(poly([[5.2, 9.6], [8.5, 12.9], [11.6, 12.9], [10.6, 9.6]]), C.glass) + win(12.7, 10.0, 1.4, 2.5, 0.25);
       break;
     case "via": {
       // VIA's SCV-42: charcoal over a darker sill band, a light gray roof.
@@ -492,7 +492,7 @@ export function charger(c, { phase7 = false } = {}) {
   // liveries show the wraparound windshield only, with a narrow cab side
   // window in the body color behind it.
   const wide = !["midwest", "california", "surfliner", "cascades"].includes(scheme);
-  if (phase7 && !via) {
+  if (phase7 && !via && !cone) {
     liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
     liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
     // ALC-42 cab: the windshield wraps back to about 7 ft; behind it the
@@ -507,7 +507,7 @@ export function charger(c, { phase7 = false } = {}) {
     }
     liv += win(10.0, 8.9, 1.15, 2.4, 0.25) + rect(11.35, 10.2, 0.5, 1.5, "#c9cdd2", 0, 'rx="0.15"');
     liv += line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
-  } else if (!via) {
+  } else if (!via && !cone) {
     liv += path(poly([[2.0, 9.0], [4.95, 13.25], [wide ? 10.8 : 7.3, 13.25], [wide ? 10.8 : 6.9, 9.0]]), C.black);
     if (p7) liv += rect(11.0, 8.6, 0.35, 5.2, "#ffffff") + rect(11.5, 8.6, 0.45, 5.2, AMTRAK.red);
     liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + (wide ? win(6.3, 9.6, 3.8, 2.9, 0.25) : win(7.7, 9.5, 1.5, 2.6, 0.25));
@@ -515,7 +515,7 @@ export function charger(c, { phase7 = false } = {}) {
   }
   s += path(d, base) + clipped(d, liv);
   if (!wide && !phase7 && !via) s += rect(9.5, 10.4, 0.35, 1.7, "#b9bec4", 0.4);  // mirror
-  s += door(12.3, sill + 0.5, 2.5, 7.6, { glassY: 0.6, glassH: 0.3 });
+  s += door(cone ? 15.0 : 12.3, sill + 0.5, 2.5, 7.6, { glassY: 0.6, glassH: 0.3 });
   // VIA's SCV-42 and Brightline's SCB-40: a tall X-braced grille toward the
   // rear, a louvered panel beside it (painted over on Brightline's).
   const xGrille = (x, y, w, h, fill) => rect(x, y, w, h, fill, 0.4, 'rx="0.3"') + lines([[x + 0.3, y + 0.3, x + w - 0.3, y + h - 0.3], [x + 0.3, y + h - 0.3, x + w - 0.3, y + 0.3]], "rgba(150,155,160,0.8)", 1.2);
@@ -545,7 +545,7 @@ export function charger(c, { phase7 = false } = {}) {
   // the cream.
   const mark = {
     phase7: { x: 20.5, y: 8.2, h: 3.9, dark: true, logo: "amtrak-stack" },
-    brightline: { x: 32.3, y: 9.6, h: 3.0 },
+    brightline: { x: 35.5, y: 9.6, h: 3.0 },
     via: { x: 34.8, y: 9.55, h: 5.4, logo: "via-word" },
     mnr: { x: 17.2, y: 7.7, h: 1.4, logo: "mta-inverse" },
     midwest: { x: 40.5, y: 10.2, h: 2.3, logo: "amtrak-midwest" },
