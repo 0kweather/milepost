@@ -1185,6 +1185,7 @@ function noticesHtml(t) {
   </div>`;
 }
 
+const stripScroll = new Map();
 function renderDetail() {
   if (state.station) return renderStation();
   // Feed updates redraw the panel; don't wipe what the rider is typing.
@@ -1195,6 +1196,10 @@ function renderDetail() {
     el.innerHTML = '<p class="empty">This train isn’t reporting right now. It may have finished its trip.</p>';
     return;
   }
+  // How far the cars strip is scrolled, kept per train across re-renders
+  // and a visit to a car's model page.
+  const shown = el.querySelector(".consist-strip");
+  if (shown && el.dataset.train) stripScroll.set(el.dataset.train, shown.scrollLeft);
   if (state.car?.page && state.car.id === t.id) return renderModelPage(t, el);
   loadNotices(t);
   const a = AGENCIES[t.agency];
@@ -1215,7 +1220,12 @@ function renderDetail() {
         return `<li class="${s.status}"><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`
     : "";
+  // Re-rendering replaces the content; keep the reader where they were in
+  // the panel, the cars strip and the stop list (same train only).
+  const same = el.dataset.train === t.id;
   const keepScroll = el.scrollTop;
+  const keepStops = same ? el.querySelector(".stops-scroll")?.scrollTop || 0 : 0;
+  el.dataset.train = t.id;
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
@@ -1232,8 +1242,10 @@ function renderDetail() {
     ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
-  // Re-rendering replaces the content; keep the reader where they were.
   el.scrollTop = keepScroll;
+  const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
+  if (strip) strip.scrollLeft = stripScroll.get(t.id) || 0;
+  if (list) list.scrollTop = keepStops;
 }
 
 // A wifi-style signal mark beside the time of the train's last GPS report.
