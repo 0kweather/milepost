@@ -315,23 +315,31 @@ const noseStripe = (color) =>
 
 export function charger(c, { phase7 = false } = {}) {
   const { L } = c, sill = 4.3, roof = 14.33;
-  const cone = c.agency === "brightline";
-  const d = poly([[2.2, sill], [L - 1.0, sill], [L - 1.0, roof - 1.0], ["q", L - 1.0, roof, L - 2.0, roof], [7.4, roof], ["q", 5.6, roof, 5.0, 13.2],
-    [2.65, 9.35], [2.15, 9.1], [1.75, 6.0], [1.55, 5.0]]);
+  const cone = c.agency === "brightline", via = c.agency === "via";
+  // VIA's SCV-42 has its own streamlined nose, the Venture cab car's: a
+  // rounded tip low down, the windshield raked back in one long slope.
+  const d = via
+    ? poly([[3.6, sill], [L - 1.0, sill], [L - 1.0, roof - 1.0], ["q", L - 1.0, roof, L - 2.0, roof], [11.1, roof], ["q", 8.7, roof, 7.3, 13.2],
+      [1.7, 7.8], ["q", 0.95, 7.1, 1.0, 6.0], [1.4, 5.0]])
+    : poly([[2.2, sill], [L - 1.0, sill], [L - 1.0, roof - 1.0], ["q", L - 1.0, roof, L - 2.0, roof], [7.4, roof], ["q", 5.6, roof, 5.0, 13.2],
+      [2.65, 9.35], [2.15, 9.1], [1.75, 6.0], [1.55, 5.0]]);
   const amtrak = c.agency === "amtrak", route = c.route || "";
   // Amtrak's state-supported routes keep their sponsors' liveries.
   const scheme = cone ? "brightline" : c.agency === "via" ? "via" : c.agency === "mnr" ? "mnr" : !amtrak ? "plain"
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
     : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
-  const base = { phase7: AMTRAK.sky, brightline: "#d9dde2", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
+  const base = { phase7: AMTRAK.sky, brightline: "#d9dde2", via: "#585c61", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
     cascades: "#1d4a45" }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
   let s = "";
   if (cone) {
-    // Streamlined nose cone over the coupler, down to just above the rail.
-    s += path(poly([[2.3, sill + 0.05], [1.55, 5.0], [1.55, 3.4], ["q", 1.55, 1.0, 2.6, 0.85], [4.8, 0.75], [4.4, sill + 0.05]]), "#f2c500", 0.6);
+    // Streamlined silver nose cone over the coupler, down to just above the rail.
+    s += path(poly([[2.3, sill + 0.05], [1.55, 5.0], [1.55, 3.4], ["q", 1.55, 1.0, 2.6, 0.85], [4.8, 0.75], [4.4, sill + 0.05]]), "#b9bec4", 0.6);
+  } else if (via) {
+    // A dark skirt over the coupler, the plow close to the rail.
+    s += path(poly([[3.6, sill], [1.4, 5.0], [1.2, 2.0], ["q", 1.25, 0.8, 2.4, 0.75], [7.5, 0.75], [7.5, sill]]), "#3a3d41");
   } else {
     s += pilot(1.55, sill);
   }
@@ -362,17 +370,36 @@ export function charger(c, { phase7 = false } = {}) {
       break;
     }
     case "brightline":
-      // Silver, a big yellow panel slanting across the middle with gray
-      // wedges, a dark roof band; the nose black with yellow rays.
-      liv += path(`M22 ${sill}L52 ${sill}L62 ${roof + 1}L32 ${roof + 1}Z`, "#ffd100") +
-        path(`M29 ${sill}L33 ${sill}L43 ${roof + 1}L39 ${roof + 1}Z`, "#8a9097") + path(`M47 ${sill}L49 ${sill}L59 ${roof + 1}L57 ${roof + 1}Z`, "#8a9097");
-      liv += rect(0, roof - 0.9, L, 2, "#3a3d41") + rect(0, sill, L, 0.6, "#3a3d41") + rect(0, 0, 7.6, roof + 1, "#1d1f22");
+      // Brightline's SCB-40: silver, a big yellow panel slanting back along
+      // the side, crossed by a white band; gray and white slants at the cab
+      // and the rear; a charcoal roof and sill band; a thin white line along
+      // the side, yellow over the black nose with its yellow streaks.
+      liv += path(poly([[14.5, 12.9], [57.4, 12.9], [70.2, 5.3], [28.0, 5.3]]), "#ffd100") +
+        path(poly([[17.8, 12.9], [22.7, 12.9], [41.5, 5.3], [36.6, 5.3]]), "#f4f5f6") +
+        path(poly([[57.4, 12.9], [59.8, 12.9], [72.6, 5.3], [70.2, 5.3]]), "#9aa0a6") +
+        path(poly([[59.8, 12.9], [62.8, 12.9], [75.6, 5.3], [72.6, 5.3]]), "#f4f5f6") +
+        path(poly([[9.8, 12.9], [12.2, 12.9], [17.0, 5.3], [14.6, 5.3]]), "#9aa0a6");
+      liv += rect(0, 12.9, L, 3, "#3a3d41") + rect(4.5, 0, L, 5.3, "#3a3d41");
+      liv += line(9.6, 9.0, L - 1.0, 9.0, "#f4f5f6", 0.8);
+      liv += path(poly([[0, 0], [4.5, 0], [4.5, 5.6], [7.0, 8.6], [10.0, 12.9], [10.0, roof + 1], [0, roof + 1]]), "#1d1f22");
       for (let k = 0; k < 4; k++) liv += path(poly([[0, 5.6 + k * 1.1], [7.6, 8.0 + k * 0.5], [7.6, 8.35 + k * 0.5], [0, 6.1 + k * 1.1]]), "#ffd100");
+      liv += path("M2.2 8.3Q4.2 9.5 6.0 8.8T9.6 9.0", "none", 0, 'stroke="#ffd100" stroke-width="0.2"');
       break;
-    case "via":
-      // VIA's SCV-42: charcoal, a light gray roof, yellow edging the cab glass.
-      liv += rect(0, roof - 0.5, L, 1.5, "#8d939a") + noseStripe("#f5c400");
+    case "via": {
+      // VIA's SCV-42: charcoal over a darker sill band, a light gray roof.
+      // The cab is light gray below a black band through its windows, set
+      // off by a light line slanting up and back; yellow edges the
+      // windshield and caps the cab roof. At the rear the coaches' bands
+      // (yellow, charcoal, light gray) carry on, cut off on the same slant.
+      const band = (y0, y1, col) => path(poly([[56.3 + (y0 - sill) * 1.22, y0], [L, y0], [L, y1], [56.3 + (y1 - sill) * 1.22, y1]]), col);
+      liv += rect(0, 13.3, L, 2, "#c3c7cb") + path(poly([[0, 0], [12.6, 0], [12.6, sill], [23.4, 13.3], [0, 13.3]]), "#c8ccd0");
+      liv += rect(5.0, 0, L, 5.45, "#3a3d41") + line(14.0, 5.45, 23.4, 13.3, "#e2e5e8", 1.2);
+      liv += path(poly([[4.2, 9.0], [17.9, 9.0], [23.0, 13.3], [8.5, 13.3]]), "#24272b");
+      liv += band(sill, 6.55, "#c8ccd0") + band(6.55, 6.8, "#f5c400") + band(6.8, 10.3, "#2b2e32") + band(10.3, 13.3, "#f5c400");
+      liv += path(poly([[0.9, 8.3], [3.5, 8.3], [8.5, 13.3], [13.0, 13.3], [13.0, roof + 1], [5.0, roof + 1]]), "#f5c400");
+      liv += path(poly([[4.9, 9.4], [8.4, 12.9], [11.7, 12.9], [11.7, 9.4]]), C.glass) + win(15.2, 10.0, 1.6, 2.6, 0.25) + win(57.0, 10.3, 1.8, 2.4, 0.25);
       break;
+    }
     case "midwest": {
       // Blue front fading through a halftone into a gray side; red sill stripe.
       const id = `ts-mw-${++clipSeq}`;
@@ -394,29 +421,41 @@ export function charger(c, { phase7 = false } = {}) {
       liv += rect(0, sill + 1.0, L, 0.35, "#ffffff", 0, 'opacity="0.85"');
   }
   // Cab glass in a black surround (flanked by white and red on Phase VII).
-  liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
-  if (p7) liv += rect(11.0, 8.6, 0.35, 5.2, "#ffffff") + rect(11.5, 8.6, 0.45, 5.2, AMTRAK.red);
-  liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
-  liv += line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
+  if (!via) {
+    liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
+    if (p7) liv += rect(11.0, 8.6, 0.35, 5.2, "#ffffff") + rect(11.5, 8.6, 0.45, 5.2, AMTRAK.red);
+    liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
+    liv += line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
+  }
   s += path(d, base) + clipped(d, liv);
   s += door(12.3, sill + 0.4, 2.3, 7.4, { glassY: 0.68, glassH: 0.2 });
-  // The see-through X grille ahead of the rear truck.
-  s += rect(44.5, 5.2, 5.5, 2.8, "rgba(20,22,25,0.6)", 0.4) + lines([[44.5, 5.2, 50, 8.0], [44.5, 8.0, 50, 5.2]], "rgba(255,255,255,0.35)", 0.6);
-  // Radiator intakes high on the rear sides, a filter grille low behind the cab.
-  for (const [x, w, y, h] of [[49, 18, 10.0, 3.0], [24, 6, 5.4, 2.4]]) {
-    s += rect(x, y, w, h, "rgba(0,0,0,0.22)", 0.4);
-    s += slats(x, y, w, h);
+  // VIA's SCV-42 and Brightline's SCB-40: a tall X-braced grille toward the
+  // rear, a louvered panel beside it (painted over on Brightline's).
+  const xGrille = (x, y, w, h, fill) => rect(x, y, w, h, fill, 0.4, 'rx="0.3"') + lines([[x + 0.3, y + 0.3, x + w - 0.3, y + h - 0.3], [x + 0.3, y + h - 0.3, x + w - 0.3, y + 0.3]], "rgba(150,155,160,0.8)", 1.2);
+  if (via) {
+    s += xGrille(50.7, 5.6, 5.9, 7.1, "rgba(20,22,25,0.75)") + rect(46.6, 6.7, 2.6, 5.6, "rgba(20,22,25,0.6)", 0.4, 'rx="0.3"') + slats(46.6, 6.7, 2.6, 5.6, 0.5);
+  } else if (cone) {
+    s += xGrille(46.4, 6.2, 7.3, 5.8, "rgba(20,22,25,0.3)") + rect(42.6, 6.7, 2.9, 4.3, "rgba(20,22,25,0.3)", 0.4, 'rx="0.3"') +
+      rect(54.3, 10.1, 2.2, 2.1, "rgba(20,22,25,0.3)", 0.4, 'rx="0.2"');
+  } else {
+    // The see-through X grille ahead of the rear truck.
+    s += rect(44.5, 5.2, 5.5, 2.8, "rgba(20,22,25,0.6)", 0.4) + lines([[44.5, 5.2, 50, 8.0], [44.5, 8.0, 50, 5.2]], "rgba(255,255,255,0.35)", 0.6);
+    // Radiator intakes high on the rear sides, a filter grille low behind the cab.
+    for (const [x, w, y, h] of [[49, 18, 10.0, 3.0], [24, 6, 5.4, 2.4]]) {
+      s += rect(x, y, w, h, "rgba(0,0,0,0.22)", 0.4);
+      s += slats(x, y, w, h);
+    }
   }
   s += rect(47.5, roof, 20.5, 0.3, C.steelDark, 0.4) + rect(38, roof, 2, 0.5, "currentColor");
   // The railroad's logo. Phase VII: name over travelmark, just behind the
-  // cab. Brightline: its wordmark on the rear half. VIA: an enormous "VIA"
-  // behind the cab. Metro-North: the MTA disc behind the cab door. The
+  // cab. Brightline: its wordmark on the yellow, over the white band. VIA:
+  // enormous yellow letters mid-side, a big red maple leaf at the rear. Metro-North: the MTA disc behind the cab door. The
   // state-supported services: their own logos mid-side on the gray; Cascades:
   // its name in white high behind the cab.
   const mark = {
     phase7: { x: 20, y: 9.2, h: 3.6, dark: true, logo: "amtrak-stack" },
-    brightline: { x: 42, y: 8.8, h: 2.6 },
-    via: { x: 39, y: 8.3, h: 5.0, logo: "via-mark" },
+    brightline: { x: 32.3, y: 9.6, h: 3.0 },
+    via: { x: 34.8, y: 9.55, h: 5.4, logo: "via-word" },
     mnr: { x: 16.5, y: 8.2, h: 1.7 },
     midwest: { x: 37, y: 9.6, h: 2.2, logo: "amtrak-midwest" },
     california: { x: 36, y: 9.8, h: 2.8, logo: "amtrak-california" },
@@ -424,6 +463,7 @@ export function charger(c, { phase7 = false } = {}) {
     cascades: { x: 33, y: 9.4, h: 3.6, logo: "cascades-dark" },
   }[scheme] || { x: 40, y: 9.0, h: 1.7 };
   s += badge(c, mark.x, mark.y, mark.h, mark);
+  if (via) s += badge(c, 64.5, 7.7, 6.7, { logo: "via-leaf" });
   s += outlineOf(d);
   return s;
 }
@@ -1205,12 +1245,12 @@ export function gtwPower(c) {
 // Airo): 85 ft, 14 ft, 51 in floor, trucks 59 ft 6 in apart. Convex sides,
 // sealed gangways, single-leaf plug doors at the car ends, a row of large
 // windows. Cab cars carry a full Charger nose.
-// Brightline: each coach one bright color, a yellow diagonal band across it
-// with white edges, dark gray through the windows. Midwest: gray, blue
-// halftone fades at the ends, red sill stripe. VIA: gray, black window band
-// under a yellow one. Airo (Phase VII): dark blue window stripe, angular
+// Brightline: each coach one bright color over the whole side, a big yellow
+// panel slanting across the middle. Midwest: gray, blue halftone fades at
+// the ends, red sill stripe. VIA: light gray, a charcoal window band under a
+// yellow one. Airo (Phase VII): dark blue window stripe, angular
 // green shapes at the ends, red sill stripe.
-const BRIGHT = ["#00a651", "#e31b23", "#00a3e0", "#f58220", "#ec008c"]; // green, red, blue, orange, pink
+const BRIGHT = ["#1fa64a", "#e5473b", "#5b4fb8", "#38a3dc"]; // green, red, purple, blue
 const VENTURE = {
   roof: 14.0, sill: 3.9, cornerR: 1.4, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
   rows: [{ xs: seq(6.6, 6.0, 12), y: 7.1, w: 4.6, h: 2.85, r: 0.45 }],
@@ -1221,19 +1261,18 @@ function venturePaint(c, g) {
   let s = rect(0, 0, L, 17, "#cdd1d6") + rect(0, 0, L, 4.9, "rgba(0,0,0,0.12)") + rect(0, 12.7, L, 3, "rgba(0,0,0,0.07)");
   switch (c.agency) {
     case "brightline": {
-      // White; the coach's color in a band above the windows, a yellow slash
-      // across the middle, a dark gray window band over a thin yellow line.
-      const col = BRIGHT[(c.index ?? 0) % BRIGHT.length];
-      s += rect(0, 0, L, 17, "#eef0f2") + rect(0, 10.4, L, 2.4, col);
-      s += path(`M${L * 0.44} 10.4L${L * 0.5} 10.4L${L * 0.54} 12.8L${L * 0.48} 12.8Z`, "#ffd100");
-      s += rect(0, 6.75, L, 0.2, "#ffd100");
-      s += rect(0, 6.95, L, 3.45, "#3a3d41");
+      // The coach's color over the whole side (each coach in a set its own),
+      // a big yellow panel slanting across the middle and over onto the
+      // roof, a charcoal roof and skirt.
+      const col = BRIGHT[((c.index ?? 1) + BRIGHT.length - 1) % BRIGHT.length]; // in that order behind the locomotive
+      s += rect(0, 0, L, 17, col) + rect(0, 12.9, L, 3, "#3a3d41") + rect(0, 0, L, 4.8, "#3a3d41");
+      s += path(poly([[L * 0.3, 4.8], [L * 0.64, 4.8], [L * 0.72, 12.9], [L * 0.38, 12.9]]), "#ffd100") + rect(L * 0.48, 12.9, L * 0.16, 2, "#ffd100");
       return s;
     }
     case "via":
       // VIA's Venture: light gray; a thin yellow line under a charcoal window
-      // band; a yellow band above it to the roof.
-      return s + rect(0, 6.55, L, 0.2, "#f5c400") + rect(0, 6.8, L, 3.5, "#2b2e32") + rect(0, 10.3, L, 2.4, "#f5c400");
+      // band; a yellow band above it up to the stainless roof.
+      return s + rect(0, 6.42, L, 0.23, "#f5c400") + rect(0, 6.65, L, 3.97, "#2b2e32") + rect(0, 10.62, L, 2.28, "#f5c400");
     case "amtrak":
       if (c.route === "Amtrak Cascades") {
         // Airo: brown and white sill stripes, a wide cream band, the windows on
@@ -1256,11 +1295,18 @@ function venturePaint(c, g) {
   }
 }
 const ventureDoor = (x) => ({ x, w: 2.9, y0: 4.25, y1: 11.3, glassY: 0.55, glassH: 0.32, grabs: false });
+// VIA's Venture coaches: nine big windows, then a blank stretch (washroom)
+// before the door at that end; "VIA RAIL CANADA" spaced out in white along
+// the middle of the yellow band, a small VIA logo by the other door.
+const VIA_VENTURE_ROWS = [{ xs: seq(10.95, 6.5, 9), y: 7.15, w: 4.75, h: 2.75, r: 0.45 }];
 export const venture = (c) => bilevel(c, { ...VENTURE, paint: venturePaint,
+  rows: c.agency === "via" ? VIA_VENTURE_ROWS : VENTURE.rows,
   badge: (c) => (c.route === "Amtrak Cascades" ? { x: c.L - 8.6, y: 5.95, h: 1.1, logo: "cascades-dark" } // on the cream, by the door
-    : { via: { x: 24, y: 11.5, h: 0.75, logo: "via-rail-canada" }, brightline: { x: 6.5, y: 5.2, h: 0.8 } }[c.agency]),
+    : { via: [{ x: 43.0, y: 11.76, h: 0.75, dark: true, logo: "via-rail-canada" }, { x: 8.1, y: 8.3, h: 0.8, logo: "via-mark" }],
+      brightline: { x: 6.5, y: 5.6, h: 0.8, dark: true } }[c.agency]),
   badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : c.route === "San Joaquins" ? "amtrak-california" : null),
-  doors: c.agency === "brightline" || c.agency === "via" ? [ventureDoor(1.2), ventureDoor(80.9)] : [ventureDoor(80.9)] });
+  doors: c.agency === "via" ? [ventureDoor(2.4), ventureDoor(78.0)]
+    : c.agency === "brightline" ? [ventureDoor(1.2), ventureDoor(80.9)] : [ventureDoor(80.9)] });
 // The Venture cab car (VIA's corridor trains, Amtrak Cascades' Airo, Amtrak
 // Midwest): a long streamlined nose sloping from the roof down to a low tip,
 // the windshield in a black mask that wraps back along the side to the cab
@@ -1272,8 +1318,20 @@ function ventureCabPaint(c, g) {
   const L = g.L;
   let s = venturePaint(c, g);
   if (c.agency === "via") {
-    // The charcoal window band dips to the sill behind the cab.
-    s += path(poly([[13.0, 10.3], [L, 10.3], [L, 6.8], [30, 6.8], [25, 3.9], [18, 3.9]]), "#2b2e32");
+    // VIA: the yellow band and the light gray below the window band end on
+    // slants well back from the cab; mid gray frames the charcoal window
+    // band ahead of them, over a dark skirt. The cab is light gray below a
+    // black band through its side window and door, behind a light line
+    // curving up and back; yellow edges the windshield and caps the cab
+    // roof.
+    s += path(poly([[0, 10.62], [42.4, 10.62], [44.6, 12.9], [0, 12.9]]), "#6b6f74") +
+      path(poly([[0, 0], [31.4, 0], [31.4, 3.9], [37.4, 6.65], [0, 6.65]]), "#6b6f74") +
+      path(poly([[5.0, 0], [31.4, 0], [31.4, 3.9], [33.6, 4.9], [5.0, 4.9]]), "#3a3d41");
+    s += path(poly([[0, 0], [16.3, 0], [16.3, 3.9], [17.4, 9.2], [0, 9.2]]), "#c8ccd0") +
+      path(poly([[3.9, 9.2], [17.4, 9.2], ["q", 18.0, 12.2, 23.6, 12.9], [7.9, 12.9]]), "#24272b") +
+      path("M16.3 3.9L17.4 9.2Q18.0 12.2 23.6 12.9", "none", 0, 'stroke="#e2e5e8" stroke-width="1.2" vector-effect="non-scaling-stroke"');
+    s += path(poly([[0.9, 7.8], [2.4, 7.8], [7.9, 12.9], [13.0, 12.9], [13.0, 15], [5.0, 15]]), "#f5c400");
+    return s;
   }
   const cap = CAP[c.agency] || CAP[c.route];
   if (cap) s += path(poly([[0.6, 6.4], [1.6, 6.4], [7.5, 12.6], [14, 12.6], [14, 14.5], [6, 14.5]]), cap);
@@ -1281,15 +1339,20 @@ function ventureCabPaint(c, g) {
   return s;
 }
 export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, paint: ventureCabPaint, cabLen: 12,
-  // VIA: its yellow logo on the charcoal behind the cab, the red maple leaf at
-  // the far end. Cascades: the name in white high behind the cab.
-  badge: (c) => (c.agency === "via" ? [{ x: 21, y: 8.6, h: 1.5, logo: "via-mark" }, { x: c.L - 4.6, y: 8.3, h: 4.6, logo: "via-leaf" }]
+  // VIA: nine windows a little closer set than the coaches'.
+  rows: c.agency === "via" ? [{ xs: seq(23.5, 6.0, 9), y: 7.15, w: 4.4, h: 2.75, r: 0.45 }] : VENTURE.rows,
+  // VIA: yellow letters on the window band just behind the cab, a big red
+  // maple leaf by the far door. Cascades: the name in white high behind
+  // the cab.
+  badge: (c) => (c.agency === "via" ? [{ x: 21.0, y: 8.8, h: 1.6, logo: "via-word" }, { x: 78.2, y: 7.1, h: 5.4, logo: "via-leaf" }]
     : c.route === "Amtrak Cascades" ? { x: 21, y: 11.4, h: 1.9, dark: true, logo: "cascades" } : undefined),
   badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : c.route === "San Joaquins" ? "amtrak-california" : null),
   nose: VENTURE_NOSE,
   doors: [ventureDoor(13.2), ventureDoor(80.9)],
-  cab: () => {
-    let s = path(poly([[1.9, 7.6], [7.0, 12.2], [9.6, 12.2], [9.6, 7.6]]), C.glass) + win(10.2, 8.6, 1.7, 2.8, 0.25);
+  cab: (c) => {
+    // VIA's: the side window in the black band ahead of the crew door.
+    let s = c.agency === "via" ? path(poly([[4.4, 9.6], [7.3, 12.4], [11.8, 12.4], [11.8, 9.6]]), C.glass)
+      : path(poly([[1.9, 7.6], [7.0, 12.2], [9.6, 12.2], [9.6, 7.6]]), C.glass) + win(10.2, 8.6, 1.7, 2.8, 0.25);
     // Skirt over the coupler, down near the rail.
     return s + path(poly([[3.4, 3.9], [1.3, 4.7], [1.15, 2.6], ["q", 1.2, 1.5, 2.4, 1.4], [7.5, 1.4], [7.5, 3.9]]), "#3a3d41");
   } });
@@ -1299,29 +1362,35 @@ export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, pai
 // power: 85 ft, 10 ft wide, 13 ft 6.75 in tall; fluted stainless below the
 // windows and on the roof, a smooth band through the windows and a smooth
 // letterboard above them. Skyline and Park domes stand 15 ft 10 in.
-// VIA's logo goes on as a decal in the window band, past the last window.
+// Today's VIA scheme: a bright blue stripe along the letterboard, VIA's logo
+// in the window band near one end, the Government of Canada wordmark low
+// on the side near the vestibule (the Park cars stay plain stainless).
 const BUDD = { roof: 13.56, sill: 3.9, cornerR: 1.1, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6, diaphragm: [4.25, 12.3],
   badge: { x: 79.4, y: 8.5, h: 1.4 } };
-function buddPaint(c, g) {
-  const L = g.L;
-  return rect(0, 0, L, 17, "#d5d9de") + flutes(0, L, 4.1, 6.6, 0.26) + rect(0, 11.9, L, 2, "#c3c9d0") + flutes(0, L, 12.0, 13.4, 0.3) +
-    line(0, 10.55, L, 10.55, "rgba(0,0,0,0.18)", 0.5) + line(0, 6.65, L, 6.65, "rgba(0,0,0,0.18)", 0.5);
-}
+const buddSteel = (L) => rect(0, 0, L, 17, "#d5d9de") + flutes(0, L, 4.1, 6.6, 0.26) + rect(0, 11.9, L, 2, "#c3c9d0") + flutes(0, L, 12.0, 13.4, 0.3) +
+  line(0, 10.55, L, 10.55, "rgba(0,0,0,0.18)", 0.5) + line(0, 6.65, L, 6.65, "rgba(0,0,0,0.18)", 0.5);
+const buddPaint = (c, g) => buddSteel(g.L) + rect(0, 10.75, g.L, 1.15, "#2266cc");
+const canadaMark = (x) => ({ x, y: 5.95, h: 3.2, dark: true, logo: "canada" });
 const buddDoor = (x) => ({ x, w: 2.6, y0: 4.0, y1: 11.0, glassY: 0.55, glassH: 0.3 });
-export const buddCoach = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(1.3), buddDoor(81.1)],
-  rows: [{ xs: seq(7.0, 5.12, 14), y: 7.15, w: 4.2, h: 2.75, r: 0.35 }] });
+// Coach (rebuilt): one vestibule; two small windows by it, then eight big
+// picture windows.
+export const buddCoach = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(1.3)],
+  badge: [canadaMark(12.5), { x: 81.4, y: 8.5, h: 2.2 }],
+  rows: [{ xs: [6.8, 12.8], y: 7.15, w: 2.4, h: 2.75, r: 0.35 }, { xs: seq(17.0, 8.0, 8), y: 7.15, w: 5.0, h: 2.75, r: 0.35 }] });
 // Manor sleeper: big section windows (with small upper-berth windows above)
 // at one end, bedroom windows in the middle, smaller roomette windows at the
 // other end; one vestibule.
 export const buddSleeper = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(1.3)],
+  badge: [canadaMark(12.5), { x: 50.5, y: 8.6, h: 1.5 }],
   rows: [{ xs: [6.4, 11.2, 16.0], y: 7.15, w: 4.0, h: 2.75, r: 0.35 }, { xs: [7.4, 12.2, 17.0], y: 10.1, w: 2.0, h: 0.6, r: 0.15 },
     { xs: [22.4, 27.0, 31.6, 36.2, 40.8, 45.4], y: 7.4, w: 3.2, h: 2.4, r: 0.3 }, { xs: seq(52.4, 3.95, 8), y: 7.6, w: 2.4, h: 2.1, r: 0.3 }] });
 // Dining car: a run of dining-room windows, a kitchen end with a few small ones.
 export const buddDiner = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(81.1)],
+  badge: [canadaMark(70.0), { x: 79.4, y: 8.5, h: 1.4 }],
   rows: [{ xs: seq(4.4, 5.0, 10), y: 7.15, w: 4.2, h: 2.75, r: 0.35 }, { xs: [57.5, 64.2, 71.0], y: 8.6, w: 1.6, h: 1.4, r: 0.2 }] });
 // Baggage car: fluted the full height, two wide doors a side, no windows.
 export const buddBaggage = (c) => bilevel(c, { ...BUDD,
-  paint: (c, g) => rect(0, 0, g.L, 17, "#d5d9de") + flutes(0, g.L, 4.1, 11.6, 0.26) + flutes(0, g.L, 12.0, 13.4, 0.3),
+  paint: (c, g) => rect(0, 0, g.L, 17, "#d5d9de") + flutes(0, g.L, 4.1, 11.6, 0.26) + flutes(0, g.L, 12.0, 13.4, 0.3) + rect(0, 10.75, g.L, 1.15, "#2266cc"),
   doors: [{ x: 17.5, w: 6.5, y0: 4.0, y1: 11.3, glass: false, grabs: false }, { x: 61.0, w: 6.5, y0: 4.0, y1: 11.3, glass: false, grabs: false }],
   rows: [] });
 // Skyline: a short dome over the middle of the car, coach seats and a
@@ -1334,24 +1403,36 @@ function dome(a, b, roof, top, { rear = false } = {}) {
   s += path(poly([[b - 1.0, roof + 0.25], [b - 3.8, top - 0.75], [b - 5.0, top - 0.75], [b - 5.0, roof + 0.25]]), C.glass);
   return s;
 }
-export const skyline = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(1.3), buddDoor(81.1)],
-  rows: [{ xs: [6.6, 11.6, 16.6, 22.0, 27.0, 56.8, 61.8, 66.8, 71.8, 76.4], y: 7.15, w: 4.0, h: 2.75, r: 0.35 }, { xs: [33.4, 39.4, 45.4, 51.0], y: 7.6, w: 2.4, h: 1.8, r: 0.3 }],
-  extra: () => dome(30.5, 60.5, 13.56, 15.83) });
+// The dome sits toward the plain end; under and ahead of it small windows,
+// at the vestibule end a lounge with big picture windows.
+export const skyline = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(81.1)],
+  badge: [canadaMark(65.4), { x: 70.0, y: 8.5, h: 1.7 }],
+  rows: [{ xs: [1.6], y: 7.5, w: 1.1, h: 2.2, r: 0.3 }, { xs: [4.7, 11.9], y: 7.5, w: 2.9, h: 2.2, r: 0.3 },
+    { xs: [15.6, 21.1, 25.6, 29.5, 34.0, 44.3], y: 7.5, w: 2.5, h: 2.2, r: 0.3 },
+    { xs: [47.6], y: 7.15, w: 6.3, h: 2.75, r: 0.35 }, { xs: [56.0], y: 7.15, w: 6.5, h: 2.75, r: 0.35 }, { xs: [64.6], y: 7.15, w: 3.2, h: 2.75, r: 0.35 },
+    { xs: [72.0], y: 7.15, w: 2.7, h: 2.75, r: 0.35 }],
+  extra: () => dome(19.2, 52.8, 13.56, 15.83) });
 // Park car: sleeping rooms up front, a lounge under a dome, and a round
 // "bullet" observation end with wraparound windows and a tail sign. Drawn
 // with the round end on the left; mirrored when it runs last, as it does.
 export const parkCar = (c) => {
   const L = c.L, roof = 13.56, sill = 3.9;
-  return bilevel({ ...c, cabL: true }, { ...BUDD, paint: buddPaint, doors: [buddDoor(81.1)], cabLen: 0,
+  // Plain stainless today; the logo in the window band by the vestibule.
+  // Big lounge windows toward the round end, small ones under the dome,
+  // three bedroom windows toward the vestibule.
+  return bilevel({ ...c, cabL: true }, { ...BUDD, paint: (c, g) => buddSteel(g.L), doors: [buddDoor(81.1)], cabLen: 0,
+    badge: { x: 78.3, y: 8.6, h: 1.7 },
     nose: [[5.0, sill], ["q", 0.6, sill, 0.6, 8.6], ["q", 0.6, roof, 6.0, roof]],
-    rows: [{ xs: [6.4, 10.8, 15.2], y: 7.15, w: 3.8, h: 2.75, r: 0.35 }, { xs: [21.0, 25.4], y: 7.15, w: 3.6, h: 2.75, r: 0.35 }, { xs: seq(52.0, 5.0, 5), y: 7.4, w: 3.2, h: 2.4, r: 0.3 }],
+    rows: [{ xs: [8.4, 13.2], y: 7.15, w: 3.4, h: 2.75, r: 0.35 }, { xs: [19.8], y: 7.15, w: 4.4, h: 2.75, r: 0.35 }, { xs: [26.0], y: 7.2, w: 2.1, h: 2.7, r: 0.3 },
+      { xs: [32.4, 37.3, 41.7, 46.4], y: 7.6, w: 2.7, h: 2.0, r: 0.3 }, { xs: [54.4, 63.8, 72.7], y: 7.4, w: 2.9, h: 2.4, r: 0.3 }],
     cab: () => path("M1.2 7.1Q1.2 6.95 1.6 6.95L5.6 6.95L5.6 10.0L1.6 10.0Q1.2 10.0 1.2 9.8Z", C.glass) + rect(1.0, 10.6, 1.0, 1.0, "#c8102e", 0, 'rx="0.2"'),
-    extra: () => dome(26.0, 50.0, roof, 15.83) });
+    extra: () => dome(18.9, 50.4, roof, 15.83) });
 };
 // Budd RDC (VIA's Sudbury-White River cars): 85 ft, 14 ft 7 in over the roof
 // equipment, fluted stainless, a diesel engine under each end driving the
 // inner axle of its truck; roof radiators and exhausts. VIA removed one cab
-// from each car (the end is plated over) and added a yellow sill stripe.
+// from each car (the end is plated over) and added a yellow sill stripe;
+// they carry the blue letterboard stripe too.
 export const rdc = (c) => bilevel({ ...c, cabL: true }, { ...BUDD, roof: 13.5, badge: false, // VIA's logo is on the ends
   paint: (c, g) => buddPaint(c, g) + rect(0, 4.1, g.L, 0.4, "#f5c400"),
   doors: [buddDoor(1.6), buddDoor(80.8)], cabLen: 0,
@@ -1371,21 +1452,23 @@ export const ncdotCoach = (c) => bilevel(c, { ...BUDD, doors: [buddDoor(1.3), bu
 // ===================== VIA Rail's Renaissance cars =====================
 // Built in Britain for Channel Tunnel night trains (Nightstar), about 75 ft,
 // lower and narrower than North American cars, with a rounded roof and
-// plug doors at each end. VIA (the Ocean): navy, a teal window band over a
-// thin yellow line.
-const REN = { navy: "#1e3466", teal: "#3fa9b5", yellow: "#f5c400" };
+// plug doors at each end. VIA (the Ocean): teal from the windows up to a
+// navy roof, a yellow line under the windows, navy below it.
+const REN = { navy: "#1e3466", teal: "#2ea3ad", yellow: "#f5c400" };
 function renaissance(c, { rows }) {
   return coachCar(c, {
     roof: 12.6, sill: 3.8, endR: 1.4, eave: 11.7, end: 0.5,
-    base: REN.navy, roofBand: "#2c3f6e",
-    stripes: [[6.6, 3.1, REN.teal], [6.3, 0.25, REN.yellow]],
+    base: REN.navy, roofBand: "#1c2c58",
+    stripes: [[6.6, 5.1, REN.teal], [6.2, 0.4, REN.yellow]],
     rows, doors: [{ x: 1.1, w: 2.3, h: 7.0 }, { x: c.L - 3.4, w: 2.3, h: 7.0 }],
     trucks: { centers: 52, wb: 8.4, d: 33 }, diaphragm: [4.25, 11.2],
     badge: { x: 7.6, y: 10.8, h: 1.0, dark: true },
   });
 }
-export const renaissanceCoach = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.0, w: 3.0, h: 2.4, pitch: 3.7, r: 0.35 }] });
-export const renaissanceSleeper = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.4, w: 1.8, h: 1.8, pitch: 3.2, r: 0.3 }] });
+// Coach: a big window for every two rows of seats. Sleeper: one window to
+// each compartment.
+export const renaissanceCoach = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.0, w: 4.6, h: 2.6, pitch: 6.6, r: 0.4 }] });
+export const renaissanceSleeper = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.3, w: 3.0, h: 2.2, pitch: 6.6, r: 0.35 }] });
 export const renaissanceDiner = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 6.9, w: 4.4, h: 2.6, pitch: 5.4, r: 0.4 }] });
 
 // ===================== Acela =====================
@@ -1708,7 +1791,8 @@ export const bl36 = (c) => cabUnit(c, {
 function f40(c, { mbta = false } = {}) {
   const roof = 15.62, sill = 4.65, hood = 15.05;
   return cabUnit(c, {
-    badge: { x: 48, y: 8.75, h: 2.0, skip: ["mbta"] },                // VIA: toward the rear
+    // VIA: a big logo at the rear end of the silver.
+    badge: (c) => (c.agency === "via" ? { x: 51.3, y: 8.45, h: 3.0 } : { x: 48, y: 8.75, h: 2.0, skip: ["mbta"] }),
     roof: hood, sill, rearR: 0.9,
     nose: [[2.45, sill], [2.45, 8.3], ["q", 2.5, 8.85, 3.1, 8.95], [6.0, 9.45], [6.3, 9.75], [7.55, 14.75], ["q", 7.75, roof, 8.7, roof], [13.6, roof], [13.75, hood]],
     glass: [[[6.55, 10.35], [7.45, 14.2], [8.0, 14.2], [8.0, 10.35]]],
@@ -1723,14 +1807,18 @@ function f40(c, { mbta = false } = {}) {
       const L = sp.L;
       if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, cabEnd: 13.6, sweep: [16.5, 24.5], tail: null, T: 32 });
       if (c.agency === "via") {
-        // VIA (current scheme): a blue-teal cab, light gray hood over a blue
-        // lower body, yellow and orange swooshes sweeping up the hood.
-        let v = rect(0, 0, L, sp.roof + 1, "#b9bec4") + rect(0, 0, L, 8.2, "#24497a") + rect(0, 0, 13.9, sp.roof + 1, "#2b7f8f");
-        for (let k = 0; k < 5; k++) {
-          const x = 24 + k * 1.1;
-          v += path(poly([[x, 8.2], [x + 0.55, 8.2], [x + 9.5, 13.0], [x + 8.95, 13.0]]), k % 2 ? "#f08a1c" : "#f5c400");
+        // VIA: a teal cab and upper body under a dark top, a silver lower
+        // body sweeping down to the sill under the cab, yellow speed lines
+        // fanning forward along it (lower ones longer and thicker), a
+        // yellow sill stripe.
+        const gold = "#f0a51c";
+        let v = rect(0, 0, L, sp.roof + 1, "#1f6f7a") + rect(7.0, 14.2, L, 2, "#26353b");
+        v += path(`M${L} 0L${L} 11.15L20 11.15C14 11.1 8 8.6 4.1 5.0L4.1 0Z`, "#a7aeb4");
+        for (const [x0, x1, y, h] of [[25.4, L, 10.75, 0.15], [19.5, 36.3, 10.3, 0.2], [15.3, 30.8, 9.7, 0.3], [12.1, 25.0, 9.0, 0.4],
+          [9.5, 23.0, 8.1, 0.5], [8.3, 20.0, 7.3, 0.55], [7.5, 17.9, 6.3, 0.6], [7.0, 16.3, 5.5, 0.4]]) {
+          v += path(poly([[x0, y + h / 2], [x0 + 1.2, y], [x1, y], [x1, y + h], [x0 + 1.2, y + h]]), gold);
         }
-        return v + rect(0, 4.65, L, 0.3, "#f5c400");
+        return v + rect(0, 4.65, L, 0.3, gold);
       }
       return genericPaint(c, sp);
     },
@@ -2009,7 +2097,7 @@ export const MODELS = {
   gtwPower: M(gtwPower, 16.4),
   flirtCar: M(flirtCar, 71, true),
   flirtPower: M(flirtPower, 21),
-  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? c.index % 5 : "")),
+  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? c.index % BRIGHT.length : "")),
   ventureCab: M(ventureCab, 85, true),
   buddCoach: M(buddCoach, 85),
   buddSleeper: M(buddSleeper, 85),
