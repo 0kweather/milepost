@@ -1,5 +1,5 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
-import { loadStations, trainsDue, mbtaPredictions, meters } from "./stations.js?v=dev";
+import { loadStations, trainsDue, mbtaPredictions, meters, norm } from "./stations.js?v=dev";
 import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices } from "./notices.js?v=dev";
@@ -46,6 +46,11 @@ const state = {
   // Mark trains late when GPS shows a delay their railroad hasn't reported
   // (js/delays.js).
   inferDelays: store.get("tt-infer", true),
+  // Point trains whose feed has no heading toward their next stop.
+  inferHeading: store.get("tt-infer-heading", true),
+  // Times shown in: "" the viewer's own zone, "station" each stop's local
+  // time, or an IANA zone.
+  timeZone: store.get("tt-tz", ""),
   // Miles or kilometers. The default follows the browser's language: miles in
   // the few countries that still use them, kilometers everywhere else.
   units: store.get("tt-units", /-(US|GB|LR|MM)\b/i.test(navigator.language || "en-US") ? "mi" : "km"),
@@ -60,6 +65,7 @@ const state = {
   rail: null,            // RailIndex (routing and snapping; uses every track)
   railGeo: null,         // rail.geojson as loaded; drawn filtered by railCollection()
   stopPos: new Map(),    // station member key -> { lat, lon }
+  stopByName: new Map(), // "agency:normalized name" -> { lat, lon }
   follow: false,
   query: "",
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
@@ -693,7 +699,7 @@ function targetOf(t) {
 // Snapping depends only on the reported position, so cache it per train.
 const snapCache = new Map(); // id -> { lat, lon, result }
 function snapped(t) {
-  const towards = t.bearing == null ? headingTarget(t) : null;
+  const towards = state.inferHeading && t.bearing == null ? headingTarget(t) : null;
   const c = snapCache.get(t.id);
   if (c && c.lat === t.lat && c.lon === t.lon && c.towards?.lat === towards?.lat && c.towards?.lon === towards?.lon) return c.result;
   const result = snapToTrack(t, state.rail, towards);
@@ -703,10 +709,17 @@ function snapped(t) {
 
 // Where a train is headed next, for pointing it when its feed gives no
 // heading: its next stop, or the one after if it's standing at the next.
+// Feeds that only name the next stop and the destination (the MBTA's): that
+// stop, or the destination once the train is standing at it.
 function headingTarget(t) {
   for (const s of t.stops || []) {
     if (s.status === "past") continue;
     const p = state.stopPos.get(s.key);
+    if (p && meters(p, t) > 400) return p;
+  }
+  if (t.stops?.length) return null;
+  for (const name of [t.nextStop, t.destination]) {
+    const p = name && state.stopByName.get(`${t.agency}:${norm(name)}`);
     if (p && meters(p, t) > 400) return p;
   }
   return null;
@@ -875,7 +888,12 @@ async function start() {
           redrawStations();
         })
         .catch(() => {});
-      for (const st of stations.values()) for (const m of st.members) state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
+      for (const st of stations.values()) {
+        for (const m of st.members) {
+          state.stopPos.set(m.key, { lat: m.lat, lon: m.lon });
+          state.stopByName.set(`${m.agency}:${m.norm}`, { lat: m.lat, lon: m.lon });
+        }
+      }
       snapStations();
       applyInference();
       computePositions();
@@ -1075,12 +1093,15 @@ function renderResults() {
 
 // ---------- Rendering: train detail ----------
 
+// A time in the zone chosen in Settings (tz: the stop's own zone, used when
+// that's the choice).
 function fmtTime(iso, tz) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(+d)) return "";
+  const zone = state.timeZone === "station" ? tz : state.timeZone;
   try {
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz || undefined });
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: zone || undefined });
   } catch {
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
@@ -1939,6 +1960,37 @@ function setShowStations(on) {
 on("stations-toggle", "change", (e) => setShowStations(e.target.checked));
 
 
+on("heading-toggle", "change", (e) => {
+  state.inferHeading = e.target.checked;
+  store.set("tt-infer-heading", state.inferHeading);
+  computePositions();
+  animateTo();
+  renderAll();
+});
+
+// Time zones to show times in: the viewer's own (the default), each stop's
+// local time, or one of the zones the railroads run in.
+const TIME_ZONE_CHOICES = [
+  ["station", "Each station's local time"],
+  ["America/St_Johns", "Newfoundland"], ["America/Halifax", "Atlantic"], ["America/New_York", "Eastern"],
+  ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona"],
+  ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"], ["UTC", "UTC"],
+];
+function initTimeZones() {
+  const select = $("tz-choice");
+  if (!select) return;
+  const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const opts = [["", `Your time zone${own ? ` (${own.split("/").pop().replace(/_/g, " ")})` : ""}`], ...TIME_ZONE_CHOICES];
+  select.innerHTML = opts.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join("");
+  if (!opts.some(([v]) => v === state.timeZone)) state.timeZone = "";
+  select.value = state.timeZone;
+}
+on("tz-choice", "change", (e) => {
+  state.timeZone = e.target.value;
+  store.set("tt-tz", state.timeZone);
+  renderAll();
+});
+
 on("infer-toggle", "change", (e) => {
   state.inferDelays = e.target.checked;
   store.set("tt-infer", state.inferDelays);
@@ -1971,6 +2023,8 @@ applyTheme();
 applyUnits();
 setChecked("stations-toggle", state.showStations);
 setChecked("infer-toggle", state.inferDelays);
+setChecked("heading-toggle", state.inferHeading);
+initTimeZones();
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {

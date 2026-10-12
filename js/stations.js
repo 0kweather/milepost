@@ -17,7 +17,7 @@ const PRIORITY = Object.keys(AGENCIES);
 // use one namespace.
 export const stopKey = (agency, id) => `${INTERCITY.has(agency) ? "ic" : agency}:${id}`;
 
-const norm = (s) => String(s || "").toLowerCase().replace(/\b(station|sta|st|street|ave|avenue)\b/g, "").replace(/[^a-z0-9]/g, "");
+export const norm = (s) => String(s || "").toLowerCase().replace(/\b(station|sta|st|street|ave|avenue)\b/g, "").replace(/[^a-z0-9]/g, "");
 
 function meters(a, b) {
   const R = 6371000, toRad = (d) => (d * Math.PI) / 180;

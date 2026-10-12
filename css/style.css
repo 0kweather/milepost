@@ -367,6 +367,18 @@ a { color: var(--accent); }
 .menu .segmented { margin: var(--s2) var(--s2) var(--s1); }
 .segmented.two { grid-template-columns: repeat(2, 1fr); }
 .menu .toggle { margin: 2px 0; }
+.menu-select {
+  display: block;
+  width: calc(100% - 2 * var(--s2));
+  margin: var(--s2) var(--s2) var(--s1);
+  padding: 7px var(--s3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
 
 /* ---------- Toggle ---------- */
 
