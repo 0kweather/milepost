@@ -5,7 +5,7 @@
 
 import {
   C, lines, slats, rect, circle, path, line, poly, win, door, windowRow, truck, pantograph, coupledEnd,
-  bodyOutline, stripes, flutes, underframe, lamp,
+  bodyOutline, stripes, flutes, underframe,
 } from "./carart.js?v=dev";
 
 let clipSeq = 0;
@@ -16,8 +16,6 @@ function clipped(outline, inner) {
 }
 const outlineOf = (d, px = 0.8) => path(d, "none", px);
 
-// Coupler and draft gear sticking out ahead of a pilot or end sill.
-const couplerHead = (x, dir = -1) => rect(dir < 0 ? x - 1.1 : x, 2.45, 1.1, 0.8, "currentColor", 0, 'rx="0.15"');
 
 // The ends of a passenger car: diaphragm/coupler between cars; a plain end
 // sill and coupler at the end of the train.
@@ -38,6 +36,14 @@ const married = (draw) => (c) => {
   const m = { ...c, cabL: true, cabR: false, lead: false, mate: true, coupledL: c.coupledR, coupledR: c.coupledL };
   return `<g transform="matrix(-1 0 0 1 ${c.L} 0)">${draw(m)}</g>`;
 };
+
+// A locomotive's pilot (plow) under its front end. fx: the front-most point of
+// the body, which the plow sits flush with; it rakes back toward the rail.
+// end = L draws the one at the far end of a double-ended locomotive.
+function pilot(fx, sill, end = null) {
+  const X = (v) => (end == null ? fx + v : end - fx - v);
+  return path(poly([[X(0), sill + 0.05], [X(3.6), sill + 0.05], [X(3.1), 3.0], [X(2.5), 0.55], [X(0.8), 0.55], [X(0), 2.3]]), C.black);
+}
 
 // ===================== Amtrak =====================
 
@@ -71,11 +77,7 @@ export function acs64(c) {
   const bodyColor = amtrak ? AMTRAK.platinum : "#c3c8ce";
   let s = "";
   // Pilots, couplers and underframe.
-  for (const [x, dir] of [[0, 1], [L, -1]]) {
-    const X = (v) => x + dir * v;
-    s += path(poly([[X(0.7), 0.55], [X(4.2), 0.55], [X(3.6), 3.0], [X(2.6), sill + 0.1], [X(1.2), sill + 0.1], [X(0.55), 2.2]]), C.black);
-    s += rect(Math.min(X(0), X(1.2)), 2.45, 1.2, 0.8, "currentColor", 0, 'rx="0.15"');
-  }
+  s += pilot(1.3, sill) + pilot(1.3, sill, L);
   s += rect(22, 2.1, L - 44, sill - 2.1, "currentColor", 0, 'opacity="0.8" rx="0.2"');
   s += rect(26, 1.6, 6, 0.6, "currentColor", 0, 'opacity="0.65"');
   s += truck(L / 2 - 16.25, { wb: 9.2, d: 44, kind: "loco", top: sill }) + truck(L / 2 + 16.25, { wb: 9.2, d: 44, kind: "loco", top: sill });
@@ -106,7 +108,6 @@ export function acs64(c) {
   s += rect(L / 2 - 9, roof, 18, 0.45, C.steelDark, 0.5, 'rx="0.15"');
   s += pantograph(14.5, roof, { up: false }) + pantograph(L - 14.5, roof, { up: true, facing: -1 });
   s += outlineOf(d);
-  if (c.lead) s += lamp(1.55, 6.3) + lamp(1.0, 3.7, 0.26);
   return s;
 }
 
@@ -121,8 +122,8 @@ export function genesis(c, s0 = {}) {
   const amtrak = c.agency === "amtrak" || !c.agency;
   let s = "";
   // Pilot, coupler, fuel tank, trucks.
-  s += path(poly([[0.75, 0.6], [4.6, 0.6], [4.0, 3.0], [2.4, sill + 0.05], [1.2, sill + 0.05], [0.6, 2.3]]), C.black) + couplerHead(1.2);
-  s += rect(L - 2.0, 2.0, 1.0, sill - 2.0, "currentColor", 0, 'opacity="0.85"') + couplerHead(L - 1.0, 1);
+  s += pilot(1.25, sill);
+  s += rect(L - 2.0, 2.0, 1.0, sill - 2.0, "currentColor", 0, 'opacity="0.85"');
   s += path(poly([[17.5, sill], [51.5, sill], [51.5, 2.4], ["q", 51.5, 1.5, 50.6, 1.5], [18.4, 1.5], ["q", 17.5, 1.5, 17.5, 2.4]]), "currentColor", 0, 'opacity="0.82"');
   s += rect(33, 2.9, 2.5, 0.9, C.steelDark, 0, 'opacity="0.8"'); // fuel gauge and filler
   s += truck(L / 2 - 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe }) + truck(L / 2 + 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe });
@@ -147,7 +148,6 @@ export function genesis(c, s0 = {}) {
   s += rect(28, roof, 9, 0.3, C.steelDark, 0.4) + rect(41.5, roof, 1.6, 0.55, "currentColor") + rect(52, roof, 14, 0.25, C.steelDark, 0.4);
   for (const x of [55.5, 62]) s += path(`M${x - 2.4} ${roof + 0.25}Q${x} ${roof + 0.95} ${x + 2.4} ${roof + 0.25}Z`, C.steelDark, 0.4);
   s += outlineOf(d);
-  if (c.lead) s += lamp(2.55, 7.6, 0.4) + lamp(1.05, 3.9, 0.26);
   return s;
 }
 export const p32 = (c) => genesis(c, { shoe: true });
@@ -172,14 +172,12 @@ function amfleet(c, { two = false, cab = false } = {}) {
   const doors = two ? [x1 - 4.4] : [x0 + 1.8, x1 - 4.4];
   for (const x of doors) {
     s += door(x, sill + 0.15, 2.6, 6.55, { glassY: 0.55, glassH: 0.32 });
-    for (let k = 0; k < 3; k++) s += rect(x + 0.2, 1.5 + k * 0.85, 2.2, 0.12, "currentColor"); // trap-door steps
   }
   const gaps = doors.map((x) => [x - 1.2, x + 3.8]);
   if (cab && c.cabL) gaps.push([x0, x0 + 6.5]);
   s += windowRow(x0 + 4.2, x1 - 4.2, winY, two ? 5.6 : 5.3, winH, two ? 6.9 : 6.5, { r: 0.55, skip: gaps });
   if (cab && c.cabL) {
     s += path(poly([[x0 + 0.35, 8.4], [x0 + 1.4, 10.6], [x0 + 3.8, 10.6], [x0 + 3.8, 8.4]]), C.black) + win(x0 + 1.5, 8.6, 2.0, 1.8, 0.3);
-    if (c.lead) s += lamp(x0 + 0.5, 6.4) + lamp(x0 + 0.5, 4.6, 0.26);
   }
   s += outlineOf(d) + carEnds(c);
   return s;
@@ -196,7 +194,7 @@ export const metrolinerCab = (c) => amfleet(c, { cab: true });
 //   flutes: [[y0, y1], ...] corrugated bands;
 //   stripes: [[y, h, color], ...];
 //   rows: [{ a, b, y, w, h, pitch, r }] window rows (a, b: ft along the car);
-//   doors: [{ x, w, y, h, leaves, steps }] (x: ft along the car);
+//   doors: [{ x, w, y, h, leaves }] (x: ft along the car);
 //   trucks: { centers, wb, d, kind }, under: equipment between the trucks;
 //   cab(c, spec): draws a driving cab at the left end.
 export function coachCar(c, spec) {
@@ -219,7 +217,6 @@ export function coachCar(c, spec) {
   const doors = spec.doors || [];
   for (const dr of doors) {
     s += door(dr.x, dr.y ?? sill + 0.15, dr.w, dr.h ?? 6.5, { leaves: dr.leaves ?? 1, glassY: dr.glassY ?? 0.55, glassH: dr.glassH ?? 0.3, glass: dr.glass ?? true, grabs: dr.grabs ?? true });
-    if (dr.steps) for (let k = 0; k < 3; k++) s += rect(dr.x + 0.2, 1.5 + k * 0.85, dr.w - 0.4, 0.12, "currentColor");
   }
   const skip = doors.map((dr) => [dr.x - 0.6, dr.x + dr.w + 0.6]);
   if (c.cabL && spec.cab) skip.push([x0, x0 + (spec.cabLen ?? 7)]);
@@ -255,11 +252,11 @@ export function charger(c, { phase7 = false } = {}) {
   let s = "";
   if (cone) {
     // Streamlined nose cone over the coupler, down to just above the rail.
-    s += path(poly([[2.3, sill + 0.05], [1.55, 5.0], [0.55, 3.4], ["q", 0.2, 2.2, 0.9, 0.9], [4.4, 0.75], [4.0, sill + 0.05]]), "#f2c500", 0.6);
+    s += path(poly([[2.3, sill + 0.05], [1.55, 5.0], [1.55, 3.4], ["q", 1.55, 1.0, 2.6, 0.85], [4.8, 0.75], [4.4, sill + 0.05]]), "#f2c500", 0.6);
   } else {
-    s += path(poly([[0.7, 0.55], [4.6, 0.55], [4.1, 3.0], [2.6, sill + 0.05], [1.3, sill + 0.05], [0.6, 2.3]]), C.black) + couplerHead(1.2);
+    s += pilot(1.55, sill);
   }
-  s += rect(L - 2.1, 2.0, 1.1, sill - 2.0, "currentColor", 0, 'opacity="0.85"') + couplerHead(L - 1.0, 1);
+  s += rect(L - 2.1, 2.0, 1.1, sill - 2.0, "currentColor", 0, 'opacity="0.85"');
   s += path(poly([[19, sill], [52.5, sill], [52.5, 2.3], ["q", 52.5, 1.4, 51.6, 1.4], [19.9, 1.4], ["q", 19, 1.4, 19, 2.3]]), "currentColor", 0, 'opacity="0.82"');
   s += truck(L / 2 - 20.4, { wb: 9.8, d: 44, kind: "loco", top: sill, shoe }) + truck(L / 2 + 20.4, { wb: 9.8, d: 44, kind: "loco", top: sill, shoe });
   let liv = rect(0, 0, L, roof + 1, base);
@@ -323,7 +320,6 @@ export function charger(c, { phase7 = false } = {}) {
   }
   s += rect(47.5, roof, 20.5, 0.3, C.steelDark, 0.4) + rect(38, roof, 2, 0.5, "currentColor");
   s += outlineOf(d);
-  if (c.lead) s += lamp(1.95, 7.6, 0.38) + (cone ? "" : lamp(1.0, 3.9, 0.26));
   return s;
 }
 export const alc42 = (c) => charger(c, { phase7: true });
@@ -368,7 +364,7 @@ export const superlinerLounge = (c) => coachCar(c, { ...superBase,
 // white and blue stripes) with a red sill stripe.
 const P3 = (y) => [[y + 0.6, 0.3, AMTRAK.red], [y + 0.3, 0.3, "#ffffff"], [y, 0.3, AMTRAK.blue]];
 const viewBase = { roof: 14.0, sill: 4.1, endR: 1.2, eave: 13.0, trucks: { centers: 59.5, wb: 8.5, d: 36 } };
-const viewDoor = (x) => ({ x, w: 2.7, h: 6.7, steps: true, glassY: 0.6, glassH: 0.28 });
+const viewDoor = (x) => ({ x, w: 2.7, h: 6.7, glassY: 0.6, glassH: 0.28 });
 export const viewlinerSleeper = (c) => coachCar(c, { ...viewBase,
   stripes: [[6.7, 2.8, AMTRAK.blue], [4.3, 0.2, AMTRAK.red]],
   rows: [{ a: 2.5, b: 77.5, y: 7.1, w: 3.2, h: 2.0, pitch: 4.15, r: 0.35 }, { a: 2.5, b: 77.5, y: 10.75, w: 2.0, h: 1.1, pitch: 4.15, r: 0.3 }],
@@ -393,7 +389,7 @@ export const viewlinerBaggage = (c) => coachCar(c, { ...viewBase,
 //   trucks: { centers, wb, d }; base: body color; paint(c, g): livery;
 //   rows: [{ xs, y, w, h, r }] windows at explicit positions (ft from the
 //     left coupler face; xs may be [start, pitch, count]);
-//   doors: [{ x, w, y0, y1, leaves, steps, glassY, glassH }];
+//   doors: [{ x, w, y0, y1, leaves, glassY, glassH }];
 //   chamfer: [low, high] Bombardier's octagonal body: lines where the
 //     upper and lower bevels meet the vertical side;
 //   roofItems: [[x, w, h]]; nose: the cab-end profile replacing the left
@@ -450,7 +446,6 @@ export function bilevel(c, spec) {
   s += path(d, spec.base ?? C.steel) + clipped(d, liv);
   for (const dr of spec.doors || []) {
     s += door(dr.x, dr.y0, dr.w, dr.y1 - dr.y0, { leaves: dr.leaves ?? 1, glassY: dr.glassY ?? 0.45, glassH: dr.glassH ?? 0.38, grabs: dr.grabs ?? true });
-    if (dr.steps) for (let k = 0; k < 3; k++) s += rect(dr.x + 0.2, 1.5 + k * ((dr.y0 - 1.5) / 3), dr.w - 0.4, 0.12, "currentColor");
   }
   for (const [x, w, h, y = roof] of spec.roofItems || []) s += rect(x, y - 0.05, w, h, C.steelDark, 0.4, 'rx="0.2"');
   if (spec.extra) s += spec.extra(c, g);
@@ -458,8 +453,6 @@ export function bilevel(c, spec) {
   // A cab at the right end too (double-ended cars): the left cab's details, mirrored.
   if (c.cabR && spec.cab && !spec.nose) s += `<g transform="matrix(-1 0 0 1 ${L} 0)">${spec.cab({ ...c, lead: false }, g)}</g>`;
   s += outlineOf(d) + carEnds(c, { floor: spec.diaphragm?.[0] ?? 4.25, top: spec.diaphragm?.[1] ?? e.h - 1.2 });
-  if (!c.coupledL && !(c.cabL && spec.cab)) s += rect(x0 - 0.3, 2.6, 0.5, 1.4, "currentColor") + couplerHead(x0 - 0.2);
-  if (!c.coupledR) s += rect(x1 - 0.2, 2.6, 0.5, 1.4, "currentColor") + couplerHead(x1 + 0.2, 1);
   return s;
 }
 
@@ -505,9 +498,8 @@ export const bombardierBilevel = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", p
 // two windows, the engineer's side window behind the corner.
 export const bombardierCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint, cabLen: 6,
   cab: (c, { x0 }) => {
-    let s = rect(x0 - 0.05, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
-    if (c.lead) s += lamp(x0 + 0.25, 10.4) + lamp(x0 + 0.25, 3.4, 0.28);
-    return s + rect(x0 - 0.45, 2.7, 0.65, 1.2, "currentColor");
+    let s = rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
+    return s;
   } });
 
 // --- Hyundai Rotem "Guardian" cab car (Metrolink 638-695, Tri-Rail 512-521):
@@ -546,8 +538,7 @@ export const rotemCabCar = (c) => bilevel(c, { ...ROTEM, paint: rotemPaint, cabL
     s += path(poly([[0.9, 3.75], [0.9, 8.0], [5.0, 8.0], [3.6, 3.75]]), metrolink ? "#00a19a" : "#2d62b3");
     s += line(0.9, 8.0, 5.0, 8.0, "#ffffff", 1.2) + line(5.0, 8.0, 9.6, 11.0, "#ffffff", 1.0);
     s += path(poly([[3.6, 11.2], [5.75, 13.75], [6.4, 13.75], [6.4, 11.2]]), C.glass) + path(poly([[6.9, 11.3], [8.9, 11.3], [8.9, 13.6], [7.5, 13.6]]), C.glass);
-    if (c.lead) s += lamp(2.4, 9.4, 0.36) + lamp(0.95, 6.9, 0.3);
-    return s + rect(0.4, 2.7, 0.6, 1.2, "currentColor") + outlineOf(poly([[0.9, 3.7], [0.9, 8.0], [7.6, 15.87], [9.6, 15.87]]));
+    return s + outlineOf(poly([[0.9, 3.7], [0.9, 8.0], [7.6, 15.87], [9.6, 15.87]]));
   } });
 export const rotemCoach = (c) => bilevel(c, { ...ROTEM, paint: rotemPaint });
 
@@ -562,7 +553,7 @@ const MBTA_BL = {
   drop: { a: 17.4, b: 67.9, y: 1.3 }, trucks: { centers: 59.5, wb: 8.5, d: 33 },
   rows: [{ xs: seq(19.2, 3.55, 14), y: 11.0, w: 2.85, h: 2.25, r: 0.35 }, { xs: seq(19.2, 3.55, 14), y: 4.1, w: 2.85, h: 2.2, r: 0.35 },
     { xs: [12.9, 69.9], y: 12.6, w: 2.4, h: 0.8, r: 0.2 }],
-  doors: [{ x: 1.35, w: 2.6, y0: 4.25, y1: 11.6, steps: true, glassY: 0.62, glassH: 0.3 }, { x: 81.38, w: 2.6, y0: 4.25, y1: 11.6, steps: true, glassY: 0.62, glassH: 0.3 }],
+  doors: [{ x: 1.35, w: 2.6, y0: 4.25, y1: 11.6, glassY: 0.62, glassH: 0.3 }, { x: 81.38, w: 2.6, y0: 4.25, y1: 11.6, glassY: 0.62, glassH: 0.3 }],
   roofItems: [[3.5, 9, 0.45, 15.2], [72.8, 9, 0.45, 15.2]], diaphragm: [4.25, 13.6],
 };
 function mbtaBand(c, g) {
@@ -575,8 +566,7 @@ function mbtaBand(c, g) {
   return s;
 }
 const mbtaCabEnd = (c, { x0 }) => {
-  let s = rect(x0 - 0.05, 4.3, 0.4, 10.5, "rgba(0,0,0,0.25)");
-  if (c.lead) s += lamp(x0 + 0.2, 13.9, 0.3) + lamp(x0 + 0.2, 6.6, 0.32) + lamp(x0 + 0.2, 3.6, 0.26);
+  let s = rect(x0, 4.3, 0.4, 10.5, "rgba(0,0,0,0.25)");
   return s;
 };
 export const mbtaBilevel = (c) => bilevel(c, { ...MBTA_BL, paint: mbtaBand });
@@ -593,8 +583,8 @@ const ML = {
   drop: { a: 18.6, b: 66.4, y: 1.3 }, trucks: { centers: 60.5, wb: 8.5, d: 36 },
   rows: [{ xs: seq(18.7, 2.75, 18), y: 10.65, w: 2.25, h: 2.1, r: 0.25 }, { xs: seq(18.7, 2.75, 18), y: 3.3, w: 2.25, h: 2.0, r: 0.25 },
     { xs: [7.0, 75.8], y: 7.4, w: 2.2, h: 1.9, r: 0.25 }],
-  doors: [{ x: 1.3, w: 2.75, y0: 4.25, y1: 10.9, steps: true, glassY: 0.55, glassH: 0.32 }, { x: 11.8, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 },
-    { x: 70.45, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }, { x: 80.95, w: 2.75, y0: 4.25, y1: 10.9, steps: true, glassY: 0.55, glassH: 0.32 }],
+  doors: [{ x: 1.3, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }, { x: 11.8, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 },
+    { x: 70.45, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }, { x: 80.95, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }],
   roofItems: [[4.5, 5.5, 0.4, 13.5], [75, 5.5, 0.4, 13.5]], diaphragm: [4.25, 12.5],
 };
 function njtPaint(c, g) {
@@ -608,9 +598,8 @@ function njtPaint(c, g) {
 export const multilevel = (c) => bilevel(c, { ...ML, paint: njtPaint });
 export const multilevelCab = (c) => bilevel(c, { ...ML, paint: njtPaint,
   cab: (c, { x0 }) => {
-    let s = rect(x0 - 0.05, 4.3, 0.4, 9, "rgba(0,0,0,0.25)");
-    if (c.lead) s += lamp(x0 + 0.2, 12.7, 0.3) + lamp(x0 + 0.2, 4.9, 0.32);
-    return s + rect(x0 - 0.45, 2.7, 0.65, 1.2, "currentColor");
+    let s = rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)");
+    return s;
   } });
 
 // --- Gallery cars (Metra: Nippon Sharyo 2002-05 and Amerail 1994-96 design):
@@ -635,9 +624,8 @@ function galleryPaint(c, g) {
 // Metra cab ends: red and white chevrons on the end panels around the door.
 const galleryCab = (c, { x0 }) => {
   let s = "";
-  for (let k = 0; k < 7; k++) s += rect(x0 - 0.05, 2.0 + k * 1.9, 0.42, 0.95, k % 2 ? "#ffffff" : "#c8102e");
+  for (let k = 0; k < 6; k++) s += rect(x0, 3.8 + k * 1.9, 0.42, 0.95, k % 2 ? "#ffffff" : "#c8102e");
   s += win(x0 + 0.8, 11.2, 2.6, 1.9, 0.3);
-  if (c.lead) s += lamp(x0 + 0.2, 14.6, 0.3) + lamp(x0 + 0.2, 3.3, 0.28);
   return s;
 };
 export const gallery = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint });
@@ -672,9 +660,8 @@ function c3Paint(c, g) {
 export const c3 = (c) => bilevel(c, { ...C3, paint: c3Paint });
 export const c3Cab = (c) => bilevel(c, { ...C3, paint: c3Paint,
   cab: (c, { x0 }) => {
-    let s = rect(x0 - 0.05, 4.3, 0.42, 3.2, LIRR.yellow) + rect(x0 - 0.05, 7.5, 0.42, 1.0, "#1c3f94");
-    if (c.lead) s += lamp(x0 + 0.2, 13.0, 0.3) + lamp(x0 + 0.2, 4.9, 0.3);
-    return s + rect(x0 - 0.45, 2.7, 0.65, 1.2, "currentColor");
+    let s = rect(x0, 4.3, 0.42, 3.2, LIRR.yellow) + rect(x0, 7.5, 0.42, 1.0, "#1c3f94");
+    return s;
   } });
 
 // --- California Car (Morrison-Knudsen 1994-97) and Surfliner (Alstom
@@ -703,9 +690,8 @@ function surfPaint(c, g) {
   return rect(0, 0, L, 17, "#c9cdd2") + rect(0, 8.7, L, 8.5, "#1d3f8f") + rect(0, 8.45, L, 0.16, "#ffffff") + rect(0, 4.15, L, 0.14, "#ffffff") + rect(0, 15.0, L, 2, "#2a3f6f");
 }
 const calCab = (c, { x0 }) => {
-  let s = rect(x0 - 0.05, 9.9, 0.42, 3.6, C.black) + win(x0 + 0.8, 10.6, 2.8, 2.6, 0.35);
-  if (c.lead) s += lamp(x0 + 0.2, 14.4, 0.32) + lamp(x0 + 0.2, 7.6, 0.32) + lamp(x0 + 0.2, 4.6, 0.28);
-  return s + rect(x0 - 0.45, 2.7, 0.65, 1.2, "currentColor");
+  let s = rect(x0, 9.9, 0.42, 3.6, C.black) + win(x0 + 0.8, 10.6, 2.8, 2.6, 0.35);
+  return s;
 };
 export const californiaCar = (c) => bilevel(c, { ...CALCAR, paint: calPaint });
 export const californiaCab = (c) => bilevel(c, { ...CALCAR, paint: calPaint, cab: calCab, cabLen: 5 });
@@ -723,7 +709,7 @@ export const surflinerCab = (c) => bilevel(c, { ...CALCAR, paint: surfPaint, cab
 const COMET = {
   roof: 13.0, sill: 3.75, cornerR: 1.0, trucks: { centers: 59.5, wb: 8.5, d: 36 },
   rows: [{ xs: seq(6.3, 3.62, 20), y: 7.0, w: 2.75, h: 2.5, r: 0.3 }],
-  doors: [{ x: 1.4, w: 2.6, y0: 3.95, y1: 10.95, steps: true, glassY: 0.55, glassH: 0.3 }, { x: 81.0, w: 2.6, y0: 3.95, y1: 10.95, steps: true, glassY: 0.55, glassH: 0.3 }],
+  doors: [{ x: 1.4, w: 2.6, y0: 3.95, y1: 10.95, glassY: 0.55, glassH: 0.3 }, { x: 81.0, w: 2.6, y0: 3.95, y1: 10.95, glassY: 0.55, glassH: 0.3 }],
   roofItems: [[34, 17, 0.45]], diaphragm: [4.25, 11.8],
 };
 const cometCenter = { x: 40.4, w: 4.2, y0: 3.95, y1: 10.95, leaves: 2, glassY: 0.55, glassH: 0.3 };
@@ -741,9 +727,8 @@ function cometPaint(band, { stripe = null, pin = null } = {}) {
 }
 // Cab end: black frame around the end door and windows, lights.
 const cometCab = (c, { x0 }) => {
-  let s = rect(x0 - 0.05, 6.8, 0.42, 4.6, C.black);
-  if (c.lead) s += lamp(x0 + 0.2, 12.1, 0.3) + lamp(x0 + 0.2, 5.3, 0.3);
-  return s + rect(x0 - 0.45, 2.7, 0.65, 1.2, "currentColor");
+  let s = rect(x0, 6.8, 0.42, 4.6, C.black);
+  return s;
 };
 const PAINT = {
   mbta: cometPaint(MBTA.purple, { stripe: [9.85, 0.16, MBTA.yellow], pin: [6.55, 0.16, MBTA.yellow] }),
@@ -766,12 +751,11 @@ export const shorelinerCab = (c) => single(c.agency === "ctdot" ? PAINT.ctdot : 
 
 // A flat EMU cab end seen from the side: the front's paint on the corner post,
 // the engineer's side window, lights on the lead car.
-const emuEnd = (front, { win: w = [1.45, 7.0, 1.35, 2.9], lights = [11.6, 5.6] } = {}) => (c, { x0 }) => {
+const emuEnd = (front, { win: w = [1.45, 7.0, 1.35, 2.9] } = {}) => (c, { x0 }) => {
   let s = "";
-  for (const [y, h, fill] of front) s += rect(x0 - 0.05, y, 0.42, h, fill);
+  for (const [y, h, fill] of front) s += rect(x0, y, 0.42, h, fill);
   s += win(x0 + w[0], w[1], w[2], w[3], 0.25);
-  if (c.lead) s += lamp(x0 + 0.2, lights[0], 0.3) + lamp(x0 + 0.2, lights[1], 0.32);
-  return s + rect(x0 - 0.45, 2.75, 0.65, 1.1, "currentColor");
+  return s;
 };
 
 // --- Bombardier M7 (LIRR 7001-7836) and M7A (Metro-North): 85 ft, 12 ft
@@ -844,7 +828,7 @@ export const m3 = married((c) => bilevel(c, {
 export const silverliner4 = married((c) => bilevel(c, {
   roof: 13.5, sill: 3.6, cornerR: 0.8, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
   rows: [{ xs: [6.8, 12.8, 18.8, 24.8, 30.8, 41.0, 51.2, 57.2, 63.2, 69.2, 75.2], y: 7.4, w: 3.0, h: 2.3, r: 0.3 }],
-  doors: [{ x: 1.3, w: 2.6, y0: 4.0, y1: 11.1, steps: true, glassY: 0.55, glassH: 0.3 }, { x: 81.1, w: 2.6, y0: 4.0, y1: 11.1, steps: true, glassY: 0.55, glassH: 0.3 }],
+  doors: [{ x: 1.3, w: 2.6, y0: 4.0, y1: 11.1, glassY: 0.55, glassH: 0.3 }, { x: 81.1, w: 2.6, y0: 4.0, y1: 11.1, glassY: 0.55, glassH: 0.3 }],
   diaphragm: [4.25, 11.8], cabLen: 4,
   paint: (c, g) => {
     const L = g.L;
@@ -873,7 +857,7 @@ export const silverliner5 = married((c) => {
   const rtd = c.agency === "rtd";
   const doors = rtd
     ? [{ x: 18.4, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.45, glassH: 0.4 }, { x: 62.1, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.45, glassH: 0.4 }]
-    : [{ x: 18.4, w: 4.6, y0: 4.0, y1: 11.0, leaves: 2, steps: true, glassY: 0.45, glassH: 0.4 }, { x: 63.0, w: 2.7, y0: 4.0, y1: 11.0, steps: true, glassY: 0.45, glassH: 0.4 }];
+    : [{ x: 18.4, w: 4.6, y0: 4.0, y1: 11.0, leaves: 2, glassY: 0.45, glassH: 0.4 }, { x: 63.0, w: 2.7, y0: 4.0, y1: 11.0, glassY: 0.45, glassH: 0.4 }];
   const xs = rtd ? [5.0, 10.2, 24.4, 29.7, 35.0, 40.3, 45.6, 50.9, 56.2, 68.4, 73.7, 79.0] : [4.8, 9.6, 14.0, 24.4, 29.8, 35.2, 40.6, 46.0, 51.4, 56.8, 67.4, 72.3, 77.2];
   return bilevel(c, {
     roof: 12.6, sill: 3.6, cornerR: 1.3, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
@@ -929,8 +913,7 @@ export const kissCab = (c) => {
     rows: kissRows(20.6, L - 15.0), doors: kissDoors(L, 6.0, L - 0.6), cabLen: 6,
     cab: (c) => {
       let s = path(poly([[2.15, 9.9], [5.3, 15.0], [6.6, 15.0], [6.6, 10.6], [3.2, 9.9]]), C.glass) + win(7.2, 11.3, 2.4, 2.1, 0.3);
-      if (c.lead) s += lamp(1.1, 6.7, 0.36) + lamp(1.35, 8.1, 0.3);
-      return s + rect(0.3, 2.75, 0.6, 1.1, "currentColor");
+      return s;
     } });
 };
 
@@ -953,8 +936,7 @@ export const smartDmu = married((c) => bilevel(c, {
   },
   cab: (c) => {
     let s = path(poly([[1.9, 8.9], [4.4, 12.9], [5.6, 12.9], [5.6, 8.9]]), C.glass);
-    if (c.lead) s += lamp(5.4, 13.9, 0.3) + lamp(1.05, 6.3, 0.3);
-    return s + rect(0.4, 2.8, 0.6, 1.1, "currentColor");
+    return s;
   },
 }));
 
@@ -972,7 +954,6 @@ export const gtwCar = (c) => bilevel({ ...c, cabL: true }, {
   paint: (c, g) => rect(0, 0, g.L, 17, "#f1f2f4") + rect(0, 0, g.L, 2.9, "#1d3f8f") + rect(0, 2.9, g.L, 0.4, "#c8102e") + rect(0, 11.6, g.L, 2, "#1d3f8f"),
   cab: (c) => {
     let s = path(poly([[1.7, 7.9], [3.4, 11.2], [4.5, 11.2], [4.5, 7.9]]), C.glass);
-    if (c.lead) s += lamp(1.05, 4.6, 0.32) + lamp(4.6, 12.2, 0.28);
     return s;
   },
   extra: () => truck(9.2, { wb: 6.9, d: 30, top: 2.4 }),
@@ -1044,8 +1025,7 @@ export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, pai
   doors: [ventureDoor(13.2), ventureDoor(80.9)],
   cab: (c) => {
     let s = path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black) + path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
-    if (c.lead) s += lamp(1.95, 7.6, 0.38) + lamp(1.0, 3.9, 0.26);
-    return s + path(poly([[0.7, 0.9], [4.0, 0.9], [3.6, 3.0], [2.5, 3.95], [1.3, 3.95], [0.6, 2.3]]), C.black);
+    return s + pilot(1.55, 3.9);
   } });
 
 // ===================== VIA Rail's Budd stainless fleet =====================
@@ -1059,7 +1039,7 @@ function buddPaint(c, g) {
   return rect(0, 0, L, 17, "#d5d9de") + flutes(0, L, 4.1, 6.6, 0.26) + rect(0, 11.9, L, 2, "#c3c9d0") + flutes(0, L, 12.0, 13.4, 0.3) +
     line(0, 10.55, L, 10.55, "rgba(0,0,0,0.18)", 0.5) + line(0, 6.65, L, 6.65, "rgba(0,0,0,0.18)", 0.5);
 }
-const buddDoor = (x) => ({ x, w: 2.6, y0: 4.0, y1: 11.0, steps: true, glassY: 0.55, glassH: 0.3 });
+const buddDoor = (x) => ({ x, w: 2.6, y0: 4.0, y1: 11.0, glassY: 0.55, glassH: 0.3 });
 export const buddCoach = (c) => bilevel(c, { ...BUDD, paint: buddPaint, doors: [buddDoor(1.3), buddDoor(81.1)],
   rows: [{ xs: seq(7.0, 5.12, 14), y: 7.15, w: 4.2, h: 2.75, r: 0.35 }] });
 // Manor sleeper: big section windows (with small upper-berth windows above)
@@ -1109,7 +1089,7 @@ export const rdc = (c) => bilevel({ ...c, cabL: true }, { ...BUDD, roof: 13.5,
   doors: [buddDoor(1.6), buddDoor(80.8)], cabLen: 0,
   rows: [{ xs: seq(8.0, 4.55, 15), y: 7.3, w: 3.4, h: 2.5, r: 0.35 }],
   roofItems: [[6.5, 13, 0.8], [65.5, 13, 0.8]],
-  cab: (c) => (c.lead ? lamp(0.85, 12.2, 0.3) : "") + rect(0.65, 7.2, 0.35, 2.4, C.glass),
+  cab: (c) => rect(0.65, 7.2, 0.35, 2.4, C.glass),
   extra: (c, g) => rect(20, 2.0, 12, 1.8, "currentColor", 0, 'opacity="0.8" rx="0.2"') + rect(53, 2.0, 12, 1.8, "currentColor", 0, 'opacity="0.8" rx="0.2"') +
     rect(12.5, 14.25, 0.5, 0.9, "currentColor") + rect(72.0, 14.25, 0.5, 0.9, "currentColor") });
 
@@ -1148,8 +1128,7 @@ export function acelaPower(c) {
   s += door(10.6, sill + 0.3, 2.1, 7.3, { glassY: 0.62, glassH: 0.25 }) + win(13.8, 9.6, 1.4, 1.8, 0.3);
   s += rect(20, roof - 0.05, 22, 0.55, "#9aa1a9", 0.4) + slats(20, roof - 0.05, 22, 0.55, 0.45, "rgba(0,0,0,0.3)");
   s += pantograph(L - 15, roof + 0.4, { up: true, facing: -1 }).replace(/currentColor/g, "#c8102e");
-  s += outlineOf(d) + coupledEnd(L, 1, { floor: sill, top: 12.8 });
-  if (c.lead) s += lamp(1.4, 6.6, 0.42) + lamp(3.5, 11.4, 0.3);
+  s += outlineOf(d) + carEnds(c, { floor: sill, top: 12.8 });
   return s;
 }
 export function acelaCoach(c) {
@@ -1197,7 +1176,6 @@ export function autorack(c) {
   for (let x = 3.2; x < L - 2; x += 2.6) segs.push([x, sill + 0.3, x, roof - 0.4]);
   liv += lines(segs, "rgba(0,0,0,0.12)", 0.5) + line(0, 11.6, L, 11.6, "rgba(0,0,0,0.25)", 0.8);
   s += path(d, "#c3c8ce") + clipped(d, liv) + outlineOf(d);
-  s += rect(x0 - 0.3, 2.6, 0.5, 1.4, "currentColor") + rect(x1 - 0.2, 2.6, 0.5, 1.4, "currentColor");
   return s;
 }
 
@@ -1210,20 +1188,21 @@ export function autorack(c) {
 //     rearR: rear roof corner radius.
 //   paint(c, sp): livery, clipped to the body. glass: cab glass polygons;
 //     sideWin: cab side windows [[x, y, w, h]].
-//   doors: [[x, w, y0, y1]]; ladders: [[x, w]] steps hung below the body;
+//   doors: [[x, w, y0, y1]]; steps hung below the body;
 //   grilles: [[x, y, w, h, gap]]; panels: [[x, y, w, h]] outlined access doors;
 //   tank: [x0, x1, bottom]; reservoir: [x0, x1]; trucks: { centers, wb, d, shoe };
-//   lights: [[x, y, r]] (lit on the lead unit); roofItems: [[x, w, h]];
+//   roofItems: [[x, w, h]];
 //   fans: [x, ...]; horn: x; extra(c, sp).
 export function cabUnit(c, spec) {
   const { L } = c, { roof, sill } = spec;
   const rearR = spec.rearR ?? 1.2, endX = L - 1.0;
-  const nose = spec.nose, front = nose[0][0];
+  const nose = spec.nose;
   const d = poly([...nose, ...(spec.top || []), [endX - rearR, roof], ["q", endX, roof, endX, roof - rearR], [endX, sill]]);
   let s = "";
   // Pilot and plow, coupler; rear end sill and coupler.
-  s += path(poly(spec.pilot || [[0.7, 0.55], [front + 2.4, 0.55], [front + 2.0, 3.0], [front + 0.45, sill + 0.05], [1.3, sill + 0.05], [0.6, 2.3]]), C.black) + couplerHead(1.2);
-  s += rect(L - 2.1, 2.0, 1.1, sill - 2.0, "currentColor", 0, 'opacity="0.85"') + couplerHead(L - 1.0, 1);
+  const fx = Math.min(...nose.map((p) => (p[0] === "q" ? p[3] : p[0])));
+  s += pilot(fx, sill);
+  s += rect(L - 2.1, 2.0, 1.1, sill - 2.0, "currentColor", 0, 'opacity="0.85"');
   // Fuel tank and main reservoirs between the trucks.
   if (spec.tank) {
     const [t0, t1, tb = 1.4] = spec.tank;
@@ -1236,11 +1215,6 @@ export function cabUnit(c, spec) {
   }
   const tr = spec.trucks;
   for (const k of [-1, 1]) s += truck(L / 2 + (k * tr.centers) / 2, { wb: tr.wb, d: tr.d, kind: "loco", top: sill, shoe: tr.shoe });
-  for (const [x, w] of spec.ladders || []) {
-    const segs = [[x, sill, x, 1.55], [x + w, sill, x + w, 1.55]];
-    for (let y = sill - 0.85; y > 1.4; y -= 0.85) segs.push([x, y, x + w, y]);
-    s += lines(segs, "currentColor", 0.7);
-  }
   let liv = rect(0, 0, L, roof + 1, spec.base ?? C.steel);
   if (spec.paint) liv += spec.paint(c, { ...spec, L });
   for (const g of spec.glass || []) liv += path(poly(g), C.glass) + path(poly(g), "none", 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"`);
@@ -1254,7 +1228,6 @@ export function cabUnit(c, spec) {
   if (spec.horn != null) s += rect(spec.horn, roof - 0.05, 1.1, 0.35, "currentColor") + rect(spec.horn + 0.1, roof + 0.3, 0.25, 0.35, "currentColor") + rect(spec.horn + 0.6, roof + 0.3, 0.25, 0.45, "currentColor");
   if (spec.extra) s += spec.extra(c, { ...spec, L });
   s += outlineOf(d);
-  if (c.lead) for (const [x, y, r] of spec.lights || []) s += lamp(x, y, r);
   return s;
 }
 
@@ -1300,13 +1273,12 @@ export const hsp46 = (c) => cabUnit(c, {
   nose: [[1.95, 4.4], [1.55, 5.3], [1.5, 10.2], [1.75, 10.55], [3.05, 13.85], ["q", 3.4, 15.37, 5.2, 15.37]],
   glass: [[[1.95, 10.75], [3.05, 13.6], [3.6, 13.6], [3.6, 10.75]]],
   sideWin: [[4.6, 10.7, 2.3, 2.5], [7.0, 10.7, 1.5, 2.5]],
-  doors: [[9.6, 2.0, 5.0, 13.4]], ladders: [[2.4, 1.4], [9.75, 1.7]],
+  doors: [[9.6, 2.0, 5.0, 13.4]],
   grilles: [[4.9, 5.0, 3.4, 2.1, 0.3], [15.0, 13.55, 3.6, 1.05, 0.35], [57.5, 8.2, 1.15, 4.6, 0.25], [59.3, 8.2, 1.15, 4.6, 0.25], [64.4, 8.2, 1.15, 4.6, 0.25]],
   panels: [[19.0, 8.0, 3.2, 5.0]],
   tank: [23, 48, 1.5], reservoir: [33.5, 46],
   trucks: { centers: 45, wb: 9.33, d: 40 },
   roofItems: [[46, 1.6, 0.45], [53, 15, 0.3]], fans: [56, 61, 66], horn: 4.2,
-  lights: [[1.6, 9.3, 0.36], [1.55, 6.3, 0.3]],
   paint: (c, sp) => c.agency === "mbta" || !c.agency
     ? mbtaPaint(c, { L: sp.L, roof: sp.roof, cabEnd: 12.0, sweep: [15.2, 23.6], tail: sp.L - 8.4, T: 28.5 })
       + vee(sp.L - 10.7, 8.2, 1.9, 4.6)
@@ -1328,13 +1300,12 @@ export const mp36 = (c) => cabUnit(c, {
   nose: [[2.25, 4.55], ["q", 1.2, 5.0, 1.2, 7.2], [1.3, 9.6], ["q", 1.45, 10.35, 2.05, 10.55], [3.85, 13.95], ["q", 4.1, 15.5, 5.8, 15.5]],
   glass: [[[2.25, 10.8], [3.75, 13.65], [4.35, 13.65], [4.35, 10.8]], [[4.55, 10.8], [4.55, 13.65], [5.4, 13.65], [5.4, 10.8]]],
   sideWin: [[6.1, 11.0, 2.6, 2.3]],
-  doors: [[9.6, 2.0, 5.1, 13.6], [15.6, 2.0, 5.1, 12.4]], ladders: [[2.5, 1.4], [9.75, 1.7]],
+  doors: [[9.6, 2.0, 5.1, 13.6], [15.6, 2.0, 5.1, 12.4]],
   grilles: [[5.8, 5.3, 2.6, 1.9, 0.3], [44.5, 11.3, 20.5, 2.6, 0.38], [24.5, 5.5, 3.6, 1.6, 0.3]],
   panels: [[19.5, 5.4, 3.0, 6.3], [36.0, 5.4, 3.0, 6.3]],
   tank: [20.5, 46.5, 1.5], reservoir: [32, 45],
   trucks: { centers: 42.83, wb: 9.33, d: 40 },
-  roofItems: [[33, 1.6, 0.6], [45, 21, 0.3]], fans: [47.5, 52, 56.5, 61, 65.2], horn: 5.6,
-  lights: [[1.25, 9.0, 0.34], [1.3, 6.3, 0.3]],
+  roofItems: [[33, 1.6, 0.6], [45, 21, 0.3]], fans: [46.7, 51.1, 55.5, 59.9, 64.1], horn: 5.6,
   paint: (c, sp) => {
     const L = sp.L;
     switch (c.agency) {
@@ -1378,13 +1349,12 @@ export const f125 = (c) => cabUnit(c, {
   nose: [[2.45, 4.5], [1.5, 5.3], [1.35, 8.7], [1.6, 9.65], [2.6, 12.45], ["q", 3.1, 14.54, 6.6, 14.54]],
   glass: [[[1.95, 9.95], [2.65, 12.15], [3.4, 12.15], [3.4, 9.95]]],
   sideWin: [[4.9, 10.0, 3.2, 2.2]],
-  doors: [[9.2, 2.1, 5.0, 12.8]], ladders: [[2.6, 1.4], [9.4, 1.7]],
+  doors: [[9.2, 2.1, 5.0, 12.8]],
   grilles: [[50.5, 10.0, 15.5, 3.0, 0.36], [5.3, 5.6, 2.6, 1.3, 0.3], [30, 11.5, 6, 1.6, 0.36]],
   panels: [[16.5, 6.0, 3.0, 5.6], [40.5, 6.0, 3.0, 5.6]],
   tank: [21, 48, 1.5], reservoir: [34, 47],
   trucks: { centers: 42.33, wb: 9.58, d: 40 },
   roofItems: [[48.5, 19, 0.3], [24, 1.6, 0.5]], fans: [52, 57, 62], horn: 6.0,
-  lights: [[1.38, 8.3, 0.45], [1.5, 5.9, 0.3]],
   paint: (c, sp) => {
     const L = sp.L;
     if (c.agency !== "metrolink") return genericPaint(c, sp);
@@ -1407,13 +1377,12 @@ export const bl36 = (c) => cabUnit(c, {
   nose: [[2.2, 4.55], [1.45, 5.3], [1.55, 9.7], [1.85, 10.15], [3.45, 13.35], [4.4, 14.25], [5.6, 14.67]],
   glass: [[[2.15, 10.45], [3.4, 13.0], [4.0, 13.0], [4.0, 10.45]]],
   sideWin: [[4.9, 10.6, 3.0, 2.2]],
-  doors: [[9.1, 2.0, 5.0, 13.4]], ladders: [[2.5, 1.4], [9.25, 1.7]],
+  doors: [[9.1, 2.0, 5.0, 13.4]],
   grilles: [[14.5, 12.4, 45, 1.5, 0.32], [5.2, 5.5, 2.6, 1.6, 0.3], [52, 5.6, 4, 4.6, 0.3], [57, 5.6, 4, 4.6, 0.3]],
   panels: [[20, 5.6, 3.0, 6.0], [38, 5.6, 3.0, 6.0]],
   tank: [21, 46, 1.5], reservoir: [32, 45],
   trucks: { centers: 41.5, wb: 9.0, d: 40 },
   roofItems: [[40, 1.4, 0.6], [48, 16, 0.3]], fans: [52, 57, 62], horn: 5.4,
-  lights: [[1.6, 9.2, 0.34], [1.5, 5.9, 0.3]],
   paint: (c, sp) => {
     const L = sp.L;
     if (c.agency !== "trirail") return genericPaint(c, sp);
@@ -1437,13 +1406,12 @@ function f40(c, { mbta = false } = {}) {
     nose: [[2.45, sill], [2.45, 8.3], ["q", 2.5, 8.85, 3.1, 8.95], [6.0, 9.45], [6.3, 9.75], [7.55, 14.75], ["q", 7.75, roof, 8.7, roof], [13.6, roof], [13.75, hood]],
     glass: [[[6.55, 10.35], [7.45, 14.2], [8.0, 14.2], [8.0, 10.35]]],
     sideWin: [[8.4, 11.4, 1.15, 2.6], [9.65, 11.4, 1.35, 2.6]],
-    doors: [[11.15, 2.1, sill + 0.2, 14.4]], ladders: [[2.65, 1.3], [11.3, 1.8]],
+    doors: [[11.15, 2.1, sill + 0.2, 14.4]],
     grilles: [[14.3, 12.6, 8.5, 2.0, 0.32], [c.L - 16.5, 10.6, 13.5, 3.6, 0.36]],
     panels: [[23.5, 5.2, 3.0, 7.0], [27.0, 5.2, 3.0, 7.0], [31.0, 5.2, 3.0, 7.0]],
     tank: [17.5, c.L - 17.5, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
     trucks: { centers: c.L - 23.2, wb: 9.0, d: 40 },
     roofItems: [[c.L - 26, 1.6, 0.45]], fans: [c.L - 13.5, c.L - 8.3, c.L - 3.6], horn: 9.6,
-    lights: [[2.5, 8.1, 0.34], [2.45, 5.8, 0.3]],
     paint: (c, sp) => {
       const L = sp.L;
       if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, cabEnd: 13.6, sweep: [16.5, 24.5], tail: null, T: 32 });
@@ -1468,13 +1436,12 @@ export const f59 = (c) => cabUnit(c, {
   nose: [[2.4, 4.6], ["q", 1.5, 4.9, 1.45, 6.4], ["q", 1.5, 8.6, 2.6, 10.0], [5.2, 14.4], ["q", 5.8, 15.55, 7.4, 15.55], [12.4, 15.55], ["q", 13.2, 15.55, 13.4, 15.0]],
   glass: [[[2.95, 10.45], [5.05, 14.0], [5.8, 14.0], [5.8, 10.45]]],
   sideWin: [[6.5, 11.4, 2.6, 2.3]],
-  doors: [[10.0, 2.1, 5.1, 14.2]], ladders: [[2.7, 1.3], [10.15, 1.8]],
+  doors: [[10.0, 2.1, 5.1, 14.2]],
   grilles: [[14.0, 12.4, 9.0, 2.0, 0.32], [c.L - 15.5, 10.4, 13.0, 3.6, 0.36]],
   panels: [[25, 5.4, 3.0, 6.6], [29, 5.4, 3.0, 6.6]],
   tank: [17.5, c.L - 17, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
   trucks: { centers: 35.58, wb: 9.0, d: 40 },
   fans: [c.L - 12.8, c.L - 7.8, c.L - 3.4], horn: 9.0,
-  lights: [[1.6, 7.6, 0.34], [1.5, 5.4, 0.3]],
   paint: (c, sp) => {
     const L = sp.L;
     if (c.agency === "amtrak" && c.route === "Piedmont") {
@@ -1495,8 +1462,7 @@ export function gp40(c) {
   const { L } = c, deck = 4.85, cabRoof = 15.4, hood = 13.95;
   let s = "";
   // Frame, pilots, walkway edge.
-  s += path(poly([[0.7, 0.55], [4.0, 0.55], [3.6, 3.0], [2.4, 3.7], [1.3, 3.7], [0.6, 2.3]]), C.black) + couplerHead(1.2);
-  s += path(poly([[L - 0.7, 0.55], [L - 4.0, 0.55], [L - 3.6, 3.0], [L - 2.4, 3.7], [L - 1.3, 3.7], [L - 0.6, 2.3]]), C.black) + couplerHead(L - 1.2, 1);
+  s += pilot(1.2, 3.65) + pilot(1.2, 3.65, L);
   s += path(poly([[18, 3.5], [L - 19, 3.5], [L - 19, 2.3], ["q", L - 19, 1.5, L - 19.8, 1.5], [18.8, 1.5], ["q", 18, 1.5, 18, 2.3]]), "currentColor", 0, 'opacity="0.82"');
   for (const k of [-1, 1]) s += truck(L / 2 + k * 18.75, { wb: 9.0, d: 40, kind: "loco", top: 3.7 });
   const frame = poly([[1.2, 3.7], [L - 1.2, 3.7], [L - 1.2, deck], [1.2, deck]]);
@@ -1520,14 +1486,12 @@ export function gp40(c) {
   for (const x of [L - 13.5, L - 9.2, L - 5.2]) s += path(`M${x - 1.9} ${hood + 0.55}Q${x} ${hood + 1.25} ${x + 1.9} ${hood + 0.55}Z`, C.steelDark, 0.4);
   s += path(cab, MBTA.silver) + clipped(cab, paint("") + path(poly([[6.7, 10.6], [7.2, 14.4], [7.9, 14.4], [7.9, 10.6]]), C.glass) + win(8.6, 11.3, 2.0, 2.4, 0.2) + win(11.0, 11.3, 2.4, 2.4, 0.2));
   s += outlineOf(hoodD) + outlineOf(cab) + outlineOf(frame);
-  // Handrails along the walkway; steps at the corners.
+  // Handrails along the walkway.
   const posts = [];
   for (let x = 15; x < L - 3; x += 6.2) posts.push([x, deck, x, deck + 3.1]);
   posts.push([14.4, deck + 3.1, L - 2.0, deck + 3.1], [L - 2.0, deck, L - 2.0, deck + 3.1], [2.0, deck, 2.0, deck + 3.1], [2.0, deck + 3.1, 2.6, deck + 3.1]);
   s += lines(posts, "currentColor", 0.6);
-  for (const x of [1.6, L - 3.2]) s += lines([[x, 3.7, x, 1.6], [x + 1.4, 3.7, x + 1.4, 1.6], [x, 2.85, x + 1.4, 2.85], [x, 2.0, x + 1.4, 2.0]], "currentColor", 0.6);
   s += rect(8.5, cabRoof - 0.05, 1.1, 0.35, "currentColor");
-  if (c.lead) s += lamp(2.65, 8.4, 0.34) + lamp(2.6, 5.5, 0.28);
   return s;
 }
 
@@ -1546,8 +1510,7 @@ export function alp46(c) {
   let s = "";
   for (const k of [-1, 1]) {
     const x = (v) => X(v, k);
-    s += path(poly([[x(0.7), 0.55], [x(4.0), 0.55], [x(3.5), 3.0], [x(2.4), sill + 0.05], [x(1.2), sill + 0.05], [x(0.55), 2.2]]), C.black);
-    s += rect(Math.min(x(0), x(1.2)), 2.45, 1.2, 0.8, "currentColor", 0, 'rx="0.15"');
+    s += pilot(1.4, sill, k > 0 ? L : null);
     s += truck(L / 2 + k * 16.6, { wb: 8.83, d: 44, kind: "loco", top: sill });
   }
   s += rect(21.5, 2.2, L - 43, sill - 2.2, "currentColor", 0, 'opacity="0.8" rx="0.2"');
@@ -1575,7 +1538,6 @@ export function alp46(c) {
   // Pantographs toward each end; the trailing one raised.
   s += pantograph(12.2, roof, { up: false, facing: 1 }) + pantograph(L - 12.2, roof, { up: true, facing: -1 });
   s += outlineOf(d);
-  if (c.lead) s += lamp(1.6, 9.2, 0.34) + lamp(1.5, 5.6, 0.3);
   return s;
 }
 
@@ -1590,12 +1552,11 @@ function lirrDiesel(c, shoe) {
     nose: [[2.2, 4.6], [1.45, 5.4], [1.4, 7.7], [2.9, 10.0], [4.9, 12.75], ["q", 4.9, 14.33, 7.1, 14.33]],
     glass: [[[3.1, 10.15], [4.7, 12.4], [5.4, 12.4], [5.4, 10.15]]],
     sideWin: [[6.0, 10.3, 3.4, 2.0]],
-    doors: [[10.6, 2.2, 5.0, 12.6]], ladders: [[2.6, 1.3], [10.8, 1.8]],
+    doors: [[10.6, 2.2, 5.0, 12.6]],
     tank: [20, 54, 1.4], reservoir: [36, 50],
     grilles: [[6.2, 6.3, 3.0, 0.9], [33.5, 7.2, 2.6, 2.4], [36.4, 7.2, 2.6, 2.4], [33.5, 9.9, 2.6, 2.4], [36.4, 9.9, 2.6, 2.4], [56, 6.0, 15.5, 6.4, 0.36]],
     roofItems: [[46.5, 1.8, 0.7], [54, 18, 0.25]], fans: [59, 63.8, 68.6], horn: 8.2,
     trucks: { centers: 46.17, wb: 9.5, d: 44, shoe }, base: C.steel,
-    lights: [[2.55, 9.55, 0.36], [1.5, 5.6, 0.26]],
     paint: (c, sp) => flutes(11, sp.L - 1, 5.0, 12.6, 0.32) +
       rect(0, 4.6, sp.L, 0.9, LIRR.blue) + rect(0, 5.75, sp.L, 0.28, LIRR.blue) +
       path(poly([[0, 4.6], [10.4, 4.6], [10.4, 10.0], [0, 10.0]]), LIRR.blue) +

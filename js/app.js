@@ -1191,12 +1191,12 @@ function renderDetail() {
         ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(t.statusText)}</span>` : ""}
         ${trackButton(t)}
       </div>
+      ${consistSection(t)}
       ${inferredNote(t)}
     </div>
     ${state.trackPicker === t.id ? trackPicker(t) : ""}
     ${noticesHtml(t)}
     ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
-    ${consistSection(t)}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
   // Re-rendering replaces the content; keep the reader where they were.
@@ -1220,21 +1220,21 @@ function inferredNote(t) {
     so it can’t get there before ${fmtTime(new Date(n.earliest).toISOString(), n.tz)}. The railroad hasn’t reported this yet; the times below include it.</p>`;
 }
 
-// The train's cars: live where the railroad reports them, otherwise what
-// typically runs on the route, labeled as typical.
+// The train's cars, drawn right under its status: live where the railroad
+// reports them; otherwise what typically runs on the route, marked with an
+// eye icon whose tip says the count and types may not be accurate.
+const EYE_ICON = `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.6 10Q10 4.9 15.4 10Q10 15.1 4.6 10Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="10" r="1.9" fill="currentColor"/></svg>`;
 function consistSection(t) {
   const c = consistOf(t);
   if (!c) return "";
   const a = AGENCIES[t.agency];
-  const note = !c.typical ? ""
-    : c.reported ? `${esc(a.short)}’s feed names one car of this train, ${esc(c.reported.number)} (${esc(c.reported.name)}). The rest shows what typically runs on this line.`
-    : `${esc(a.short)} doesn’t report which cars this train has. This is what typically runs on this route.`;
-  return `<section class="consist${c.typical ? " typical" : ""}">
-    <h3 class="section-title">Consist${c.typical ? '<span class="typical-tag">Typical</span>' : ""}</h3>
-    <p class="consist-sum">${esc(c.summary)}</p>
-    <div class="consist-strip">${consistHtml(c, a.color)}</div>
-    ${note ? `<p class="estimate-note">${note}</p>` : ""}
-  </section>`;
+  const why = !c.typical ? ""
+    : c.reported ? `${a.short}’s feed names one car, ${c.reported.number} (${c.reported.name}); the rest is what typically runs on this line.`
+    : `${a.short} doesn’t report this train’s cars; this is what typically runs on this route.`;
+  const eye = c.typical
+    ? `<button type="button" class="consist-eye" aria-label="Car count and type may not be accurate">${EYE_ICON}<span class="tip" aria-hidden="true"><strong>Car count and type may not be accurate.</strong> ${esc(why)}</span></button>`
+    : "";
+  return `<div class="consist"><div class="consist-strip">${consistHtml(c, a.color)}</div>${eye}</div>`;
 }
 
 function fmtIn(ms) {

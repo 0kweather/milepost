@@ -47,7 +47,6 @@ export const C = {
   gasket: "#111417",
   black: "#17191c",
   rubber: "#202326",
-  lamp: "#ffe7a1",
   red: "#c8102e",
 };
 
@@ -214,5 +213,3 @@ export function underframe(x0, x1, top, { depth = 1.4, boxes = 3, tanks = true }
   return s;
 }
 
-// Headlight and ditch lights, lit on the lead cab.
-export const lamp = (x, y, r = 0.32) => circle(x, y, r, C.lamp, 0, `stroke="${C.gasket}" stroke-width="0.5" ${STROKE}`);

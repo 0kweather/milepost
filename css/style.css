@@ -622,12 +622,12 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .stops-scroll { position: relative; flex: none; }
 
 /* The train's cars, front on the left, scrolling sideways when long. */
-.consist { margin-top: var(--s3); }
-.consist .section-title { margin-bottom: var(--s1); }
-.consist-sum { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; }
+.consist { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
 .consist-strip {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  gap: 0; /* cars draw their own diaphragms and couplers, which meet */
+  gap: 0; /* cars draw their own diaphragms, which meet */
   overflow-x: auto;
   padding-bottom: var(--s1);
   scrollbar-width: thin;
@@ -635,17 +635,42 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .consist .car { margin: 0; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .consist .car svg { display: block; color: var(--car-ink); }
 .consist .car figcaption { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
-.consist .estimate-note { margin-top: var(--s1); }
-.typical-tag {
-  margin-left: var(--s2);
-  padding: 1px 6px;
-  border: 1px dashed var(--faint);
-  border-radius: var(--r-pill);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+/* Typical equipment: an eye whose tip says the cars may not be the real ones. */
+.consist-eye {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
   color: var(--muted);
-  vertical-align: 1px;
+  cursor: help;
 }
+.consist-eye:hover, .consist-eye:focus-visible { color: var(--text); background: var(--hover); }
+.consist-eye .tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  width: 220px;
+  padding: var(--s2) 10px;
+  border-radius: var(--r-sm);
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s, visibility 0.12s;
+}
+.consist-eye .tip strong { color: var(--text); font-weight: 600; }
+.consist-eye:hover .tip, .consist-eye:focus .tip { opacity: 1; visibility: visible; }
 
 .hero, .meta, .estimate-note, .consist { flex: none; }
 .hero { padding: 6px 0 var(--s4); border-bottom: 1px solid var(--line); }

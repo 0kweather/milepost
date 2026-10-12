@@ -208,9 +208,11 @@ function typicalFor(t, reported) {
         : set("M7A electric cars, usually 6 to 10", ["m7a", 8]);
     case "mbta": {
       const single = reported === "single" || reported === "singleCab";
+      // The locomotive the feed named, when it named one.
+      const loco = ["hsp46", "f40c", "gp40", "mp36"].includes(reported) ? reported : "hsp46";
       return single
-        ? set("Diesel locomotive with single-level coaches", ["hsp46", 1], ["single", 5], ["singleCab", 1])
-        : set("Diesel locomotive with bi-level coaches", ["hsp46", 1], ["bilevel", 5], [reported === "kawasakiCab" ? "kawasakiCab" : "rotemCab", 1]);
+        ? set("Diesel locomotive with single-level coaches", [loco, 1], ["single", 5], ["singleCab", 1])
+        : set("Diesel locomotive with bi-level coaches", [loco, 1], ["bilevel", 5], [reported === "kawasakiCab" ? "kawasakiCab" : "rotemCab", 1]);
     }
     case "septa": return set("Silverliner IV or V cars, usually 2 to 6", ["silverliner4", 4]);
     case "njt": return set("Electric or dual-mode locomotive with MultiLevel coaches", ["alp46", 1], ["multilevel", 5], ["multilevelCab", 1]);
