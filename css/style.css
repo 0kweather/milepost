@@ -324,6 +324,34 @@ a { color: var(--accent); }
 
 .notices { flex: none; }
 .notices .section-title { margin-bottom: var(--s2); }
+.notices.collapsed .section-title { margin-bottom: 0; }
+.notices-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.notices-toggle:hover, .notices-toggle:focus-visible { color: var(--text); background: var(--hover); }
+.notices-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  text-align: center;
+  line-height: 16px;
+}
+.notices-toggle .chev { transition: transform 0.15s; }
+.notices.collapsed .notices-toggle .chev { transform: rotate(-90deg); }
 
 .notice {
   display: grid;
@@ -786,6 +814,8 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 }
 
 .meta li strong { color: var(--text); font-weight: 600; }
+.meta .signal { display: inline-flex; align-items: center; gap: 5px; }
+.meta .signal svg { flex: none; }
 
 .estimate-note {
   margin: var(--s3) 0 0;

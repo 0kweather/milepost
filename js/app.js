@@ -57,6 +57,8 @@ const state = {
   // Trains the viewer is following (saved in the browser):
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
   tracked: store.get("tt-tracked", []),
+  // Service notices folded down to their heading (remembered across trains).
+  noticesCollapsed: store.get("tt-notices-collapsed", false),
   trackPicker: null,     // train id whose "where are you headed?" picker is open
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   trackQuery: "",        // what's typed in the picker's station search
@@ -948,7 +950,7 @@ function tick() {
   }
 }
 setTimeout(tick, 2000);
-// The selected train's panel ("GPS · 3 min ago") ages too.
+// The selected train's panel (its last GPS report, "3 min ago") ages too.
 setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 
 
@@ -1142,9 +1144,13 @@ function loadNotices(t) {
 function noticesHtml(t) {
   const list = state.notices.id === t.id ? state.notices.list : [];
   if (!list.length) return "";
-  return `<div class="notices">
-    <h3 class="section-title">Service notices</h3>
-    ${list.map((n) => `<div class="notice">
+  const open = !state.noticesCollapsed;
+  return `<div class="notices${open ? "" : " collapsed"}">
+    <h3 class="section-title"><button type="button" class="notices-toggle" data-notices-toggle aria-expanded="${open}">
+      Service notices <span class="notices-count">${list.length}</span>
+      <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button></h3>
+    ${open ? list.map((n) => `<div class="notice">
       <span class="notice-icon" aria-hidden="true">!</span>
       <div class="notice-body">
         <p class="notice-head">${esc(n.header)}</p>
@@ -1153,7 +1159,7 @@ function noticesHtml(t) {
         ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">Details</a>` : ""}
         ${n.scope === "line" && t.route ? `<span class="notice-scope">${esc(t.route)}</span>` : ""}
       </div>
-    </div>`).join("")}
+    </div>`).join("") : ""}
   </div>`;
 }
 
@@ -1175,7 +1181,7 @@ function renderDetail() {
     t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
     headingChip(t),
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
-    `${t.estimated ? "Estimated" : "GPS"} · ${fmtAgo(t.updated)}`,
+    t.estimated ? `Estimated · ${fmtAgo(t.updated)}` : `<span class="signal" title="Last GPS report">${SIGNAL_ICON}${fmtAgo(t.updated)}</span>`,
   ].filter(Boolean);
   const stops = t.stops?.length
     ? `<h3 class="section-title">Stops</h3><div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s) => {
@@ -1206,6 +1212,9 @@ function renderDetail() {
   // Re-rendering replaces the content; keep the reader where they were.
   el.scrollTop = keepScroll;
 }
+
+// A wifi-style signal mark beside the time of the train's last GPS report.
+const SIGNAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-label="GPS"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.8 6.2a9 9 0 0 1 12.4 0"/><path d="M4.1 8.7a5.6 5.6 0 0 1 7.8 0"/></g><circle cx="8" cy="11.6" r="1.4" fill="currentColor"/></svg>`;
 
 const INFERRED_TITLE = "Worked out by Trainsheet from GPS; not yet reported by the railroad";
 
@@ -1791,6 +1800,11 @@ on("train-detail", "keydown", (e) => {
 });
 
 on("train-detail", "click", (e) => {
+  if (e.target.closest("[data-notices-toggle]")) {
+    state.noticesCollapsed = !state.noticesCollapsed;
+    store.set("tt-notices-collapsed", state.noticesCollapsed);
+    return renderDetail();
+  }
   const track = e.target.closest("[data-track]");
   if (track) {
     const t = state.trains.get(track.dataset.track);
