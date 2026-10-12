@@ -52,6 +52,8 @@ const state = {
   labels: store.get("tt-labels", "number"),
   // Leave out trains placed from timetables rather than GPS.
   hideEstimated: store.get("tt-hide-estimated", false),
+  // While tracking a train, show only the tracked ones (and the selected one).
+  onlyTracked: store.get("tt-only-tracked", false),
   // Times as 18:05 instead of 6:05 PM.
   clock24: store.get("tt-clock24", false),
   // Times shown in: "" the viewer's own zone, "station" each stop's local
@@ -574,8 +576,10 @@ map.once("load", () => {
 
 function visible(t) {
   if (state.hidden.has(t.agency)) return false;
-  // Estimated trains stay visible when selected or tracked.
-  return !(state.hideEstimated && t.estimated && t.id !== state.selected && !state.tracked.some((r) => r.id === t.id));
+  // The selected and tracked trains always show.
+  if (t.id === state.selected || state.tracked.some((r) => r.id === t.id)) return true;
+  if (state.onlyTracked && state.tracked.length) return false;
+  return !(state.hideEstimated && t.estimated);
 }
 
 // A train's line, shortened for its plate ("Northeast Corridor",
@@ -1561,6 +1565,8 @@ function applySelectionFilter() {
   }
   map.setFilter("tt-station-labels", ["!=", ["get", "id"], sid]); // the callout replaces its plain label
   ping(Boolean(ids.length || sid));
+  // Which trains show can depend on the selection and tracking (visible()).
+  redraw();
 }
 
 // A circle that grows and fades from the selected train or station, then
@@ -1967,6 +1973,12 @@ on("estimated-toggle", "change", (e) => {
   redraw();
   renderAll();
 });
+on("only-tracked-toggle", "change", (e) => {
+  state.onlyTracked = e.target.checked;
+  store.set("tt-only-tracked", state.onlyTracked);
+  redraw();
+  renderAll();
+});
 on("clock-toggle", "change", (e) => {
   state.clock24 = e.target.checked;
   store.set("tt-clock24", state.clock24);
@@ -2064,6 +2076,7 @@ applyUnits();
 setChecked("stations-toggle", state.showStations);
 setChecked("estimated-toggle", state.hideEstimated);
 setChecked("clock-toggle", state.clock24);
+setChecked("only-tracked-toggle", state.onlyTracked);
 applyLabels();
 setChecked("infer-toggle", state.inferDelays);
 setChecked("heading-toggle", state.inferHeading);
