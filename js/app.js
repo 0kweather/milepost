@@ -46,8 +46,6 @@ const state = {
   // Mark trains late when GPS shows a delay their railroad hasn't reported
   // (js/delays.js).
   inferDelays: store.get("tt-infer", true),
-  // Point trains whose feed has no heading toward their next stop.
-  inferHeading: store.get("tt-infer-heading", true),
   // Miles or kilometers. The default follows the browser's language: miles in
   // the few countries that still use them, kilometers everywhere else.
   units: store.get("tt-units", /-(US|GB|LR|MM)\b/i.test(navigator.language || "en-US") ? "mi" : "km"),
@@ -95,9 +93,10 @@ map.touchZoomRotate.disableRotation();
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 map.addControl(new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 10 } }), "bottom-right");
 
-// Marker images are drawn on a canvas once per agency color: a dot for trains
-// with no known heading, and a dot with a pointer for trains that have one.
-function markerImage(color, withArrow, intercity) {
+// Marker images are drawn on a canvas once per agency color: an arrow for
+// trains heading a known way, and a dot for the rare train whose direction
+// can't be worked out at all.
+function markerImage(color, withArrow) {
   const ratio = 2, size = 44, c = document.createElement("canvas");
   c.width = c.height = size * ratio;
   const g = c.getContext("2d");
@@ -108,18 +107,20 @@ function markerImage(color, withArrow, intercity) {
   g.shadowBlur = 3;
   g.shadowOffsetY = 0.5;
   if (withArrow) {
-    // Chevron just ahead of the dot, pointing north; MapLibre rotates it.
+    // Arrowhead centered on the train, pointing north; MapLibre rotates it.
     g.beginPath();
-    g.moveTo(cx, cy - r - 9);
-    g.lineTo(cx + 6.5, cy - r - 1);
-    g.lineTo(cx, cy - r - 3.5);
-    g.lineTo(cx - 6.5, cy - r - 1);
+    g.moveTo(cx, cy - 10);
+    g.lineTo(cx + 7.5, cy + 8);
+    g.lineTo(cx, cy + 4);
+    g.lineTo(cx - 7.5, cy + 8);
     g.closePath();
     g.lineWidth = 3;
     g.strokeStyle = "#fff";
     g.stroke();
+    g.shadowColor = "transparent";
     g.fillStyle = color;
     g.fill();
+    return { image: g.getImageData(0, 0, c.width, c.height), ratio };
   }
   g.beginPath();
   g.arc(cx, cy, r, 0, Math.PI * 2);
@@ -130,17 +131,6 @@ function markerImage(color, withArrow, intercity) {
   g.arc(cx, cy, r - 2, 0, Math.PI * 2);
   g.fillStyle = color;
   g.fill();
-  if (intercity) {
-    // Amtrak, VIA and Brightline: a white ring around a colored center dot.
-    g.beginPath();
-    g.arc(cx, cy, r - 3.6, 0, Math.PI * 2);
-    g.fillStyle = "#fff";
-    g.fill();
-    g.beginPath();
-    g.arc(cx, cy, 2.1, 0, Math.PI * 2);
-    g.fillStyle = color;
-    g.fill();
-  }
   return { image: g.getImageData(0, 0, c.width, c.height), ratio };
 }
 
@@ -228,7 +218,7 @@ function addImages() {
     for (const arrow of [true, false]) {
       const name = `tt-${id}-${arrow ? "arrow" : "dot"}`;
       if (map.hasImage(name)) continue;
-      const { image, ratio } = markerImage(a.color, arrow, a.kind === "intercity");
+      const { image, ratio } = markerImage(a.color, arrow);
       map.addImage(name, image, { pixelRatio: ratio });
     }
   }
@@ -242,13 +232,12 @@ function themeColors() {
         stationFill: "#ffffff", stationText: "#4a505a", railOpacity: 0.8, footprintOpacity: 0.1, stateBorder: "rgba(90,100,115,0.35)" };
 }
 
-// Train markers by zoom. Intercity trains draw a little larger than commuter
-// trains, and the selected and tracked trains larger still: the whole marker,
-// heading arrow included, grows rather than gaining a halo. Their plates sit
-// a little further out to clear it.
+// Train markers by zoom, the same for every railroad. The selected and tracked
+// trains draw larger: the whole marker grows rather than gaining a halo. Their
+// plates sit a little further out to clear it.
 const SELECTED_SCALE = 1.4;
 function trainIconSize(highlighted = false) {
-  const sized = (v) => ["*", ["case", ["get", "intercity"], 1.12, 1], ["case", highlighted, SELECTED_SCALE, 1], v];
+  const sized = (v) => ["*", ["case", highlighted, SELECTED_SCALE, 1], v];
   return ["interpolate", ["linear"], ["zoom"], 2, sized(0.5), 5, sized(0.68), 8, sized(0.85), 12, sized(1)];
 }
 const PLATE_OFFSET = ["left", [1.55, 0], "right", [-1.55, 0], "top", [0, 1.7], "bottom", [0, -1.45]];
@@ -506,7 +495,7 @@ function addLayers() {
     id: "tt-labels",
     type: "symbol",
     source: "trains",
-    filter: [">=", ["zoom"], 8], // zoomed further out, trains are unlabeled dots
+    filter: [">=", ["zoom"], 8], // zoomed further out, trains are unlabeled arrows
     layout: {
       "text-field": ["get", "plate"],
       "text-font": ["Noto Sans Bold"],
@@ -583,7 +572,6 @@ function featureCollection() {
         plate: t.number || AGENCIES[t.agency].short,
         bearing: targetOf(t).bearing ?? 0,
         hasBearing: targetOf(t).bearing != null,
-        intercity,
         stale: Date.now() - t.updated > STALE_MS && !t.estimated,
         drawOrder: intercity ? 1 : 0,
         labelOrder: intercity ? 0 : 1,
@@ -705,7 +693,7 @@ function targetOf(t) {
 // Snapping depends only on the reported position, so cache it per train.
 const snapCache = new Map(); // id -> { lat, lon, result }
 function snapped(t) {
-  const towards = state.inferHeading && t.bearing == null ? headingTarget(t) : null;
+  const towards = t.bearing == null ? headingTarget(t) : null;
   const c = snapCache.get(t.id);
   if (c && c.lat === t.lat && c.lon === t.lon && c.towards?.lat === towards?.lat && c.towards?.lon === towards?.lon) return c.result;
   const result = snapToTrack(t, state.rail, towards);
@@ -1950,13 +1938,6 @@ function setShowStations(on) {
 }
 on("stations-toggle", "change", (e) => setShowStations(e.target.checked));
 
-on("heading-toggle", "change", (e) => {
-  state.inferHeading = e.target.checked;
-  store.set("tt-infer-heading", state.inferHeading);
-  computePositions();
-  animateTo();
-  renderAll();
-});
 
 on("infer-toggle", "change", (e) => {
   state.inferDelays = e.target.checked;
@@ -1990,7 +1971,6 @@ applyTheme();
 applyUnits();
 setChecked("stations-toggle", state.showStations);
 setChecked("infer-toggle", state.inferDelays);
-setChecked("heading-toggle", state.inferHeading);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
