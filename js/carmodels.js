@@ -97,6 +97,7 @@ const AMTRAK = {
 // Other railroads' colors used across several models.
 const MBTA = { purple: "#80276c", yellow: "#f2c230", silver: "#c8ccd1", roof: "#4f545a", black: "#1d1f22" };
 const LIRR = { blue: "#1c3f94", yellow: "#f5c400" };
+const MNR_BLUE = "#2352b0";
 
 // --- Siemens ACS-64: 66 ft 8 in over couplers, 12 ft 6 in to the roof,
 // trucks 9.9 m apart on 44 in wheels. A raked cab at each end; gray body,
@@ -168,10 +169,10 @@ export function genesis(c, s0 = {}) {
   const mnr = c.agency === "mnr";
   let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : mnr ? "#c3c8ce" : c.color);
   if (mnr) {
-    // Metro-North's P32AC-DMs: a blue cab and nose, silver hood over a blue
-    // band with a red stripe along its top.
-    liv += rect(0, 0, 12.6, roof + 1, "#1f4fbf") + rect(0, sill, L, 3.0, "#1f4fbf") +
-      path(`M12.6 ${sill + 3.0}L${L} ${sill + 3.4}L${L} ${sill + 3.75}L12.6 ${sill + 3.35}Z`, AMTRAK.red);
+    // Metro-North's P32AC-DMs: silver all over; a blue stripe at headlight
+    // height (a V across the nose) that broadens behind the cab door into a
+    // band toward the back; a gray pinstripe below it.
+    liv += path(`M0 7.9L${L} 7.9L${L} 9.9L38 9.9C28 9.9 22 8.35 15 8.35L0 8.35Z`, "#2a5aa8") + rect(0, 6.95, L, 0.13, "#6c7889");
   }
   if (amtrak) {
     // The blue top's lower edge waves gently from the cab to the back.
@@ -192,7 +193,7 @@ export function genesis(c, s0 = {}) {
   // Roof: dynamic brake hatch, exhaust, two radiator fans at the back.
   s += rect(28, roof, 9, 0.3, C.steelDark, 0.4) + rect(41.5, roof, 1.6, 0.55, "currentColor") + rect(52, roof, 14, 0.25, C.steelDark, 0.4);
   for (const x of [55.5, 62]) s += path(`M${x - 2.4} ${roof + 0.25}Q${x} ${roof + 0.95} ${x + 2.4} ${roof + 0.25}Z`, C.steelDark, 0.4);
-  s += mnr ? badge(c, 17.5, 10.2, 1.6) : badge(c, 55, 9.3, 1.6);    // MTA disc behind the cab; Amtrak toward the rear
+  s += mnr ? badge(c, 16.6, 10.0, 1.0) : badge(c, 55, 9.3, 1.6);    // MTA disc behind the cab door; Amtrak toward the rear
   s += outlineOf(d);
   return s;
 }
@@ -356,9 +357,13 @@ export function charger(c, { phase7 = false } = {}) {
       liv += noseStripe("#b08a5a");
       break;
     case "mnr":
-      // Metro-North: a blue cab and nose; silver behind, over a blue band edged in red.
-      liv += rect(0, sill, L, 3.0, "#1f4fbf") + path(`M14 ${sill + 3.0}L${L} ${sill + 3.0}L${L} ${sill + 3.35}L22 ${sill + 3.35}Q17 ${sill + 3.5} 14 ${sill + 4.6}Z`, AMTRAK.red);
-      liv += rect(0, sill, 14, roof + 1, "#1f4fbf") + rect(0, sill, L, 0.35, "#1d1f22");
+      // Metro-North (SC-42DM): a royal blue cab whose blue sweeps down behind
+      // the logo into a band along the side to the back, red under the band,
+      // its front end slanting down to the sill; silver above and below;
+      // white and black pinstripes along the sill.
+      liv += path(`M0 ${sill}L18.2 ${sill}L21.9 6.05L${L} 6.05L${L} 7.9L25.5 7.9C21 7.9 18.2 10.8 17.6 ${roof + 1}L0 ${roof + 1}Z`, "#2150c8");
+      liv += path(poly([[18.2, sill], [19.0, sill], [22.3, 5.55], [L, 5.55], [L, 6.05], [21.9, 6.05]]), AMTRAK.red);
+      liv += rect(0, sill, L, 0.2, "#1d1f22") + rect(0, sill + 0.2, L, 0.12, "#f4f5f6");
       break;
     case "phase7": {
       // Two blues split by a curved white stripe, a red nose, red and white sill stripes.
@@ -449,14 +454,15 @@ export function charger(c, { phase7 = false } = {}) {
   s += rect(47.5, roof, 20.5, 0.3, C.steelDark, 0.4) + rect(38, roof, 2, 0.5, "currentColor");
   // The railroad's logo. Phase VII: name over travelmark, just behind the
   // cab. Brightline: its wordmark on the yellow, over the white band. VIA:
-  // enormous yellow letters mid-side, a big red maple leaf at the rear. Metro-North: the MTA disc behind the cab door. The
+  // enormous yellow letters mid-side, a big red maple leaf at the rear.
+  // Metro-North: the white MTA disc on the blue behind the cab door. The
   // state-supported services: their own logos mid-side on the gray; Cascades:
   // its name in white high behind the cab.
   const mark = {
     phase7: { x: 20, y: 9.2, h: 3.6, dark: true, logo: "amtrak-stack" },
     brightline: { x: 32.3, y: 9.6, h: 3.0 },
     via: { x: 34.8, y: 9.55, h: 5.4, logo: "via-word" },
-    mnr: { x: 16.5, y: 8.2, h: 1.7 },
+    mnr: { x: 17.2, y: 7.7, h: 1.4, logo: "mta-inverse" },
     midwest: { x: 37, y: 9.6, h: 2.2, logo: "amtrak-midwest" },
     california: { x: 36, y: 9.8, h: 2.8, logo: "amtrak-california" },
     surfliner: { x: 36, y: 9.5, h: 1.6, logo: "surfliner" },
@@ -797,35 +803,36 @@ export const mbtaBilevel = (c) => bilevel(c, { ...MBTA_BL, paint: mbtaBand });
 export const mbtaCab = (c) => bilevel(c, { ...MBTA_BL, paint: mbtaBand, cab: mbtaCabEnd });
 
 // --- Bombardier/Alstom MultiLevel (NJ Transit 7000-7767; MultiLevel III
-// 8000s): 85 ft, 14 ft 6 in so it clears the Hudson tunnels. Low end roofs
-// over the trucks rise to the full height over the two decks. Four single
-// doors a side, all at the end-section level: one at each end with traps, one
-// over each truck for high platforms only. Long bands of narrow windows on
-// both decks; NJ Transit's blue-magenta-orange stripe between them.
+// 8000s, the same body): 85 ft, 14 ft 6 in so it clears the Hudson tunnels.
+// Low end roofs over the trucks rise to the full height over the two decks.
+// Four single doors a side, all at the end-section level: one at each end
+// with traps, one over each truck for high platforms only; between them a
+// window and "NJ TRANSIT". Eight wide windows on each deck; NJ Transit's
+// stripe between the decks the length of the middle, blue fading in at the
+// front through magenta to orange fading out at the back.
 const ML = {
   roof: 14.5, sill: 3.7, cornerR: 0.8, ends: { h: 13.5, len: 13.8, ramp: 3.0 },
   drop: { a: 18.6, b: 66.4, y: 1.3 }, trucks: { centers: 60.5, wb: 8.5, d: 36 },
-  rows: [{ xs: seq(18.7, 2.75, 18), y: 10.65, w: 2.25, h: 2.1, r: 0.25 }, { xs: seq(18.7, 2.75, 18), y: 3.3, w: 2.25, h: 2.0, r: 0.25 },
-    { xs: [7.0, 75.8], y: 7.4, w: 2.2, h: 1.9, r: 0.25 }],
+  rows: [{ xs: seq(19.1, 6.0, 8), y: 9.35, w: 4.8, h: 2.55, r: 0.35 }, { xs: seq(19.1, 6.0, 8), y: 2.95, w: 4.8, h: 2.45, r: 0.35 },
+    { xs: [8.6, 74.3], y: 7.2, w: 2.1, h: 2.3, r: 0.3 }],
   doors: [{ x: 1.3, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }, { x: 11.8, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 },
     { x: 70.45, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }, { x: 80.95, w: 2.75, y0: 4.25, y1: 10.9, glassY: 0.55, glassH: 0.32 }],
   roofItems: [[4.5, 5.5, 0.4, 13.5], [75, 5.5, 0.4, 13.5]], diaphragm: [4.25, 12.5],
-  badge: { x: 9.0, y: 10.3, h: 0.9, logo: "njt-word" },             // on one end section
+  badge: [{ x: 6.3, y: 8.35, h: 0.6, logo: "njt-word" }, { x: 78.7, y: 8.35, h: 0.6, logo: "njt-word" }],  // each end section
 };
 function njtPaint(c, g) {
   const L = g.L, id = `ts-njt-${++clipSeq}`;
   let s = rect(0, 0, L, 17, C.steel);
-  s += `<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#1b3f94"/><stop offset="0.5" stop-color="#b5267a"/><stop offset="1" stop-color="#f26b21"/></linearGradient></defs>`;
-  s += rect(18.3, 10.45, L - 36.6, 2.55, "#1d2024") + rect(18.3, 3.1, L - 36.6, 2.45, "#1d2024");
-  s += rect(18.3, 8.2, 18, 0.9, `url(#${id})`) + rect(L - 36.3, 8.2, 18, 0.9, `url(#${id})`);
+  s += `<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#22389a" stop-opacity="0"/>` +
+    '<stop offset="0.06" stop-color="#22389a"/><stop offset="0.22" stop-color="#2a3d9a"/><stop offset="0.4" stop-color="#d0207f"/>' +
+    '<stop offset="0.55" stop-color="#e8336e"/><stop offset="0.72" stop-color="#f26b2a"/><stop offset="0.9" stop-color="#f47c3c" stop-opacity="0.7"/>' +
+    '<stop offset="1" stop-color="#f47c3c" stop-opacity="0"/></linearGradient></defs>';
+  s += rect(18.0, 6.25, L - 36.0, 1.25, `url(#${id})`);
   return s;
 }
 export const multilevel = (c) => bilevel(c, { ...ML, paint: njtPaint });
 export const multilevelCab = (c) => bilevel(c, { ...ML, paint: njtPaint,
-  cab: (c, { x0 }) => {
-    let s = rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)");
-    return s;
-  } });
+  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") });
 
 // --- Gallery cars (Metra: Nippon Sharyo 2002-05 and Amerail 1994-96 design):
 // 85 ft, 15 ft 10 in, fluted stainless, the upper level a pair of balconies
@@ -865,31 +872,37 @@ export const highliner = married((c) => bilevel(c, { ...GALLERY, paint: galleryP
   extra: (c, g) => rect(g.L - 15.5, 14.6, 14.6, 1.3, "rgba(0,0,0,0.18)") + pantograph(g.L - 8.6, 14.6, { up: true, facing: -1 }) }));
 
 // --- LIRR C3 (Kawasaki, 1997-99): 85 ft, only 14 ft 5.6 in tall. The ends
-// over the trucks have lower roofs; single-leaf sliding doors at the quarter
-// points, high-platform only; a fluted skirt tapering along the lower deck;
-// two light blue stripes between the decks.
+// over the trucks have lower roofs; a single-leaf sliding door in each end
+// section right beside the high middle, high-platform only; a narrow window
+// near each end. A fluted skirt along the lower deck; two blue stripes
+// between the decks that spread apart over the end sections, one rising to
+// the upper windows and one dropping below the end window, the MTA logo
+// between them outboard of the door.
 const C3 = {
   roof: 14.47, sill: 3.7, cornerR: 0.7, ends: { h: 13.6, len: 16.2, ramp: 1.6 },
   drop: { a: 17.8, b: 67.2, y: 1.3 }, trucks: { centers: 60, wb: 8.5, d: 36 },
   rows: [{ xs: seq(19.6, 3.35, 14), y: 10.75, w: 2.6, h: 2.05, r: 0.3 }, { xs: seq(19.6, 3.35, 14), y: 3.75, w: 2.6, h: 2.05, r: 0.3 },
-    { xs: [5.6, 77.0], y: 9.4, w: 1.4, h: 2.0, r: 0.2 }],
+    { xs: [1.9, 82.1], y: 8.3, w: 1.0, h: 2.2, r: 0.2 }],
   doors: [{ x: 13.5, w: 3.0, y0: 4.25, y1: 11.3, glassY: 0.5, glassH: 0.36 }, { x: 68.5, w: 3.0, y0: 4.25, y1: 11.3, glassY: 0.5, glassH: 0.36 }],
   roofItems: [[2.5, 9.0, 0.5, 13.6], [73.5, 9.0, 0.5, 13.6]], diaphragm: [4.25, 12.4],
-  badge: [{ x: 9.5, y: 8.0, h: 0.8 }, { x: 74.5, y: 8.0, h: 0.8 }],  // in each end vestibule, outboard of the door
+  badge: [{ x: 11.0, y: 8.7, h: 0.9 }, { x: 74.0, y: 8.7, h: 0.9 }],  // in each end section, outboard of the door
 };
 function c3Paint(c, g) {
-  const L = g.L;
+  const L = g.L, blue = "#3a62c6";
   let s = rect(0, 0, L, 17, "#c7ccd2") + flutes(19, L - 19, 1.4, 3.2, 0.28);
-  s += rect(0, 9.95, L, 0.38, "#3d8fe0") + rect(0, 6.4, L, 0.38, "#3d8fe0");
+  // Each stripe: level across the middle, stepping out over the last few
+  // feet of it to its end-section height, broken by the doors.
+  for (const [mid, end] of [[8.85, 10.95], [7.45, 6.4]]) {
+    s += rect(3.4, end, 9.9, 0.5, blue) + rect(L - 13.3, end, 9.9, 0.5, blue);
+    s += path(`M16.7 ${end}L17.2 ${end}L19.6 ${mid}L${L - 19.6} ${mid}L${L - 17.2} ${end}L${L - 16.7} ${end}` +
+      `L${L - 16.7} ${end + 0.5}L${L - 17.2} ${end + 0.5}L${L - 19.6} ${mid + 0.5}L19.6 ${mid + 0.5}L17.2 ${end + 0.5}L16.7 ${end + 0.5}Z`, blue);
+  }
   s += rect(2.5, 4.6, 2.4, 1.8, "rgba(0,0,0,0.25)") + slats(2.5, 4.6, 2.4, 1.8, 0.3);
   return s;
 }
 export const c3 = (c) => bilevel(c, { ...C3, paint: c3Paint });
 export const c3Cab = (c) => bilevel(c, { ...C3, paint: c3Paint,
-  cab: (c, { x0 }) => {
-    let s = rect(x0, 4.3, 0.42, 3.2, LIRR.yellow) + rect(x0, 7.5, 0.42, 1.0, "#1c3f94");
-    return s;
-  } });
+  cab: (c, { x0 }) => rect(x0, 4.3, 0.42, 3.0, LIRR.yellow) });                  // yellow below the cab windows
 
 // --- California Car (Morrison-Knudsen 1994-97) and Surfliner (Alstom
 // 1998-2002): Superliner-sized bi-levels, 85 ft, 16 ft 2 in, but with two
@@ -962,14 +975,12 @@ const cometCab = (c, { x0 }) => {
 const PAINT = {
   mbta: cometPaint(MBTA.purple, { stripe: [9.85, 0.16, MBTA.yellow], pin: [6.55, 0.16, MBTA.yellow] }),
   septa: cometPaint(null, { stripe: [9.9, 0.45, "#1f4fa3"], pin: [9.55, 0.3, "#e0352b"] }),
-  mnr: cometPaint("#1f4fa3", { stripe: [10.0, 0.2, "#1f4fa3"] }),
   ctdot: cometPaint("#c8102e", { stripe: [10.0, 0.2, "#c8102e"] }),
 };
 const single = (paint, { center = false, cab = false } = {}) => (c) => {
   const rows = center ? [{ ...COMET.rows[0], xs: skipAround(COMET.rows[0].xs, 39.4, 45.6) }] : COMET.rows;
   const badge = {
     mbta: { x: 10, y: 5.0, h: 1.0 },
-    mnr: [{ x: 5.15, y: 8.25, h: 1.2, logo: "mta-inverse" }, { x: 79.4, y: 8.25, h: 1.2, logo: "mta-inverse" }],
   }[c.agency] ?? null;
   return bilevel(c, { ...COMET, rows, doors: center ? [...COMET.doors, cometCenter] : COMET.doors, paint, cab: cab ? cometCab : null, cabLen: cab ? 4 : 0, badge });
 };
@@ -977,8 +988,17 @@ export const mbtaSingle = single(PAINT.mbta);
 export const mbtaSingleCab = single(PAINT.mbta, { cab: true });
 export const septaCoach = single(PAINT.septa);
 export const septaCab = single(PAINT.septa, { cab: true });
-export const shoreliner = (c) => single(c.agency === "ctdot" ? PAINT.ctdot : PAINT.mnr, { center: true })(c);
-export const shorelinerCab = (c) => single(c.agency === "ctdot" ? PAINT.ctdot : PAINT.mnr, { center: true, cab: true })(c);
+// Metro-North's Shoreliners: five big windows each side of the center door
+// in a wide blue band that stops short of the vestibules, the white MTA logo
+// at each end of it.
+const shorelinerMnr = (cab) => (c) => bilevel(c, { ...COMET,
+  rows: [{ xs: [9.0, 15.1, 21.2, 27.3, 33.4, 46.6, 52.7, 58.8, 64.9, 71.0], y: 6.85, w: 5.0, h: 2.8, r: 0.5 }],
+  doors: [...COMET.doors, cometCenter], cab: cab ? cometCab : null, cabLen: cab ? 4 : 0,
+  paint: (c, g) => cometPaint(null)(c, g) + rect(4.4, 6.2, 35.5, 3.95, MNR_BLUE) + rect(45.1, 6.2, 35.5, 3.95, MNR_BLUE),
+  badge: [{ x: 6.3, y: 8.2, h: 1.1, logo: "mta-inverse" }, { x: 78.7, y: 8.2, h: 1.1, logo: "mta-inverse" }],
+});
+export const shoreliner = (c) => (c.agency === "ctdot" ? single(PAINT.ctdot, { center: true }) : shorelinerMnr(false))(c);
+export const shorelinerCab = (c) => (c.agency === "ctdot" ? single(PAINT.ctdot, { center: true, cab: true }) : shorelinerMnr(true))(c);
 
 // ===================== Electric multiple units =====================
 
@@ -993,66 +1013,84 @@ const emuEnd = (front, { win: w = [1.45, 7.0, 1.35, 2.9] } = {}) => (c, { x0 }) 
 
 // --- Bombardier M7 (LIRR 7001-7836) and M7A (Metro-North): 85 ft, 12 ft
 // 10.5 in to the roof, floor 4 ft 3 in, trucks 59 ft 6 in apart on 36 in
-// wheels. Two single-leaf sliding doors a side, the front one about 18 ft
-// from the cab corner; stainless sides, doors edged in color; third-rail
-// shoes (over-running on the LIRR, under-running on Metro-North).
-// LIRR ends: black above a yellow band; Metro-North M7A: blue with white.
+// wheels. Two single-leaf sliding doors a side, each about 17 ft in from its
+// end of the car; wide, low windows: a tall narrow one for the engineer, one
+// more ahead of the front door, six between the doors, two at the inner end.
+// Plain stainless sides, the MTA logo beside each door on the car-end side;
+// third-rail shoes (over-running on the LIRR, under-running on Metro-North).
+// LIRR ends: black above a yellow band; Metro-North M7A: blue over a band of
+// white chevrons.
 const M7 = {
   roof: 12.88, sill: 3.55, cornerR: 1.1, trucks: { centers: 59.5, wb: 8.5, d: 36, shoe: true }, end: 0.6,
-  rows: [{ xs: [4.6, 9.4, 22.4, 27.7, 33.0, 38.3, 43.6, 48.9, 54.2, 59.5, 70.6, 75.6, 80.6], y: 7.05, w: 3.1, h: 2.55, r: 0.3 }],
-  doors: [{ x: 16.9, w: 4.2, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }, { x: 63.9, w: 4.2, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }],
+  rows: [{ xs: [7.9, ...seq(25.8, 5.75, 6), 72.5, 78.2], y: 7.0, w: 4.6, h: 2.35, r: 0.55 }],
+  doors: [{ x: 17.6, w: 4.5, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }, { x: 62.9, w: 4.5, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }],
   roofItems: [[5.5, 10, 0.5], [69.5, 10, 0.5]], diaphragm: [4.25, 11.4], cabLen: 4,
-  // The MTA disc (with the railroad's name) on the car-end side of each door.
-  badge: [{ x: 14.4, y: 8.3, h: 0.8 }, { x: 68.8, y: 8.3, h: 0.8 }],
+  badge: [{ x: 15.0, y: 8.3, h: 0.85 }, { x: 70.0, y: 8.3, h: 0.85 }],
 };
-const m7Paint = (edge) => (c, g) => {
-  const L = g.L;
-  let s = rect(0, 0, L, 17, "#d0d4d9") + rect(0, 11.9, L, 2, C.steelShade) + rect(0, 0, L, 4.25, "#2a2d31");
-  s += rect(0, 4.25, L, 0.25, "#9aa1a9");
-  for (const x of [16.9, 63.9]) s += rect(x - 0.35, 4.2, 0.3, 7.0, edge) + rect(x + 4.25, 4.2, 0.3, 7.0, edge);
-  return s;
-};
-export const m7 = married((c) => bilevel(c, { ...M7, paint: m7Paint("#d4a72c"),
-  cab: emuEnd([[9.6, 2.8, C.black], [6.1, 1.6, LIRR.yellow], [4.3, 1.8, "#c9cdd2"]]) }));
-export const m7a = married((c) => bilevel(c, { ...M7, paint: m7Paint("#1f4fa3"),
-  cab: emuEnd([[6.0, 6.4, "#1f4fa3"], [7.8, 0.2, "#ffffff"], [8.4, 0.2, "#ffffff"], [4.3, 1.7, "#c9cdd2"]]) }));
+const m7Paint = (c, g) => rect(0, 0, g.L, 17, "#d0d4d9") + rect(0, 11.9, g.L, 2, C.steelShade) + rect(0, 0, g.L, 3.85, "#2a2d31");
+const m7Cab = (front) => emuEnd(front, { win: [1.8, 7.0, 2.0, 3.6] });
+export const m7 = married((c) => bilevel(c, { ...M7, paint: m7Paint,
+  cab: m7Cab([[7.0, 5.9, C.black], [4.7, 1.8, LIRR.yellow]]) }));
+export const m7a = married((c) => bilevel(c, { ...M7, paint: m7Paint,
+  cab: m7Cab([[7.0, 5.9, MNR_BLUE], [5.2, 1.8, "#eef1f5"], [5.75, 0.3, MNR_BLUE], [6.35, 0.3, MNR_BLUE]]) }));
 
 // --- Kawasaki M8 (Metro-North New Haven Line, 9101-9580): 85 ft, married
 // pairs with a pantograph on the even car at the inner end, 25/12.5 kV
-// overhead plus third rail. Gray stainless sides with a black-to-red stripe
-// low along the side; red cab ends; single-leaf doors.
+// overhead plus third rail. Doors and windows placed as on the M7, the six
+// between the doors set in one dark band. Stainless sides; red cab ends whose
+// red runs back along the roof edge to the front door; a broad red stripe
+// under the windows, dark gray from the cab back to the first window.
 export const m8 = married((c) => bilevel(c, {
-  badge: { x: 15, y: 8.3, h: 1.0 },                                   // cab side of the first door
+  badge: { x: 15.4, y: 8.7, h: 0.9 },                                 // cab side of the front door
   roof: 13.0, sill: 3.55, cornerR: 1.2, trucks: { centers: 59.5, wb: 8.5, d: 36, shoe: true }, end: 0.6,
-  rows: [{ xs: [4.5, 9.6, 23.7, 29.0, 34.3, 39.6, 44.9, 50.2, 55.5, 60.8, 71.0, 76.3], y: 7.15, w: 3.5, h: 2.45, r: 0.35 }],
-  doors: [{ x: 16.9, w: 4.2, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }, { x: 63.9, w: 4.2, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }],
-  roofItems: [[3.5, 9, 0.5]], diaphragm: [4.25, 11.5], cabLen: 4,
+  rows: [{ xs: [9.6], y: 7.6, w: 4.0, h: 2.3, r: 0.35 }, { xs: seq(25.8, 5.75, 6), y: 7.6, w: 5.1, h: 2.3, r: 0.2 },
+    { xs: [72.5, 78.2], y: 7.6, w: 4.4, h: 2.3, r: 0.35 }],
+  doors: [{ x: 17.6, w: 4.5, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }, { x: 62.9, w: 4.5, y0: 4.2, y1: 11.15, glassY: 0.48, glassH: 0.38 }],
+  roofItems: [[18.0, 26, 0.6]], diaphragm: [4.25, 11.5], cabLen: 4,
   paint: (c, g) => {
     const L = g.L;
-    return rect(0, 0, L, 17, "#b4b9bf") + rect(0, 12.0, L, 2, "#9aa0a7") + rect(0, 0, L, 4.25, "#2a2d31") +
-      path(`M0 5.0L${L} 5.0L${L} 5.9L0 5.9Z`, "#c8102e") + path("M0 5.0L22 5.0Q30 5.45 34 5.9L0 5.9Z", "#1d1f22");
+    return rect(0, 0, L, 17, "#c5c9ce") + rect(0, 12.0, L, 2, "#a9afb6") + rect(0, 0, L, 3.85, "#2a2d31") +
+      rect(25.6, 7.45, 34.25, 2.6, "#1d2024", 0, 'rx="0.3"') +
+      [[13.6, 17.6], [22.1, 62.9], [67.4, L]].map(([a, b]) => rect(a, 5.75, b - a, 1.45, "#c8102e")).join("") +   // not across the doors
+      path("M0 5.75L13.6 5.75Q15.4 6.475 13.6 7.2L0 7.2Z", "#3a3f45") +
+      path("M0 12.15L16.0 12.15Q17.4 12.15 17.4 13.6L0 13.6Z", "#c8102e");
   },
-  cab: emuEnd([[4.3, 8.5, "#c8102e"], [7.0, 3.2, "#1d1f22"]]),
+  cab: emuEnd([[3.55, 9.45, "#c8102e"]], { win: [1.8, 7.6, 2.2, 3.2] }),
   extra: (c, g) => (c.mate || c.single ? pantograph(g.L - 10, 13.0, { up: true, facing: -1 }) + rect(g.L - 16, 12.95, 4, 0.5, C.steelDark, 0.4) : ""),
 }));
 
-// --- Kawasaki M9 (LIRR 9001-9202): the M7's successor, same size; two
-// sliding doors a side; blue and yellow cab ends; a blue stripe under the
-// windows.
+// --- Kawasaki M9 (LIRR 9001-9202): the M7's successor, same size, doors
+// and windows. A tall cab side window, then black and yellow stripes leaning
+// back, a gray band and a dark blue panel (one window in it) to just short of
+// the logo, its trailing edge raked and darker; blue around the front windows.
+const M9_BLUE = "#2b2e83";
+const leanBack = (x, w) => poly([[x, 3.0], [x + w, 3.0], [x + w + 1.75, 13.5], [x + 1.75, 13.5]]);
 export const m9 = married((c) => bilevel(c, { ...M7,
-  paint: (c, g) => m7Paint("#1c3f94")(c, g) + rect(0, 6.6, g.L, 0.3, "#1c3f94"),
-  cab: emuEnd([[8.6, 3.8, "#1c3f94"], [5.9, 2.5, LIRR.yellow], [4.3, 1.6, "#1c3f94"]]) }));
+  paint: (c, g) => m7Paint(c, g) + path(leanBack(6.3, 6.1), M9_BLUE) + path(leanBack(11.7, 0.7), "#1a1c4f") +
+    path(leanBack(5.3, 1.0), "#a2a8b0") + path(leanBack(4.85, 0.45), LIRR.yellow) + path(leanBack(4.4, 0.45), C.black),
+  cab: emuEnd([[7.3, 5.6, M9_BLUE]], { win: [1.2, 7.3, 2.5, 3.7] }) }));
 
-// --- Budd M3 (LIRR and Metro-North, 1984-86): 85 ft, fluted stainless below
-// the windows, two sets of bi-parting doors at the quarter points.
+// --- Budd M3 (LIRR, 1984-86): 85 ft, two sets of bi-parting doors a side
+// about 17 ft in from each end. Windows in strips of four panes in a dark
+// frame: one strip between the cab window and the front door, three between
+// the doors, one at the inner end; a white panel with the logo just inside
+// each door. Stainless sides with a few belt-line ribs; the cab end yellow
+// below the windows.
+const M3_STRIPS = [4.8, 27.3, 37.5, 47.7, 71.2];
 export const m3 = married((c) => bilevel(c, {
-  badge: [{ x: 15.5, y: 8.4, h: 1.1 }, { x: 70.2, y: 8.4, h: 1.1 }],  // beside each door
+  badge: [{ x: 23.2, y: 8.45, h: 1.0 }, { x: 59.0, y: 8.45, h: 1.0 }],  // on the white panels inside the doors
   roof: 12.6, sill: 3.55, cornerR: 1.1, trucks: { centers: 59.5, wb: 8.5, d: 36, shoe: true }, end: 0.6,
-  rows: [{ xs: [5.0, 9.6, 25.6, 30.4, 35.2, 40.0, 44.8, 49.6, 54.4, 59.2, 71.6, 76.4], y: 7.2, w: 3.3, h: 2.4, r: 0.4 }],
-  doors: [{ x: 18.2, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.48, glassH: 0.38 }, { x: 64.2, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.48, glassH: 0.38 }],
+  rows: [{ xs: M3_STRIPS.flatMap((x) => seq(x + 0.2, 2.35, 4)), y: 7.3, w: 2.15, h: 2.3, r: 0.15 }],
+  doors: [{ x: 17.2, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.48, glassH: 0.38 }, { x: 63.2, w: 4.6, y0: 4.2, y1: 11.0, leaves: 2, glassY: 0.48, glassH: 0.38 }],
   roofItems: [[6, 12, 0.45]], diaphragm: [4.25, 11.2], cabLen: 4,
-  paint: (c, g) => rect(0, 0, g.L, 17, "#d0d4d9") + flutes(0, g.L, 4.4, 6.9, 0.27) + rect(0, 11.6, g.L, 2, C.steelShade) + rect(0, 0, g.L, 4.25, "#2a2d31") + rect(0, 9.9, g.L, 0.25, c.agency === "mnr" ? "#1f4fa3" : "#3d8fe0"),
-  cab: emuEnd([[4.3, 8.4, "#2a2d31"]]),
+  paint: (c, g) => {
+    let s = rect(0, 0, g.L, 17, "#d0d4d9") + rect(0, 11.6, g.L, 2, C.steelShade) + rect(0, 0, g.L, 3.85, "#2a2d31");
+    s += lines([[0, 7.05, g.L, 7.05], [0, 5.3, g.L, 5.3], [0, 5.0, g.L, 5.0]], "rgba(0,0,0,0.18)", 0.5);
+    for (const x of M3_STRIPS) s += rect(x, 7.15, 9.6, 2.6, "#2a2e33", 0, 'rx="0.2"');
+    for (const x of [22.4, 58.2]) s += rect(x, 7.3, 4.2, 2.3, "#f2f3f5", 0, 'rx="0.15"');
+    return s;
+  },
+  cab: emuEnd([[4.3, 2.4, c.agency === "mnr" ? "#1f4fa3" : LIRR.yellow]], { win: [1.0, 7.3, 2.0, 3.4] }),
 }));
 
 // --- GE Silverliner IV (SEPTA, 1974-76): 85 ft, trucks 59 ft 6 in apart,
@@ -1958,6 +1996,12 @@ export function sd70mach(c) {
   return s;
 }
 
+// --- Bombardier ALP-46 (NJ Transit 4600-4664): 64 ft, a cab at each end,
+// trucks 33 ft 2 in apart on 44 in wheels. Silver sides under a dark roof
+// band carrying the air intakes; each cab side a black panel around the
+// side window with "NJ TRANSIT" below it; behind the cab doors the blue-to-
+// magenta-to-orange stripe along the bottom of the side, fading in from a
+// halftone at the front; an orange line along the sill.
 export function alp46(c) {
   const { L } = c, sill = 4.25, roof = 13.75;
   const X = (v, k) => (k > 0 ? L - v : v);
@@ -1965,34 +2009,33 @@ export function alp46(c) {
     [5.0, roof], ["q", 3.75, roof, 3.4, 13.1], [1.75, 9.6], [1.4, 9.0], [1.45, 5.1]]);
   let s = "";
   for (const k of [-1, 1]) {
-    const x = (v) => X(v, k);
     s += pilot(1.4, sill, k > 0 ? L : null);
     s += truck(L / 2 + k * 16.6, { wb: 8.83, d: 44, kind: "loco", top: sill });
   }
   s += rect(21.5, 2.2, L - 43, sill - 2.2, "currentColor", 0, 'opacity="0.8" rx="0.2"');
   const nj = c.agency === "njt" || !c.agency;
-  let liv = rect(0, 0, L, roof + 1, nj ? "#bcc1c7" : c.color) + rect(0, roof - 0.6, L, 1, "#3b4046");
+  let liv = rect(0, 0, L, roof + 1, nj ? "#c4c8cd" : c.color) + rect(0, 12.55, L, 2, nj ? "#1f2430" : "#3b4046");
   if (nj) {
     const grad = `ts-disco-${++clipSeq}`;
-    liv += `<defs><linearGradient id="${grad}" x1="0" x2="1"><stop offset="0" stop-color="#1b3f94"/><stop offset="0.45" stop-color="#b5267a"/><stop offset="1" stop-color="#f26b21"/></linearGradient></defs>`;
-    liv += rect(13, 5.2, 24, 1.0, `url(#${grad})`);
-    for (const k of [-1, 1]) {
-      const x = (v) => X(v, k);
-      liv += path(poly([[x(0), 9.0], [x(4.6), 9.0], [x(4.6), 6.8], [x(7.0), 6.8], [x(7.0), roof], [x(0), roof]]), "#1d1f22");
-    }
-    liv += rect(0, 4.85, L, 0.22, "#f26b21") + rect(0, 0, L, 4.85, "#3b4046");
+    liv += `<defs><linearGradient id="${grad}" x1="0" x2="1"><stop offset="0" stop-color="#1b3f94" stop-opacity="0"/>` +
+      '<stop offset="0.12" stop-color="#1b3f94"/><stop offset="0.38" stop-color="#22389a"/><stop offset="0.56" stop-color="#6a2aa0"/>' +
+      '<stop offset="0.74" stop-color="#d42a84"/><stop offset="0.88" stop-color="#f2622a"/><stop offset="1" stop-color="#f26b21"/></linearGradient></defs>';
+    liv += rect(10.4, 4.6, L - 20.8, 2.2, `url(#${grad})`);
+    for (const k of [-1, 1]) liv += rect(Math.min(X(0, k), X(7.2, k)), 7.6, 7.2, roof, C.black);
+    liv += rect(0, sill, L, 0.25, "#f26b21");
   }
   for (const k of [-1, 1]) {
     const x = (v) => X(v, k);
     liv += path(poly([[x(1.95), 9.95], [x(3.4), 12.8], [x(4.0), 12.8], [x(4.0), 9.95]]), C.glass);
     liv += win(Math.min(x(5.0), x(6.5)), 9.7, 1.5, 3.0, 0.2);
   }
-  s += path(d, "#bcc1c7") + clipped(d, liv);
+  s += path(d, "#c4c8cd") + clipped(d, liv);
   for (const k of [-1, 1]) s += door(Math.min(X(7.4, k), X(9.4, k)), sill + 0.35, 2.0, 7.9, { glassY: 0.7, glassH: 0.2 });
-  for (const x of [16, 22, 36, 42]) s += rect(x, 9.2, 5, 3.0, "rgba(0,0,0,0.25)", 0.4) + slats(x, 9.2, 5, 3.0, 0.32);
+  // Air intakes along the dark roof band.
+  for (const x of [14.5, 25.0, 39.5]) s += rect(x, 12.75, 10, 0.75, "rgba(255,255,255,0.08)", 0.3) + slats(x, 12.75, 10, 0.75, 0.4, "rgba(255,255,255,0.18)");
   s += rect(27.5, roof - 0.05, 9, 0.5, C.steelDark, 0.4);
-  // "NJ TRANSIT" low on each cab side.
-  for (const x of [11.5, L - 11.5]) s += badge(c, x, 7.0, 1.0, { logo: "njt-word" });
+  // "NJ TRANSIT" low on each cab side, under the black panel.
+  for (const x of [4.9, L - 4.9]) s += badge(c, x, 6.6, 0.75, { logo: "njt-word" });
   // Pantographs toward each end; the trailing one raised.
   s += pantograph(12.2, roof, { up: false, facing: 1 }) + pantograph(L - 12.2, roof, { up: true, facing: -1 });
   s += outlineOf(d);
@@ -2001,26 +2044,48 @@ export function alp46(c) {
 
 // --- EMD DE30AC / DM30AC (LIRR): 75 ft over couplers, 14 ft 4 in, trucks
 // 46 ft 2 in apart, 9 ft 6 in wheelbase, 44 in wheels. Monocoque body with
-// fluted stainless sides and blue stripes; blue and yellow cab with a raised
-// rounded yellow roof cap; two-pane raked windshield over a flat lower nose;
-// a 2x2 intake grille mid-body. The DM30AC adds third-rail shoes.
-function lirrDiesel(c, shoe) {
+// ribbed stainless sides and two pairs of blue stripes, high and low. A blue
+// cab with the MTA logo, its roof a little lower than the body's and capped
+// in yellow, yellow along the top of the nose; raked windshield over a flat
+// lower nose. Behind the cab a hatch, then the DE30AC's big 2x2 intake
+// grille amidships and a radiator grille low at the back; the DM30AC (with
+// third-rail shoes) has a narrow louvered panel amidships and two grilles at
+// mid-height at the back. An engine-room door ahead of the rear grilles.
+function lirrDiesel(c, dm) {
+  const L = c.L;
+  // Where the stripes stop: the doors and grille panels, [x0, x1, y0, y1].
+  const gaps = dm ? [[27.1, 29.7, 4.9, 12.3], [59.9, 62.2, 5.0, 12.4], [65.2, 72.0, 6.2, 9.4]]
+    : [[25.3, 33.8, 4.75, 12.2], [61.5, 63.7, 5.0, 12.4], [64.4, 73.2, 4.8, 9.0]];
+  const stripe = (y, from = 10.7) => {
+    let s = "", x = from;
+    for (const [a, b] of [...gaps.filter((g) => y < g[3] && y + 0.33 > g[2]), [L, L]]) {
+      if (a > x) s += rect(x, y, a - x, 0.33, LIRR.blue);
+      x = Math.max(x, b);
+    }
+    return s;
+  };
   return cabUnit(c, {
-    badge: { x: 8.0, y: 8.6, h: 1.0, logo: "mta-inverse" },          // on the blue cab panel
+    badge: { x: 5.6, y: 8.25, h: 1.3, logo: "mta-inverse" },          // on the blue cab side
     roof: 14.33, sill: 4.6, rearR: 1.0,
-    nose: [[2.2, 4.6], [1.45, 5.4], [1.4, 7.7], [2.9, 10.0], [4.9, 12.75], ["q", 4.9, 14.33, 7.1, 14.33]],
-    glass: [[[3.1, 10.15], [4.7, 12.4], [5.4, 12.4], [5.4, 10.15]]],
-    sideWin: [[6.0, 10.3, 3.4, 2.0]],
-    doors: [[10.6, 2.2, 5.0, 12.6]],
+    nose: [[2.2, 4.6], [1.45, 5.0], [1.4, 7.2], [1.6, 7.5], [3.6, 9.4], [5.6, 12.4], ["q", 5.8, 13.65, 6.8, 13.65], [10.6, 13.65]],
+    top: [[11.2, 14.33]],
+    glass: [[[3.75, 9.55], [5.5, 12.25], [5.75, 12.25], [5.75, 9.55]]],
+    sideWin: [[6.0, 9.4, 1.9, 2.4]],
+    doors: [[8.2, 1.9, 5.8, 11.5], dm ? [59.9, 2.3, 5.0, 12.4] : [61.5, 2.2, 5.0, 12.4]],
+    panels: [[dm ? 17.1 : 16.8, 7.6, 1.9, 2.4], dm ? [27.1, 4.9, 2.6, 7.4] : [25.3, 4.75, 8.5, 7.45]],
     tank: [20, 54, 1.4], reservoir: [36, 50],
-    grilles: [[6.2, 6.3, 3.0, 0.9], [33.5, 7.2, 2.6, 2.4], [36.4, 7.2, 2.6, 2.4], [33.5, 9.9, 2.6, 2.4], [36.4, 9.9, 2.6, 2.4], [56, 6.0, 15.5, 6.4, 0.36]],
-    roofItems: [[46.5, 1.8, 0.7], [54, 18, 0.25]], fans: [59, 63.8, 68.6], horn: 8.2,
-    trucks: { centers: 46.17, wb: 9.5, d: 44, shoe }, base: C.steel,
-    paint: (c, sp) => flutes(11, sp.L - 1, 5.0, 12.6, 0.32) +
-      rect(0, 4.6, sp.L, 0.9, LIRR.blue) + rect(0, 5.75, sp.L, 0.28, LIRR.blue) +
-      path(poly([[0, 4.6], [10.4, 4.6], [10.4, 10.0], [0, 10.0]]), LIRR.blue) +
-      path(poly([[0, 10.0], [10.4, 10.0], [10.4, 15], [0, 15]]), LIRR.yellow) +
-      path(poly([[2.75, 10.0], [4.75, 12.6], [9.8, 12.6], [9.8, 10.0]]), C.black),
+    grilles: [[5.0, 4.9, 2.0, 1.0, 0.25], ...(dm
+      ? [[27.3, 5.3, 2.2, 2.7], [27.3, 9.1, 2.2, 2.7], [65.3, 6.2, 2.4, 3.2], [68.1, 6.2, 3.8, 3.2]]
+      : [[25.6, 4.95, 3.9, 3.4], [29.7, 4.95, 3.9, 3.4], [25.6, 8.55, 3.9, 3.45], [29.7, 8.55, 3.9, 3.45], [64.4, 4.8, 8.8, 4.2, 0.36]])],
+    roofItems: [[46.5, 1.8, 0.7], [54, 18, 0.25]], fans: [59, 63.8, 68.6],
+    trucks: { centers: 46.17, wb: 9.5, d: 44, shoe: dm }, base: C.steel,
+    paint: (c, sp) => flutes(10.7, sp.L - 1, 5.0, 13.6, 0.66) +
+      stripe(11.2) + stripe(10.5) + stripe(6.6) + stripe(5.95, 12.0) +
+      rect(0, 0, 10.7, 12.3, LIRR.blue) + rect(0, 12.3, 10.7, 3, LIRR.yellow) +
+      path(poly([[0, 6.3], [1.5, 6.9], [3.9, 9.3], [3.9, 15], [0, 15]]), LIRR.yellow) +
+      path(poly([[3.55, 9.3], [5.55, 12.35], [5.9, 12.35], [5.9, 9.3]]), C.black),
+    // Horns on the front of the cab roof.
+    extra: () => rect(7.6, 13.6, 1.1, 0.35, "currentColor") + rect(7.7, 13.95, 0.25, 0.35, "currentColor") + rect(8.2, 13.95, 0.25, 0.45, "currentColor"),
   });
 }
 export const de30ac = (c) => lirrDiesel(c, false);
