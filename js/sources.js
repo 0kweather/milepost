@@ -12,7 +12,7 @@
 import { decodeFeed } from "./gtfsrt.js?v=dev";
 
 export const AGENCIES = {
-  amtrak:     { name: "Amtrak",              short: "Amtrak",   region: "Nationwide",          color: "#1f5fad", kind: "intercity" },
+  amtrak:     { name: "Amtrak",              short: "Amtrak",   region: "United States",       color: "#1f5fad", kind: "intercity" },
   brightline: { name: "Brightline",          short: "Brightline", region: "Florida",           color: "#d9a400", kind: "intercity" },
   via:        { name: "VIA Rail",            short: "VIA",      region: "Canada",              color: "#c8102e", kind: "intercity" },
   mbta:       { name: "MBTA Commuter Rail",  short: "MBTA",     region: "Boston",              color: "#80276c", kind: "commuter" },
