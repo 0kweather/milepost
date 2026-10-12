@@ -132,6 +132,7 @@ a { color: var(--accent); }
   place-items: center;
   width: 36px;
   height: 36px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: transparent;
@@ -693,9 +694,14 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 /* Typical equipment: an "i" at the top left whose tip says the cars may not
    be the real ones. */
 /* Tapping a car opens a card about its model; the card leads to its page. */
-.consist .car { cursor: pointer; border-radius: 4px; }
+/* The tapped car: the others fade back, and a bar in the accent color
+   underlines it (its room is always kept, so nothing shifts). */
+.consist .car { cursor: pointer; border-radius: 4px; transition: opacity 0.15s; }
+.consist .car::after { content: ""; align-self: stretch; height: 3px; margin: 2px 1px 0; border-radius: 2px; background: transparent; }
 .consist .car:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.consist .car[aria-pressed="true"] svg { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.consist-strip.has-open .car:not([aria-pressed="true"]) { opacity: 0.4; }
+.consist-strip.has-open .car:not([aria-pressed="true"]):hover { opacity: 0.75; }
+.consist .car[aria-pressed="true"]::after { background: var(--accent); }
 .model-card {
   margin-top: var(--s2);
   padding: var(--s3);

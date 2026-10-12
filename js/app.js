@@ -1255,7 +1255,7 @@ function consistSection(t) {
   let strip = consistHtml(c, a.color);
   if (open != null) strip = strip.replace(`data-car="${open}" `, `data-car="${open}" aria-pressed="true" `);
   return `<div class="consist">
-    <div class="consist-strip">${strip}</div>
+    <div class="consist-strip${open != null ? " has-open" : ""}">${strip}</div>
     ${open != null ? modelCard(t, c, open) : ""}</div>`;
 }
 
