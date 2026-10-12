@@ -244,6 +244,14 @@ function themeColors() {
 // trains draw larger: the whole marker grows rather than gaining a halo. Their
 // plates sit a little further out to clear it.
 const SELECTED_SCALE = 1.4;
+// Pings: filled circles in the marker's color, animated by ping() below.
+// Their paint is set every frame, so MapLibre's own easing between values is
+// off (it would show the snap back to the small size as a shrink).
+const NO_EASING = { duration: 0, delay: 0 };
+const PING_PAINT = {
+  "circle-radius": 12, "circle-color": ["get", "color"], "circle-opacity": 0,
+  "circle-radius-transition": NO_EASING, "circle-opacity-transition": NO_EASING,
+};
 function trainIconSize(highlighted = false) {
   const sized = (v) => ["*", ["case", highlighted, SELECTED_SCALE, 1], v];
   return ["interpolate", ["linear"], ["zoom"], 2, sized(0.5), 5, sized(0.68), 8, sized(0.85), 12, sized(1)];
@@ -404,7 +412,7 @@ function addLayers() {
     type: "circle",
     source: "stations",
     filter: stationSel,
-    paint: { "circle-radius": 10, "circle-color": "transparent", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": 0 },
+    paint: PING_PAINT,
   });
   map.addLayer({
     id: "tt-station-shadow",
@@ -475,7 +483,7 @@ function addLayers() {
     type: "circle",
     source: "trains",
     filter: trainSel,
-    paint: { "circle-radius": 12, "circle-color": "transparent", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": 0 },
+    paint: PING_PAINT,
   });
 
   map.addLayer({
@@ -1540,11 +1548,11 @@ function applySelectionFilter() {
   ping(Boolean(ids.length || sid));
 }
 
-// A ring that grows and fades from the selected train or station, then
-// rests before the next one. It fades in as it starts, so there's no visible
-// jump back to the small size. A still ring if motion is reduced.
+// A circle that grows and fades from the selected train or station, then
+// rests (hidden, back at the small size) before the next one. A still circle
+// if motion is reduced.
 let pingRaf = null;
-const PING_MS = 1800, PING_REST_MS = 900;
+const PING_MS = 1300, PING_REST_MS = 600;
 function ping(on) {
   cancelAnimationFrame(pingRaf);
   const layers = ["tt-ping", "tt-station-ping"].filter((l) => map.getLayer(l));
@@ -1554,7 +1562,7 @@ function ping(on) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     for (const l of layers) {
       map.setPaintProperty(l, "circle-radius", base(l) + 6);
-      map.setPaintProperty(l, "circle-stroke-opacity", 0.45);
+      map.setPaintProperty(l, "circle-opacity", 0.25);
     }
     return;
   }
@@ -1563,12 +1571,13 @@ function ping(on) {
     if (now - last > 33 && !document.hidden) {
       last = now;
       const t = now % (PING_MS + PING_REST_MS);
-      const k = Math.min(1, t / PING_MS);
+      const resting = t > PING_MS;
+      const k = resting ? 0 : t / PING_MS;
       const grow = 1 - (1 - k) ** 3; // ease out
-      const opacity = t > PING_MS ? 0 : 0.7 * Math.min(1, k / 0.15) * (1 - k);
+      const opacity = resting ? 0 : 0.4 * (1 - k) ** 1.5;
       for (const l of layers) {
-        map.setPaintProperty(l, "circle-radius", base(l) + 2 + grow * 18);
-        map.setPaintProperty(l, "circle-stroke-opacity", opacity);
+        map.setPaintProperty(l, "circle-radius", base(l) + grow * 18);
+        map.setPaintProperty(l, "circle-opacity", opacity);
       }
     }
     pingRaf = requestAnimationFrame(step);
