@@ -138,10 +138,13 @@ function typeOf(agency, number) {
 
 const set = (label, ...units) => ({ label, units });
 
-const VIEWLINER_LD = set("Genesis or ALC-42 locomotives with Viewliner and Amfleet cars",
-  ["genesis", 2], ["viewlinerBaggage", 1], ["viewlinerSleeper", 2], ["viewlinerDiner", 1], ["amfleet2", 3]);
-const SUPERLINER_LD = set("Genesis or ALC-42 locomotives with Superliner cars",
-  ["alc42", 2], ["viewlinerBaggage", 1], ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2]);
+// Two locomotives rarely match: a new ALC-42 Charger usually leads an older
+// P42 Genesis.
+const LD_PAIR = [["alc42", 1], ["genesis", 1]];
+const VIEWLINER_LD = set("ALC-42 and Genesis locomotives with Viewliner and Amfleet cars",
+  ...LD_PAIR, ["viewlinerBaggage", 1], ["viewlinerSleeper", 2], ["viewlinerDiner", 1], ["amfleet2", 3]);
+const SUPERLINER_LD = set("ALC-42 and Genesis locomotives with Superliner cars",
+  ...LD_PAIR, ["viewlinerBaggage", 1], ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2]);
 const EMPIRE = set("P32AC-DM locomotive with Amfleet coaches", ["p32", 1], ["amfleet", 5]);
 const DIESEL_AMFLEET = set("Genesis or ALC-42 locomotive with Amfleet coaches", ["genesis", 1], ["amfleet", 6]);
 const MIDWEST = set("Charger locomotive with Venture coaches", ["charger", 1], ["venture", 4], ["ventureCab", 1]);
@@ -160,8 +163,8 @@ const AMTRAK = {
   "California Zephyr": SUPERLINER_LD, "Southwest Chief": SUPERLINER_LD, "Empire Builder": SUPERLINER_LD,
   "Coast Starlight": SUPERLINER_LD, "Texas Eagle": SUPERLINER_LD, "Sunset Limited": SUPERLINER_LD,
   "City of New Orleans": SUPERLINER_LD,
-  "Auto Train": set("ALC-42 locomotives with Superliner cars and auto carriers",
-    ["alc42", 2], ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2], ["autorack", 3]),
+  "Auto Train": set("ALC-42 and Genesis locomotives with Superliner cars and auto carriers",
+    ...LD_PAIR, ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2], ["autorack", 3]),
   "Heartland Flyer": SUPERLINER_SHORT, "Borealis": SUPERLINER_SHORT, "Saluki": SUPERLINER_SHORT,
   "Wolverine": MIDWEST, "Blue Water": MIDWEST, "Pere Marquette": MIDWEST, "Hiawatha": MIDWEST,
   "Lincoln Service": MIDWEST, "Lincoln River Runner": MIDWEST, "Missouri River Runner": MIDWEST,
