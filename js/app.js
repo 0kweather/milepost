@@ -37,7 +37,6 @@ const state = {
   trains: new Map(),     // id -> train (merged)
   display: new Map(),    // id -> { lat, lon } currently drawn
   hidden: new Set(store.get("tt-hidden", [])),
-  kind: "all",
   selected: null,        // selected train id
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
@@ -559,10 +558,7 @@ map.once("load", () => {
 // ---------- Train features ----------
 
 function visible(t) {
-  const a = AGENCIES[t.agency];
-  if (state.hidden.has(t.agency)) return false;
-  if (state.kind !== "all" && a.kind !== state.kind) return false;
-  return true;
+  return !state.hidden.has(t.agency);
 }
 
 function featureCollection() {
@@ -596,7 +592,6 @@ function redraw() {
 
 function agencyShown(agency) {
   if (state.hidden.has(agency)) return false;
-  if (state.kind !== "all" && AGENCIES[agency].kind !== state.kind) return false;
   const src = SOURCES.find((s) => s.agencies.includes(agency));
   return src && sourceAvailability(src).ok;
 }
@@ -659,14 +654,11 @@ function footprintCollection() {
 }
 
 // Rail lines drawn for the railroads currently shown. Hiding a railroad in the
-// list (or filtering to intercity/commuter) removes its strands; shared track
-// redraws with the railroads that remain, side by side.
+// list removes its strands; shared track redraws with the railroads that
+// remain, side by side. Railroads drawn but not tracked live (MARC, VRE, ...)
+// always show.
 function networkShown(net) {
-  const a = AGENCIES[net];
-  if (a) return !state.hidden.has(net) && (state.kind === "all" || a.kind === state.kind);
-  // Railroads drawn but not tracked live (MARC, VRE, ...): commuter, except Alaska.
-  const kind = net === "alaska" ? "intercity" : "commuter";
-  return state.kind === "all" || state.kind === kind;
+  return !(AGENCIES[net] && state.hidden.has(net));
 }
 
 function railCollection() {
@@ -999,10 +991,9 @@ function renderAgencies() {
         </div>`);
     }
   }
-  const showIntercity = state.kind !== "commuter", showCommuter = state.kind !== "intercity";
   $("agencies").innerHTML =
-    (showIntercity ? `<div class="group-title">Intercity</div>${rows.intercity.join("")}` : "") +
-    (showCommuter ? `<div class="group-title">Commuter &amp; regional</div>${rows.commuter.join("")}` : "") +
+    `<div class="group-title">Intercity</div>${rows.intercity.join("")}` +
+    `<div class="group-title">Commuter &amp; regional</div>${rows.commuter.join("")}` +
     (rows.off.length
       ? `<div class="group-title">Not connected yet</div>${rows.off.join("")}
          <p class="note">These railroads publish live data, but it has to be fetched through a small relay server${RELAY ? " or with a free developer key" : ""}. See the README to switch them on.</p>`
@@ -1899,16 +1890,6 @@ on("agencies", "click", (e) => {
   }
 });
 
-on("kind-filter", "click", (e) => {
-  const b = e.target.closest("[data-kind]");
-  if (!b) return;
-  state.kind = b.dataset.kind;
-  for (const x of $("kind-filter").children) x.setAttribute("aria-selected", String(x === b));
-  redraw();
-  redrawStations();
-  redrawRail();
-  renderAll();
-});
 
 // ---------- Settings menu ----------
 
