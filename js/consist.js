@@ -59,6 +59,7 @@ const TYPES = {
   hsp46: { name: "HSP46 diesel locomotive", kind: "diesel" },
   bl36: { name: "BL36PH diesel locomotive", kind: "diesel" },
   f125: { name: "F125 diesel locomotive", kind: "diesel" },
+  sd70mach: { name: "SD70MACH diesel locomotive", kind: "diesel" },
   // Electric and diesel multiple units
   silverliner4: { name: "Silverliner IV", kind: "emu", pan: true },
   silverliner5: { name: "Silverliner V", kind: "emu", pan: true },
@@ -74,6 +75,8 @@ const TYPES = {
   smartDmu: { name: "Nippon Sharyo railcar", kind: "emu" },
   gtwCar: { name: "Stadler GTW passenger section", kind: "emu" },
   gtwPower: { name: "Stadler GTW power module", kind: "module" },
+  flirtCar: { name: "Stadler FLIRT passenger section", kind: "emu" },
+  flirtPower: { name: "Stadler FLIRT power module", kind: "module" },
   // Single-level coaches
   pushPullCab: { name: "Bombardier cab car", kind: "coach", cab: true },
   pushPullCoach: { name: "Bombardier coach", kind: "coach" },
@@ -98,6 +101,9 @@ const TYPES = {
   skyline: { name: "Skyline dome car", kind: "coach", dome: true },
   parkCar: { name: "Park observation car", kind: "coach", dome: true },
   talgo: { name: "Talgo car", kind: "talgo" },
+  renaissanceCoach: { name: "Renaissance coach", kind: "coach" },
+  renaissanceSleeper: { name: "Renaissance sleeping car", kind: "coach", rows2: true },
+  renaissanceDiner: { name: "Renaissance service car", kind: "coach" },
   // Bi-levels
   c3Cab: { name: "C3 bi-level cab car", kind: "bilevel", cab: true },
   c3: { name: "C3 bi-level coach", kind: "bilevel" },
@@ -147,8 +153,11 @@ const SUPERLINER_LD = set("ALC-42 and Genesis locomotives with Superliner cars",
   ...LD_PAIR, ["viewlinerBaggage", 1], ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2]);
 const EMPIRE = set("P32AC-DM locomotive with Amfleet coaches", ["p32", 1], ["amfleet", 5]);
 const DIESEL_AMFLEET = set("Genesis or ALC-42 locomotive with Amfleet coaches", ["genesis", 1], ["amfleet", 6]);
-const MIDWEST = set("Charger locomotive with Venture coaches", ["charger", 1], ["venture", 4], ["ventureCab", 1]);
-const SUPERLINER_SHORT = set("Locomotive with Superliner coaches", ["charger", 1], ["superlinerCoach", 3]);
+// Midwest Venture sets run with a Charger at each end; only the Hiawatha's
+// have cab cars.
+const MIDWEST = set("Charger locomotives with Venture coaches", ["charger", 1], ["venture", 5], ["charger", 1]);
+const HIAWATHA = set("Charger locomotive with Venture coaches and a cab car", ["charger", 1], ["venture", 5], ["ventureCab", 1]);
+const SUPERLINER_SHORT = set("Charger locomotive with Superliner coaches", ["charger", 1], ["superlinerCoach", 3]);
 
 const AMTRAK = {
   "Acela": set("Avelia Liberty trainset (some trips still use the original Acela Express)", ["acelaPower", 1], ["acelaCoach", 9], ["acelaPower", 1]),
@@ -156,7 +165,7 @@ const AMTRAK = {
   "Keystone": set("ACS-64 locomotive with Amfleet coaches and a Metroliner cab car", ["acs64", 1], ["amfleet", 4], ["metrolinerCab", 1]),
   "Empire Service": EMPIRE, "Adirondack": EMPIRE, "Maple Leaf": EMPIRE, "Ethan Allen Express": EMPIRE,
   "Vermonter": DIESEL_AMFLEET, "Carolinian": DIESEL_AMFLEET, "Pennsylvanian": DIESEL_AMFLEET, "Downeaster": DIESEL_AMFLEET,
-  "Palmetto": set("Genesis or ALC-42 locomotive with Amfleet coaches", ["genesis", 1], ["amfleet2", 6]),
+  "Palmetto": set("ALC-42 locomotive with Amfleet coaches", ["alc42", 1], ["amfleet2", 6]),
   "Piedmont": set("F59PHI or Charger locomotive with NCDOT coaches", ["f59", 1], ["coach", 3]),
   "Crescent": VIEWLINER_LD, "Cardinal": VIEWLINER_LD, "Floridian": VIEWLINER_LD,
   "Lake Shore Limited": VIEWLINER_LD, "Silver Meteor": VIEWLINER_LD,
@@ -165,12 +174,16 @@ const AMTRAK = {
   "City of New Orleans": SUPERLINER_LD,
   "Auto Train": set("ALC-42 and Genesis locomotives with Superliner cars and auto carriers",
     ...LD_PAIR, ["superlinerSleeper", 2], ["superlinerDiner", 1], ["superlinerLounge", 1], ["superlinerCoach", 2], ["autorack", 3]),
-  "Heartland Flyer": SUPERLINER_SHORT, "Borealis": SUPERLINER_SHORT, "Saluki": SUPERLINER_SHORT,
-  "Wolverine": MIDWEST, "Blue Water": MIDWEST, "Pere Marquette": MIDWEST, "Hiawatha": MIDWEST,
+  "Heartland Flyer": set("Genesis locomotive with Superliner coaches", ["genesis", 1], ["superlinerCoach", 3]),
+  "Borealis": SUPERLINER_SHORT,
+  // CN keeps the Venture cars off its line south of Chicago.
+  "Saluki": set("Charger locomotive with Superliner coaches", ["charger", 1], ["superlinerCoach", 5]),
+  "Illini": set("Charger locomotive with Superliner coaches", ["charger", 1], ["superlinerCoach", 5]),
+  "Wolverine": MIDWEST, "Blue Water": MIDWEST, "Pere Marquette": MIDWEST, "Hiawatha": HIAWATHA,
   "Lincoln Service": MIDWEST, "Lincoln River Runner": MIDWEST, "Missouri River Runner": MIDWEST,
-  "Carl Sandburg": MIDWEST, "Illinois Zephyr": MIDWEST, "Illini": MIDWEST,
+  "Carl Sandburg": MIDWEST, "Illinois Zephyr": MIDWEST,
   "Capitol Corridor": set("Charger or F59PHI locomotive with California Cars", ["charger", 1], ["californiaCar", 3], ["californiaCab", 1]),
-  "San Joaquins": set("Charger locomotive with California Cars or Venture coaches", ["charger", 1], ["californiaCar", 4], ["californiaCab", 1]),
+  "San Joaquins": set("Charger locomotive with a Caltrans Venture trainset (some trains still use California Cars)", ["charger", 1], ["venture", 5], ["ventureCab", 1]),
   "Pacific Surfliner": set("Charger or F59PHI locomotive with Surfliner bi-levels", ["charger", 1], ["surfliner", 5], ["surflinerCab", 1]),
   "Amtrak Cascades": set("ALC-42E locomotive with an Airo trainset", ["alc42", 1], ["venture", 6], ["ventureCab", 1]),
 };
@@ -180,7 +193,7 @@ const VIA = {
   "Corridor": set("Siemens Venture trainset (some trains use LRC or HEP cars)", ["charger", 1], ["venture", 4], ["ventureCab", 1]),
   "Canadian": set("F40PH locomotives with Budd stainless cars",
     ["f40", 2], ["buddBaggage", 1], ["buddCoach", 2], ["skyline", 1], ["buddDiner", 1], ["buddSleeper", 3], ["parkCar", 1]),
-  "Ocean": set("F40PH locomotive with stainless cars", ["f40", 1], ["buddBaggage", 1], ["buddCoach", 2], ["skyline", 1], ["buddSleeper", 2]),
+  "Ocean": set("F40PH locomotive with Renaissance cars", ["f40", 1], ["renaissanceCoach", 2], ["renaissanceDiner", 1], ["renaissanceSleeper", 3]),
   "Hudson Bay": VIA_BUDD, "Skeena": VIA_BUDD,
   "Abitibi": set("F40PH locomotive with Budd stainless cars", ["f40", 1], ["buddBaggage", 1], ["buddCoach", 2]),
   "Saguenay": set("F40PH locomotive with Budd stainless cars", ["f40", 1], ["buddBaggage", 1], ["buddCoach", 2]),
@@ -194,7 +207,7 @@ function typicalFor(t, reported) {
   switch (t.agency) {
     case "amtrak": return AMTRAK[t.route] || set("Locomotive with coaches", ["genesis", 1], ["amfleet", 5]);
     case "via": return VIA[t.route] || VIA.Corridor;
-    case "brightline": return set("Charger locomotives with Brightline coaches", ["charger", 1], ["venture", 4], ["charger", 1]);
+    case "brightline": return set("Charger locomotives with 10 Brightline coaches", ["charger", 1], ["venture", 10], ["charger", 1]);
     case "lirr": {
       const diesel = reported ? !["m7", "m9", "m3"].includes(reported)
         : /Montauk|Greenport|Oyster Bay/.test(t.route || "") || /Port Jefferson|Oyster Bay|Montauk|Greenport|Speonk/.test(dest);
@@ -203,8 +216,13 @@ function typicalFor(t, reported) {
         : set("M7 or M9 electric cars, usually 6 to 12", [reported === "m9" ? "m9" : "m7", 8]);
     }
     case "mnr":
-      if (t.route === "Danbury" || t.route === "Waterbury" || /Poughkeepsie|Wassaic/.test(dest)) {
-        return set("SC-42DM or P32AC-DM locomotive with Shoreliner coaches", ["charger", 1], ["shoreliner", 4], ["shorelinerCab", 1]);
+      // The new SC-42DM Chargers run the Hudson Line to Poughkeepsie; the
+      // Danbury and upper Harlem trains still have P32AC-DMs.
+      if (/Poughkeepsie/.test(dest) && !/Danbury|Waterbury|Harlem/.test(t.route || "")) {
+        return set("SC-42DM Charger locomotive with Shoreliner coaches", ["charger", 1], ["shoreliner", 4], ["shorelinerCab", 1]);
+      }
+      if (t.route === "Danbury" || t.route === "Waterbury" || /Wassaic/.test(dest)) {
+        return set("P32AC-DM locomotive with Shoreliner coaches", ["p32", 1], ["shoreliner", 4], ["shorelinerCab", 1]);
       }
       return /New Haven|New Canaan/.test(t.route || "")
         ? set("M8 electric cars, usually 6 to 10", ["m8", 8])
@@ -221,14 +239,19 @@ function typicalFor(t, reported) {
     case "njt": return set("Electric or dual-mode locomotive with MultiLevel coaches", ["alp46", 1], ["multilevel", 5], ["multilevelCab", 1]);
     case "metra": return t.route === "ME"
       ? set("Highliner electric cars", ["highliner", 4])
-      : set("Diesel locomotive with gallery bi-levels", ["mp36", 1], ["gallery", 5], ["galleryCab", 1]);
+      : ["MD-N", "MD-W"].includes(t.route)
+        ? set("SD70MACH locomotive with gallery bi-levels", ["sd70mach", 1], ["gallery", 5], ["galleryCab", 1])
+        : set("Diesel locomotive with gallery bi-levels", ["mp36", 1], ["gallery", 5], ["galleryCab", 1]);
     case "rtd": return set("Silverliner V electric cars, usually 2 to 4", ["silverliner5", 4]);
     case "frontrunner": return set("MP36PH locomotive with Bombardier bi-levels", ["mp36", 1], ["bilevel", 3], ["bilevelCab", 1]);
     case "capmetro": return set("Stadler GTW diesel railcar", ["gtwCar", 1], ["gtwPower", 1], ["gtwCar", 1]);
     case "trirail": return set("Diesel locomotive with bi-level coaches", ["bl36", 1], ["bilevel", 3], ["bilevelCab", 1]);
     case "caltrain": return set("Stadler KISS electric trainset", ["kissCab", 1], ["kiss", 5], ["kissCab", 1]);
     case "smart": return set("Nippon Sharyo diesel railcars", ["smartDmu", 2]);
-    case "metrolink": return set("F125 locomotive with bi-level coaches", ["f125", 1], ["bilevel", 4], ["bilevelCab", 1]);
+    // Arrow (San Bernardino–Redlands, trains 38xx): Stadler FLIRT railcars.
+    case "metrolink": return /^38\d\d$/.test(t.number || "") || /Redlands/.test(dest)
+      ? set("Stadler FLIRT railcar", ["flirtCar", 1], ["flirtPower", 1], ["flirtCar", 1])
+      : set("F125 locomotive with bi-level coaches", ["f125", 1], ["bilevel", 4], ["bilevelCab", 1]);
     default: return null;
   }
 }

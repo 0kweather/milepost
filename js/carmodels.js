@@ -33,10 +33,20 @@ function carBadge(c, spec, { rows, doors, sill, top }) {
   const spot = spotOnCar(c, { x, sill, top: top(x), rows: near.map(([y, h]) => [y, h]), doors, logo });
   return spot ? badge(c, spot.x, spot.y, spot.h, { dark, logo }) : "";
 }
-// Clips livery to the body outline so stripes and swooshes can be drawn freely.
+// Clips livery to the body outline so stripes and swooshes can be drawn freely,
+// then shades it for a little depth: darker toward the sill, a soft highlight
+// along the upper side where it catches the light, the roof edge turning away.
+// The bands follow the outline's own height, so every body shades alike.
 function clipped(outline, inner) {
   const id = `ts-clip-${++clipSeq}`;
-  return `<clipPath id="${id}"><path d="${outline}"/></clipPath><g clip-path="url(#${id})">${inner}</g>`;
+  const ys = outline.match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  const lo = Math.min(...ys), hi = Math.max(...ys);
+  const shade = `<linearGradient id="${id}-s" gradientUnits="userSpaceOnUse" x1="0" y1="${lo}" x2="0" y2="${hi}">` +
+    '<stop offset="0" stop-color="#000" stop-opacity="0.13"/><stop offset="0.3" stop-color="#000" stop-opacity="0.03"/>' +
+    '<stop offset="0.6" stop-color="#fff" stop-opacity="0.05"/><stop offset="0.82" stop-color="#fff" stop-opacity="0.14"/>' +
+    '<stop offset="0.93" stop-color="#fff" stop-opacity="0.03"/><stop offset="1" stop-color="#000" stop-opacity="0.16"/></linearGradient>';
+  return `<clipPath id="${id}"><path d="${outline}"/></clipPath><defs>${shade}</defs>` +
+    `<g clip-path="url(#${id})">${inner}<rect x="-5" y="${lo}" width="200" height="${hi - lo}" fill="url(#${id}-s)"/></g>`;
 }
 const outlineOf = (d, px = 0.8) => path(d, "none", px);
 
@@ -154,7 +164,14 @@ export function genesis(c, s0 = {}) {
   s += path(poly([[17.5, sill], [51.5, sill], [51.5, 2.4], ["q", 51.5, 1.5, 50.6, 1.5], [18.4, 1.5], ["q", 17.5, 1.5, 17.5, 2.4]]), "currentColor", 0, 'opacity="0.82"');
   s += rect(33, 2.9, 2.5, 0.9, C.steelDark, 0, 'opacity="0.8"'); // fuel gauge and filler
   s += truck(L / 2 - 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe }) + truck(L / 2 + 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe });
-  let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : c.color);
+  const mnr = c.agency === "mnr";
+  let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : mnr ? "#c3c8ce" : c.color);
+  if (mnr) {
+    // Metro-North's P32AC-DMs: a blue cab and nose, silver hood over a blue
+    // band with a red stripe along its top.
+    liv += rect(0, 0, 12.6, roof + 1, "#1f4fbf") + rect(0, sill, L, 3.0, "#1f4fbf") +
+      path(`M12.6 ${sill + 3.0}L${L} ${sill + 3.4}L${L} ${sill + 3.75}L12.6 ${sill + 3.35}Z`, AMTRAK.red);
+  }
   if (amtrak) {
     // The blue top's lower edge waves gently from the cab to the back.
     liv += path(`M0 ${roof + 1}L0 10.1L5.8 10.1C16 10.0 22 11.0 32 10.75S48 10.1 56 10.55S66 11.2 ${L} 11.0L${L} ${roof + 1}Z`, AMTRAK.blue);
@@ -174,7 +191,7 @@ export function genesis(c, s0 = {}) {
   // Roof: dynamic brake hatch, exhaust, two radiator fans at the back.
   s += rect(28, roof, 9, 0.3, C.steelDark, 0.4) + rect(41.5, roof, 1.6, 0.55, "currentColor") + rect(52, roof, 14, 0.25, C.steelDark, 0.4);
   for (const x of [55.5, 62]) s += path(`M${x - 2.4} ${roof + 0.25}Q${x} ${roof + 0.95} ${x + 2.4} ${roof + 0.25}Z`, C.steelDark, 0.4);
-  s += badge(c, 55, 9.3, 1.6);                                       // toward the rear, under the blue
+  s += mnr ? badge(c, 17.5, 10.2, 1.6) : badge(c, 55, 9.3, 1.6);    // MTA disc behind the cab; Amtrak toward the rear
   s += outlineOf(d);
   return s;
 }
@@ -287,7 +304,7 @@ export function charger(c, { phase7 = false } = {}) {
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
     : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
-  const base = { phase7: AMTRAK.sky, brightline: "#ffd100", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
+  const base = { phase7: AMTRAK.sky, brightline: "#d9dde2", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
     cascades: "#1d4a45" }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
@@ -325,9 +342,12 @@ export function charger(c, { phase7 = false } = {}) {
       break;
     }
     case "brightline":
-      // Yellow, with white and gray bands slanting across the side.
-      liv += path(`M20 ${sill}L27 ${sill}L41 ${roof + 1}L34 ${roof + 1}Z`, "#ffffff") + path(`M27 ${sill}L31 ${sill}L45 ${roof + 1}L41 ${roof + 1}Z`, "#8a9097");
-      liv += rect(0, sill, L, 0.9, "#3a3d41");
+      // Silver, a big yellow panel slanting across the middle with gray
+      // wedges, a dark roof band; the nose black with yellow rays.
+      liv += path(`M22 ${sill}L52 ${sill}L62 ${roof + 1}L32 ${roof + 1}Z`, "#ffd100") +
+        path(`M29 ${sill}L33 ${sill}L43 ${roof + 1}L39 ${roof + 1}Z`, "#8a9097") + path(`M47 ${sill}L49 ${sill}L59 ${roof + 1}L57 ${roof + 1}Z`, "#8a9097");
+      liv += rect(0, roof - 0.9, L, 2, "#3a3d41") + rect(0, sill, L, 0.6, "#3a3d41") + rect(0, 0, 7.6, roof + 1, "#1d1f22");
+      for (let k = 0; k < 4; k++) liv += path(poly([[0, 5.6 + k * 1.1], [7.6, 8.0 + k * 0.5], [7.6, 8.35 + k * 0.5], [0, 6.1 + k * 1.1]]), "#ffd100");
       break;
     case "via":
       // VIA's SCV-42: charcoal, a light gray roof, yellow edging the cab glass.
@@ -375,7 +395,7 @@ export function charger(c, { phase7 = false } = {}) {
   // its name in white high behind the cab.
   const mark = {
     phase7: { x: 20, y: 9.2, h: 3.6, dark: true, logo: "amtrak-stack" },
-    brightline: { x: 56, y: 8.5, h: 3.0 },
+    brightline: { x: 42, y: 8.8, h: 2.6 },
     via: { x: 39, y: 8.3, h: 5.0, logo: "via-mark" },
     mnr: { x: 16.5, y: 8.2, h: 1.7 },
     midwest: { x: 37, y: 9.6, h: 2.2, logo: "amtrak-midwest" },
@@ -1055,6 +1075,33 @@ export const gtwCar = (c) => bilevel({ ...c, cabL: true }, {
   },
   extra: () => truck(9.2, { wb: 6.9, d: 30, top: 2.4 }),
 });
+// --- Stadler FLIRT DMU (Metrolink's Arrow, San Bernardino-Redlands): two
+// passenger sections, about 71 ft, either side of a power module, sharing its
+// trucks at the inner ends. Low floor, big windows, a long sloped cab.
+// Arrow: white, a blue nose and roof band, a green stripe low on the side.
+const ARROW = { white: "#f4f5f6", blue: "#1f5fbf", green: "#3aa858" };
+export const flirtCar = (c) => bilevel({ ...c, cabL: true }, {
+  roof: 13.4, sill: 3.0, cornerR: 1.0, end: 0.6, noTrucks: true,
+  nose: [[1.0, 3.0], [1.0, 5.8], ["q", 1.1, 7.0, 2.0, 8.0], [5.2, 12.4], ["q", 6.0, 13.4, 7.6, 13.4]],
+  rows: [{ xs: [16.4, 21.6, 26.8, 32.0, 37.2, 53.0, 58.2, 63.4], y: 6.2, w: 4.4, h: 3.4, r: 0.45 }],
+  doors: [{ x: 10.8, w: 4.4, y0: 2.8, y1: 10.2, leaves: 2, glassY: 0.4, glassH: 0.45 }, { x: 44.6, w: 4.4, y0: 2.8, y1: 10.2, leaves: 2, glassY: 0.4, glassH: 0.45 }],
+  roofItems: [[20, 10, 0.5]], diaphragm: [3.2, 11.8], cabLen: 9, badge: false,
+  paint: (c, g) => rect(0, 0, g.L, 17, ARROW.white) + rect(0, 3.3, g.L, 0.4, ARROW.green) + rect(0, 12.5, g.L, 3, ARROW.blue) +
+    path(poly([[0, 7.0], [2.2, 7.0], [7.8, 12.5], [0, 12.5]]), ARROW.blue),
+  cab: () => path(poly([[1.9, 8.1], [5.0, 12.1], [7.6, 12.1], [7.6, 8.1]]), C.glass) + win(8.2, 8.6, 1.8, 2.4, 0.25),
+  extra: () => truck(9.5, { wb: 8.2, d: 33, top: 3.0 }),
+});
+export function flirtPower(c) {
+  const { L } = c, roof = 13.4, sill = 3.4;
+  const d = poly([[0.4, sill], [L - 0.4, sill], [L - 0.4, roof - 0.6], ["q", L - 0.4, roof, L - 1.0, roof], [1.0, roof], ["q", 0.4, roof, 0.4, roof - 0.6]]);
+  let s = truck(L / 2, { wb: 8.2, d: 33, kind: "loco", top: sill });
+  const liv = rect(0, 0, L, 15, ARROW.white) + rect(0, 3.7, L, 0.4, ARROW.green) + rect(0, 12.5, L, 3, ARROW.blue);
+  s += path(d, ARROW.white) + clipped(d, liv);
+  s += rect(2.0, 6.2, L - 4.0, 4.2, "rgba(20,22,25,0.55)", 0.4) + slats(2.0, 6.2, L - 4.0, 4.2, 0.35, "rgba(255,255,255,0.18)");
+  s += rect(1.5, roof - 0.05, L - 3, 0.8, C.steelDark, 0.4, 'rx="0.2"') + rect(L / 2 - 0.3, roof + 0.7, 0.6, 0.8, "currentColor");
+  return s + outlineOf(d);
+}
+
 // The power module: a short, tall box over its own truck, with a gangway
 // through the middle and radiators and exhausts on the roof.
 export function gtwPower(c) {
@@ -1078,7 +1125,7 @@ export function gtwPower(c) {
 // halftone fades at the ends, red sill stripe. VIA: gray, black window band
 // under a yellow one. Airo (Phase VII): dark blue window stripe, angular
 // green shapes at the ends, red sill stripe.
-const BRIGHT = ["#00a651", "#e31b23", "#7b3f98", "#00a3e0", "#f58220", "#ec008c"];
+const BRIGHT = ["#00a651", "#e31b23", "#00a3e0", "#f58220", "#ec008c"]; // green, red, blue, orange, pink
 const VENTURE = {
   roof: 14.0, sill: 3.9, cornerR: 1.4, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6,
   rows: [{ xs: seq(6.6, 6.0, 12), y: 7.1, w: 4.6, h: 2.85, r: 0.45 }],
@@ -1089,11 +1136,13 @@ function venturePaint(c, g) {
   let s = rect(0, 0, L, 17, "#cdd1d6") + rect(0, 0, L, 4.9, "rgba(0,0,0,0.12)") + rect(0, 12.7, L, 3, "rgba(0,0,0,0.07)");
   switch (c.agency) {
     case "brightline": {
+      // White; the coach's color in a band above the windows, a yellow slash
+      // across the middle, a dark gray window band over a thin yellow line.
       const col = BRIGHT[(c.index ?? 0) % BRIGHT.length];
-      s += rect(0, 0, L, 17, col);
-      s += path(`M${L * 0.18} 3.9L${L * 0.42} 3.9L${L * 0.66} 14.2L${L * 0.42} 14.2Z`, "#ffd100");
-      s += path(`M${L * 0.42} 3.9L${L * 0.44} 3.9L${L * 0.68} 14.2L${L * 0.66} 14.2Z`, "#ffffff");
-      s += rect(0, 6.8, L, 3.5, "#3a3d41", 0, 'opacity="0.85"');
+      s += rect(0, 0, L, 17, "#eef0f2") + rect(0, 10.4, L, 2.4, col);
+      s += path(`M${L * 0.44} 10.4L${L * 0.5} 10.4L${L * 0.54} 12.8L${L * 0.48} 12.8Z`, "#ffd100");
+      s += rect(0, 6.75, L, 0.2, "#ffd100");
+      s += rect(0, 6.95, L, 3.45, "#3a3d41");
       return s;
     }
     case "via":
@@ -1124,8 +1173,8 @@ function venturePaint(c, g) {
 const ventureDoor = (x) => ({ x, w: 2.9, y0: 4.25, y1: 11.3, glassY: 0.55, glassH: 0.32, grabs: false });
 export const venture = (c) => bilevel(c, { ...VENTURE, paint: venturePaint,
   badge: (c) => (c.route === "Amtrak Cascades" ? { x: c.L - 8.6, y: 5.95, h: 1.1, logo: "cascades-dark" } // on the cream, by the door
-    : { via: { x: 24, y: 11.5, h: 0.75, logo: "via-rail-canada" }, brightline: { x: 6.5, y: 5.2, h: 0.8, dark: true } }[c.agency]),
-  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : null),
+    : { via: { x: 24, y: 11.5, h: 0.75, logo: "via-rail-canada" }, brightline: { x: 6.5, y: 5.2, h: 0.8 } }[c.agency]),
+  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : c.route === "San Joaquins" ? "amtrak-california" : null),
   doors: c.agency === "brightline" || c.agency === "via" ? [ventureDoor(1.2), ventureDoor(80.9)] : [ventureDoor(80.9)] });
 // The Venture cab car (VIA's corridor trains, Amtrak Cascades' Airo, Amtrak
 // Midwest): a long streamlined nose sloping from the roof down to a low tip,
@@ -1151,7 +1200,7 @@ export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, pai
   // the far end. Cascades: the name in white high behind the cab.
   badge: (c) => (c.agency === "via" ? [{ x: 21, y: 8.6, h: 1.5, logo: "via-mark" }, { x: c.L - 4.6, y: 8.3, h: 4.6, logo: "via-leaf" }]
     : c.route === "Amtrak Cascades" ? { x: 21, y: 11.4, h: 1.9, dark: true, logo: "cascades" } : undefined),
-  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : null),
+  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : c.route === "San Joaquins" ? "amtrak-california" : null),
   nose: VENTURE_NOSE,
   doors: [ventureDoor(13.2), ventureDoor(80.9)],
   cab: () => {
@@ -1233,6 +1282,26 @@ export const rdc = (c) => bilevel({ ...c, cabL: true }, { ...BUDD, roof: 13.5, b
 export const ncdotCoach = (c) => bilevel(c, { ...BUDD, doors: [buddDoor(1.3), buddDoor(81.1)], badge: false, // lettering not confirmed
   paint: (c, g) => rect(0, 0, g.L, 17, "#c9cdd2") + rect(0, 0, g.L, 6.6, "#1f3f8f") + rect(0, 6.6, g.L, 0.35, "#c8102e") + rect(0, 12.0, g.L, 2, "#b3b9c0"),
   rows: [{ xs: seq(7.0, 5.12, 14), y: 7.4, w: 4.2, h: 2.6, r: 0.35 }] });
+
+// ===================== VIA Rail's Renaissance cars =====================
+// Built in Britain for Channel Tunnel night trains (Nightstar), about 75 ft,
+// lower and narrower than North American cars, with a rounded roof and
+// plug doors at each end. VIA (the Ocean): navy, a teal window band over a
+// thin yellow line.
+const REN = { navy: "#1e3466", teal: "#3fa9b5", yellow: "#f5c400" };
+function renaissance(c, { rows }) {
+  return coachCar(c, {
+    roof: 12.6, sill: 3.8, endR: 1.4, eave: 11.7, end: 0.5,
+    base: REN.navy, roofBand: "#2c3f6e",
+    stripes: [[6.6, 3.1, REN.teal], [6.3, 0.25, REN.yellow]],
+    rows, doors: [{ x: 1.1, w: 2.3, h: 7.0 }, { x: c.L - 3.4, w: 2.3, h: 7.0 }],
+    trucks: { centers: 52, wb: 8.4, d: 33 }, diaphragm: [4.25, 11.2],
+    badge: { x: 7.6, y: 10.8, h: 1.0, dark: true },
+  });
+}
+export const renaissanceCoach = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.0, w: 3.0, h: 2.4, pitch: 3.7, r: 0.35 }] });
+export const renaissanceSleeper = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 7.4, w: 1.8, h: 1.8, pitch: 3.2, r: 0.3 }] });
+export const renaissanceDiner = (c) => renaissance(c, { rows: [{ a: 5, b: c.L - 5, y: 6.9, w: 4.4, h: 2.6, pitch: 5.4, r: 0.4 }] });
 
 // ===================== Acela =====================
 // Alstom Avelia Liberty (Amtrak 2100-2155 power cars): a power car at each
@@ -1562,9 +1631,14 @@ function f40(c, { mbta = false } = {}) {
       const L = sp.L;
       if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, cabEnd: 13.6, sweep: [16.5, 24.5], tail: null, T: 32 });
       if (c.agency === "via") {
-        // VIA: gray body, charcoal roof and window band, yellow stripe.
-        return rect(0, 0, L, sp.roof + 1, "#b9bec4") + rect(0, 13.4, L, 3, "#33373c") + rect(0, 10.2, L, 3.2, "#33373c") +
-          rect(0, 9.7, L, 0.5, "#f5c400") + rect(0, 0, L, 5.4, "#1d1f22");
+        // VIA (current scheme): a blue-teal cab, light gray hood over a blue
+        // lower body, yellow and orange swooshes sweeping up the hood.
+        let v = rect(0, 0, L, sp.roof + 1, "#b9bec4") + rect(0, 0, L, 8.2, "#24497a") + rect(0, 0, 13.9, sp.roof + 1, "#2b7f8f");
+        for (let k = 0; k < 5; k++) {
+          const x = 24 + k * 1.1;
+          v += path(poly([[x, 8.2], [x + 0.55, 8.2], [x + 9.5, 13.0], [x + 8.95, 13.0]]), k % 2 ? "#f08a1c" : "#f5c400");
+        }
+        return v + rect(0, 4.65, L, 0.3, "#f5c400");
       }
       return genericPaint(c, sp);
     },
@@ -1650,6 +1724,60 @@ export function gp40(c) {
 // raked windshields over upright noses; boxy body; two pantographs.
 // NJ Transit: silver, black cab masks wrapping onto the sides, the blue-to-
 // magenta-to-orange "disco" band along the lower body, orange sill line.
+// --- Progress Rail SD70MACH (Metra 500-525, rebuilt from SD70MACs): a
+// freight hood unit, about 74 ft, on two three-axle trucks; a wide safety-nose
+// cab, a long hood with a dynamic brake blister and flared radiators over the
+// rear fans, a walkway with handrails. Metra blue with a halftone fading
+// toward the rear, red and white chevrons on the nose, white Metra logo on the
+// hood.
+export function sd70mach(c) {
+  const { L } = c, deck = 5.2, cabRoof = 15.6, hood = 14.9;
+  const blue = "#1f4fa3";
+  let s = "";
+  s += pilot(1.0, 4.0) + pilot(1.0, 4.0, L);
+  // Fuel tank between the trucks.
+  s += path(poly([[22, 3.9], [L - 22, 3.9], [L - 22, 2.2], ["q", L - 22, 1.3, L - 22.9, 1.3], [22.9, 1.3], ["q", 22, 1.3, 22, 2.2]]), "currentColor", 0, 'opacity="0.82"');
+  for (const k of [-1, 1]) s += truck(L / 2 + k * 22, { wb: 13.6, d: 42, kind: "loco", top: 4.0, axles: 3 });
+  const frame = poly([[1.0, 4.0], [L - 1.0, 4.0], [L - 1.0, deck], [1.0, deck]]);
+  const nose = poly([[1.6, deck], [1.6, 9.6], ["q", 1.7, 10.4, 2.6, 10.4], [6.6, 10.4], [7.2, 11.0], [7.4, 15.0], ["q", 7.5, cabRoof, 8.4, cabRoof],
+    [15.0, cabRoof], ["q", 15.8, cabRoof, 15.8, 14.8], [15.8, deck]]);
+  const hoodD = poly([[15.8, deck], [15.8, hood - 0.5], ["q", 15.8, hood, 16.3, hood], [L - 19, hood], [L - 18.4, hood + 0.6], [L - 3.4, hood + 0.6],
+    ["q", L - 2.8, hood + 0.6, L - 2.8, hood], [L - 2.8, deck]]);
+  const dots = () => {
+    // Halftone: dots shrinking toward the front of the hood.
+    let p = "";
+    for (let x = L - 26; x < L - 3; x += 0.9) for (let y = deck + 0.6; y < hood; y += 0.9) {
+      const k = (x - (L - 26)) / 23;
+      p += circle(x, y, 0.08 + 0.3 * k, "#6f9be0");
+    }
+    return p;
+  };
+  const paint = (extra = "") => rect(0, 0, L, 17, blue) + rect(0, deck, L, 0.3, "#ffffff") + rect(0, deck + 0.3, L, 0.3, "#c8102e") + extra;
+  s += path(frame, C.black);
+  s += path(hoodD, blue) + clipped(hoodD, paint(dots()));
+  for (let x = 17.5; x < L - 26; x += 4.4) s += rect(x, deck + 1.0, 3.8, hood - deck - 2.2, "none", 0.4, 'rx="0.1"');
+  s += rect(L - 18.2, hood - 3.8, 14.6, 4.0, "rgba(0,0,0,0.3)", 0.4) + slats(L - 18.2, hood - 3.8, 14.6, 4.0, 0.36);
+  s += rect(26, hood - 0.05, 9, 0.7, C.steelDark, 0.4, 'rx="0.2"');                     // dynamic brake blister
+  for (const x of [L - 15, L - 10.2, L - 5.6]) s += path(`M${x - 2.1} ${hood + 0.6}Q${x} ${hood + 1.35} ${x + 2.1} ${hood + 0.6}Z`, C.steelDark, 0.4);
+  // Cab and nose: red and white chevrons on the nose, black around the windows.
+  const chevrons = () => {
+    let p = rect(0, 0, 8, 17, "#ffffff");
+    for (let k = 0; k < 7; k++) p += path(poly([[0, deck + k * 1.6], [7.2, deck + k * 1.6 + 2.2], [7.2, deck + k * 1.6 + 3.0], [0, deck + k * 1.6 + 0.8]]), "#c8102e");
+    return p;
+  };
+  s += path(nose, blue) + clipped(nose, paint(chevrons() + rect(7.2, 12.4, 9, 4, C.black) +
+    path(poly([[7.5, 12.7], [7.7, 15.1], [9.6, 15.1], [9.6, 12.7]]), C.glass) + win(10.3, 12.8, 2.2, 2.2, 0.2) + win(13.0, 12.8, 2.3, 2.2, 0.2)));
+  s += door(12.2, deck + 0.3, 2.1, 6.4, { glassY: 0.68, glassH: 0.2, grabs: false });
+  s += badge(c, 38, (deck + hood) / 2 + 0.3, 2.4, { dark: true });                        // the Metra logo on the hood
+  s += outlineOf(hoodD) + outlineOf(nose) + outlineOf(frame);
+  const posts = [];
+  for (let x = 16.4; x < L - 3; x += 6.4) posts.push([x, deck, x, deck + 3.3]);
+  posts.push([16.0, deck + 3.3, L - 1.8, deck + 3.3], [L - 1.8, deck, L - 1.8, deck + 3.3], [1.8, deck, 1.8, deck + 3.3]);
+  s += lines(posts, "currentColor", 0.6);
+  s += rect(9.5, cabRoof - 0.05, 1.2, 0.35, "currentColor");                              // horn
+  return s;
+}
+
 export function alp46(c) {
   const { L } = c, sill = 4.25, roof = 13.75;
   const X = (v, k) => (k > 0 ? L - v : v);
@@ -1741,6 +1869,7 @@ export const MODELS = {
   f40c: M(f40c, 64.25, true),
   f59: M(f59, 58.58, true),
   gp40: M(gp40, 64, true),
+  sd70mach: M(sd70mach, 74.25, true),
   amfleet: M(amfleet1, 85.33),
   amfleet2: M(amfleet2, 85.33),
   metrolinerCab: M(metrolinerCab, 85.33, true),
@@ -1784,7 +1913,9 @@ export const MODELS = {
   smartDmu: M(smartDmu, 85),
   gtwCar: M(gtwCar, 58.85, true),
   gtwPower: M(gtwPower, 16.4),
-  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? c.index % 6 : "")),
+  flirtCar: M(flirtCar, 71, true),
+  flirtPower: M(flirtPower, 21),
+  venture: M(venture, 85, false, (c) => (c.agency === "brightline" ? c.index % 5 : "")),
   ventureCab: M(ventureCab, 85, true),
   buddCoach: M(buddCoach, 85),
   buddSleeper: M(buddSleeper, 85),
@@ -1796,6 +1927,9 @@ export const MODELS = {
   acelaPower: M(acelaPower, 62.7, true),
   acelaCoach: M(acelaCoach, 61.35, false, (c) => (c.index === 1 ? "a" : c.index === c.count - 2 ? "b" : "")),
   talgo: M(talgo, 43.1),
+  renaissanceCoach: M(renaissanceCoach, 75.5),
+  renaissanceSleeper: M(renaissanceSleeper, 75.5),
+  renaissanceDiner: M(renaissanceDiner, 75.5),
   autorack: M(autorack, 89),
   coach: M((c) => (c.route === "Piedmont" ? ncdotCoach(c) : amfleet1(c)), (ag) => 85.33),
 };

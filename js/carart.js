@@ -109,9 +109,9 @@ function coil(x, y0, y1, w) {
 //   "loco": deep frame, a coil spring nest over each journal box, flexicoil
 //     secondary springs carrying the body, dampers, sand boxes.
 //   shoe: third-rail shoe beams on the journal boxes.
-export function truck(cx, { wb = 8.5, d = 36, kind = "car", shoe = false, top = 3.6 } = {}) {
+export function truck(cx, { wb = 8.5, d = 36, kind = "car", shoe = false, top = 3.6, axles = 2 } = {}) {
   const r = d / 24, a = cx - wb / 2, b = cx + wb / 2;
-  let s = wheel(a, d) + wheel(b, d);
+  let s = wheel(a, d) + wheel(b, d) + (axles === 3 ? wheel(cx, d) : "");
   if (kind === "pioneer") {
     for (const x of [a, b]) s += circle(x, r, r * 0.55, "none", 0, `stroke="${C.steelDark}" stroke-width="0.9" ${STROKE}`); // disc brakes
     s += path(poly([[a - 0.3, r + 0.15], [b + 0.3, r + 0.15], [b + 0.3, r + 0.7], [cx + 1.6, r + 0.95], [cx - 1.6, r + 0.95], [a - 0.3, r + 0.7]]), "currentColor", 0, 'opacity="0.85"');
@@ -127,7 +127,7 @@ export function truck(cx, { wb = 8.5, d = 36, kind = "car", shoe = false, top = 
     [cx + 1.7, fb + (loco ? 0.25 : -0.25)], [b - r * 0.75, fb], [b + ext - 0.35, fb], [b + ext, fb + 0.35],
     [b + ext, ft - 0.4], [b + ext - 0.5, ft], [a - ext + 0.5, ft], [a - ext, ft - 0.4]]), "currentColor");
   // Journal boxes (axle ends) in the pedestals.
-  for (const x of [a, b]) s += rect(x - 0.55, r - 0.45, 1.1, 0.9, C.steelDark, 0, 'rx="0.14"') + circle(x, r, 0.18, "currentColor");
+  for (const x of axles === 3 ? [a, cx, b] : [a, b]) s += rect(x - 0.55, r - 0.45, 1.1, 0.9, C.steelDark, 0, 'rx="0.14"') + circle(x, r, 0.18, "currentColor");
   if (loco) {
     for (const x of [a, b]) s += coil(x, r + 0.5, ft - 0.1, 0.95);                     // primary spring nests
     s += coil(cx - 1.25, ft, top, 0.95) + coil(cx + 1.25, ft, top, 0.95);              // flexicoil secondaries
