@@ -19,15 +19,18 @@ const LOGOS = {
   smart: [3.31, false], frontrunner: [12.85, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
+  // Caltrans' mark and name (Charger and Venture sides); the San Joaquins
+  // wordmark; "SURFLINER" spaced out in white along the Surfliner cars.
+  caltrans: [5.3, false], "san-joaquins": [10, false], "surfliner-word": [22, false],
   "via-leaf": [0.84, false],
   // VIA's yellow letters alone, as on the side of the SCV-42 and the Venture cab car.
   "via-word": [2.7, false],
 };
-// Lettering with no logo file: Piedmont's F59s carry "North Carolina" in
-// script on the side.
+// Lettering with no logo file: Piedmont's locomotives and coaches carry
+// "North Carolina" in an upright serif on the side.
 const LETTERING = {
-  "north-carolina": { text: "North Carolina", aspect: 5.6, color: "#1f3f8f",
-    font: 'font-family="Georgia, Times New Roman, serif" font-style="italic"' },
+  "north-carolina": { text: "North Carolina", aspect: 5.6, color: "#3a3f4a",
+    font: 'font-family="Palatino, Georgia, Times New Roman, serif"' },
   // VIA's Venture coaches: the name widely spaced out in white along the
   // middle of the yellow band.
   "via-rail-canada": { text: "VIA RAIL CANADA", aspect: 34, color: "#33373c",
