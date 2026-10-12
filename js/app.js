@@ -582,6 +582,12 @@ map.once("load", () => {
 
 // ---------- Train features ----------
 
+// Trains in lists (search, a station's trains): every train of the railroads
+// switched on. The map-only settings (only tracked trains, hiding estimated
+// ones) don't apply.
+const inLists = (t) => !state.hidden.has(t.agency);
+
+// Trains drawn on the map.
 function visible(t) {
   if (state.hidden.has(t.agency)) return false;
   // The selected and tracked trains always show.
@@ -1077,7 +1083,7 @@ function renderResults() {
   const terms = q.split(/\s+/);
   const matches = [];
   for (const t of state.trains.values()) {
-    if (!visible(t)) continue;
+    if (!inLists(t)) continue;
     const a = AGENCIES[t.agency];
     const hay = `${a.name} ${a.short} ${a.region} ${t.number} ${t.route} ${t.origin} ${t.destination} ${t.nextStop}`.toLowerCase();
     if (!terms.every((w) => hay.includes(w))) continue;
@@ -1395,7 +1401,7 @@ function renderStation() {
   const st = state.stations.get(state.station);
   const el = $("train-detail");
   if (!st) return;
-  const trains = [...state.trains.values()].filter(visible);
+  const trains = [...state.trains.values()].filter(inLists);
   const arrivals = state.stationView === "arr";
   const extras = state.stationExtras?.id === st.id ? state.stationExtras : null;
 
