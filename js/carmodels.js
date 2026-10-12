@@ -430,61 +430,106 @@ export function charger(c, { phase7 = false } = {}) {
 export const alc42 = (c) => charger(c, { phase7: true });
 
 // --- Superliner (Pullman-Standard I, Bombardier II): 85 ft, 16 ft 2 in tall,
-// a low floor between the trucks, one door each side in the middle of the
-// lower level, big two-piece windows upstairs. Phase VI on Superliners:
-// narrow red, blue, red stripes under the upper windows; red sill stripe.
-const SUPER_STRIPES = [[9.15, 0.16, AMTRAK.red], [8.7, 0.38, AMTRAK.blue], [8.48, 0.16, AMTRAK.red], [4.35, 0.2, AMTRAK.red]];
+// a low floor between the trucks, the side door on the lower level just off
+// mid-car. Upstairs, eleven big two-pane windows a side on 6 ft 9 in
+// centers; a fluted roof and fluted bands on the lower level. Equipment
+// lockers over one truck, a big louvered HVAC grille over the other, and a
+// step well at each corner where the skirt drops. Phase IVb, which nearly
+// all still wear: red, white, red pinstripes over a blue band at the upper
+// floor, a red line under the lower windows; the logo, name over travelmark,
+// just past the door.
+const IVB_BLUE = "#26528a";
+const SUPER_STRIPES = [[7.91, 0.68, IVB_BLUE], [8.59, 0.14, "#ffffff"], [8.73, 0.12, AMTRAK.red], [8.85, 0.16, "#ffffff"],
+  [9.01, 0.12, AMTRAK.red], [3.46, 0.14, AMTRAK.red]];
+// Upstairs window bays: centers 8.8 ft from the end, then every 6.75 ft.
+const SUPER_BAYS = Array.from({ length: 11 }, (_, i) => 8.8 + 6.75 * i);
+// A two-pane window: a mullion down the middle.
+const pane2 = (x, y, w, h, r = 0.35) => win(x, y, w, h, r) + line(x + w / 2, y + 0.06, x + w / 2, y + h - 0.06, C.gasket, 0.9);
+// A louvered grille: horizontal blades in a frame.
+const louver = (x, y, w, h, gap = 0.3) => rect(x, y, w, h, C.steelShade, 0.5) +
+  lines(Array.from({ length: Math.max(0, Math.round(h / gap) - 1) }, (_, k) => [x + 0.12, y + (k + 1) * gap, x + w - 0.12, y + (k + 1) * gap]), "rgba(0,0,0,0.45)", 0.6);
 const superBase = {
-  roof: 16.17, sill: 4.3, endR: 1.5, eave: 15.0, drop: { a: 16.5, b: 68.5, y: 1.35 },
-  // Phase VI: the travelmark alone, blue, on the lower level just past the door.
-  badge: { x: 46.8, y: 5.6, h: 1.4, logo: "amtrak-mark" },
-  stripes: SUPER_STRIPES, trucks: { centers: 59.5, wb: 8.5, d: 36 }, diaphragm: [8.4, 14.9],
+  roof: 16.17, sill: 3.2, endR: 1.5, eave: 13.3, roofBand: "#cfd4d9", drop: { a: 18.6, b: 66.4, y: 1.35 },
+  flutes: [[13.45, 16.1], [6.45, 7.85], [1.45, 3.3]], stripes: SUPER_STRIPES,
+  trucks: { centers: 59.5, wb: 8.5, d: 36 }, diaphragm: [7.4, 13.0],
 };
-const superDoor = { x: 41.0, w: 3.0, y: 1.45, h: 6.6, glassY: 0.55, glassH: 0.25 };
-export const superlinerCoach = (c) => coachCar(c, { ...superBase,
-  rows: [{ a: 2.6, b: 82.4, y: 10.35, w: 4.6, h: 2.85, pitch: 5.55, r: 0.45 }, { a: 49, b: 67.5, y: 4.55, w: 3.1, h: 2.0, pitch: 4.4, r: 0.35 }],
-  doors: [superDoor] });
-export const superlinerSleeper = (c) => coachCar(c, { ...superBase,
-  rows: [{ a: 2.6, b: 82.4, y: 10.6, w: 3.0, h: 2.4, pitch: 4.2, r: 0.35 }, { a: 18, b: 39.5, y: 4.6, w: 3.0, h: 2.1, pitch: 4.2, r: 0.35 }, { a: 45.5, b: 67, y: 4.6, w: 3.0, h: 2.1, pitch: 4.2, r: 0.35 }],
-  doors: [superDoor] });
-export const superlinerDiner = (c) => coachCar(c, { ...superBase,
-  rows: [{ a: 9, b: 76, y: 10.35, w: 4.6, h: 2.85, pitch: 5.55, r: 0.45 }, { a: 56, b: 62, y: 5.2, w: 2.2, h: 1.5, pitch: 3, r: 0.3 }] });
-// Sightseer Lounge: floor-to-ceiling windows curving into the roof upstairs.
-export const superlinerLounge = (c) => coachCar(c, { ...superBase,
-  rows: [{ a: 18, b: 39, y: 4.8, w: 2.6, h: 1.9, pitch: 3.6, r: 0.3 }, { a: 46, b: 67, y: 4.8, w: 2.6, h: 1.9, pitch: 3.6, r: 0.3 }],
-  extra: (c, { x0, x1 }) => {
-    let s = "";
-    const a = x0 + 4.5, b = x1 - 4.5, w = 5.0, pitch = 5.6, count = Math.floor((b - a - w) / pitch) + 1;
-    const start = a + (b - a - ((count - 1) * pitch + w)) / 2;
-    for (let i = 0; i < count; i++) {
-      const x = start + i * pitch;
-      s += path(poly([[x, 9.55], [x + w, 9.55], [x + w, 14.6], ["q", x + w, 15.55, x + w - 0.9, 15.75], [x + 0.9, 15.75], ["q", x, 15.55, x, 14.6]]), C.glass, 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke"`);
-      s += rect(x + 0.15, 13.6, w - 0.3, 1.6, C.glassLight, 0, 'rx="0.3"');
+const superDoor = (x) => ({ x, w: 3.0, y: 1.45, h: 6.1, glassY: 0.62, glassH: 0.28 });
+const superLogo = (x) => ({ x, y: 4.85, h: 1.25, logo: "amtrak-stack" });
+// The lower level's ends and fittings, and the upstairs windows. bays:
+// which upstairs bays have windows; low: lower windows [x, w, two-pane];
+// grille: [x, w] the HVAC grille at the B end; side: extra grilles [x, w].
+function superDetail(c, { x0, x1 }, { bays = SUPER_BAYS, low = [], grille = [76.0, 4.7], side = [] } = {}) {
+  let s = "";
+  for (const [e, k] of [[x0, 1], [x1, -1]]) {
+    s += path(poly([[e, 3.2], [e, 1.7], [e + k * 2.9, 1.7], ["q", e + k * 3.5, 1.7, e + k * 3.5, 3.2]]), C.steel, 0.6);
+    const a = Math.min(e + k * 0.8, e + k * 2.1);
+    s += rect(a, 1.8, 1.3, 1.25, "#2a2d31") + lines([[a + 0.1, 2.2, a + 1.2, 2.2], [a + 0.1, 2.6, a + 1.2, 2.6]], C.steelDark, 0.8);
+  }
+  s += rect(4.6, 3.75, 6.8, 3.85, "none", 0.5) + line(8.0, 3.75, 8.0, 7.6, "currentColor", 0.5) + rect(13.6, 3.75, 4.6, 3.85, "none", 0.5); // lockers
+  if (grille) s += louver(grille[0], 3.95, grille[1], 3.5);
+  for (const [x, w] of side) s += louver(x, 4.0, w, 3.6);
+  s += rect(81.6, 4.3, 2.0, 1.9, "none", 0.5);                                                   // hatch
+  for (const [x, w, two] of low) s += two ? pane2(x, 3.85, w, 2.4) : win(x, 3.85, w, 2.4, 0.35);
+  for (const m of bays) s += pane2(m - 2.7, 10.95, 5.4, 2.1, 0.45);
+  return s;
+}
+// Coach. The sleeper shows the same side: the windows upstairs, a narrow and
+// two wide lower windows short of the door.
+const superLow = [[22.4, 2.6, false], [26.2, 5.5, true], [33.0, 5.4, true]];
+export const superlinerCoach = (c) => coachCar(c, { ...superBase, badge: superLogo(53.7), doors: [superDoor(46.6)],
+  extra: (c, g) => superDetail(c, g, { low: superLow }) });
+export const superlinerSleeper = superlinerCoach;
+// Dining car: the kitchen downstairs, no windows there; no windows upstairs
+// over the door either (the dumbwaiter and service area); a narrow grille.
+export const superlinerDiner = (c) => coachCar(c, { ...superBase, badge: superLogo(43.6), doors: [superDoor(36.5)],
+  extra: (c, g) => superDetail(c, g, { bays: SUPER_BAYS.filter((_, i) => i !== 4 && i !== 5), grille: [79.2, 2.0] }) });
+// Sightseer Lounge: in each bay a tall two-pane side window under a separate
+// roof window curving up into the roof; the cafe's windows downstairs.
+export const superlinerLounge = (c) => coachCar(c, { ...superBase, badge: superLogo(61.7), doors: [superDoor(54.6)],
+  extra: (c, g) => {
+    let s = superDetail(c, g, { bays: [], low: [[27.2, 4.9, true], [33.3, 5.2, true]], grille: [75.2, 4.8], side: [[66.4, 2.2]] });
+    for (const m of SUPER_BAYS) {
+      const x = m - 2.6, w = 5.2;
+      s += pane2(x + 0.05, 9.7, w - 0.1, 3.2, 0.4);
+      s += path(poly([[x, 13.4], [x + w, 13.4], [x + w, 15.0], ["q", x + w, 15.7, x + w - 0.9, 15.75], [x + 0.9, 15.75], ["q", x, 15.7, x, 15.0]]), C.glass, 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke"`);
+      s += rect(x + 0.2, 14.4, w - 0.4, 1.0, C.glassLight, 0, 'rx="0.3"');
     }
     return s;
   } });
 
 // --- Viewliner (Budd prototypes, Morrison-Knudsen/Amerail I, CAF II): 85 ft
-// 4 in, 14 ft tall, single level. Sleepers carry a second, upper row of small
-// windows for the upper berths — the "view" in the name. Viewliner I in
-// Phase VI (blue band); Viewliner II in the 2013 Phase III variant (red,
-// white and blue stripes) with a red sill stripe.
-const P3 = (y) => [[y + 0.6, 0.3, AMTRAK.red], [y + 0.3, 0.3, "#ffffff"], [y, 0.3, AMTRAK.blue]];
-const viewBase = { roof: 14.0, sill: 4.1, endR: 1.2, eave: 13.0, trucks: { centers: 59.5, wb: 8.5, d: 36 } };
-const viewDoor = (x) => ({ x, w: 2.7, h: 6.7, glassY: 0.6, glassH: 0.28 });
-export const viewlinerSleeper = (c) => coachCar(c, { ...viewBase, badge: false,
-  stripes: [[6.7, 2.8, AMTRAK.blue], [4.3, 0.2, AMTRAK.red]],
-  rows: [{ a: 2.5, b: 77.5, y: 7.1, w: 3.2, h: 2.0, pitch: 4.15, r: 0.35 }, { a: 2.5, b: 77.5, y: 10.75, w: 2.0, h: 1.1, pitch: 4.15, r: 0.3 }],
-  doors: [viewDoor(80.2)] });
-export const viewlinerDiner = (c) => coachCar(c, { ...viewBase, badge: false,
-  stripes: [...P3(6.2), [4.3, 0.2, AMTRAK.red]],
-  rows: [{ a: 22, b: 82.5, y: 7.3, w: 4.6, h: 2.9, pitch: 5.3, r: 0.4 }, { a: 7, b: 17, y: 8.4, w: 2.2, h: 1.6, pitch: 4.5, r: 0.3 }],
-  doors: [viewDoor(2.6)] });
-// Baggage car: no windows, two wide doors each side.
-export const viewlinerBaggage = (c) => coachCar(c, { ...viewBase, badge: { x: 42.7, y: 10.9, h: 1.2 },
-  stripes: [...P3(8.6), [4.3, 0.2, AMTRAK.red]],
-  doors: [{ x: 19.5, w: 7.5, h: 7.6, glass: false, grabs: false }, { x: 58.3, w: 7.5, h: 7.6, glass: false, grabs: false }],
-  extra: () => lines([19.5, 58.3].flatMap((x) => [1, 2, 3, 4, 5, 6].map((k) => [x + 0.2, 4.25 + k * 1.08, x + 7.3, 4.25 + k * 1.08])), "rgba(0,0,0,0.18)") });
+// 4 in, 14 ft tall, single level, two-pane windows on about 6 ft 10 in
+// centers. Sleepers and diners have a second, shorter row over the first
+// (the upper berths' windows, the "view" in the name). Fluted below the
+// windows, a red line low on the side.
+// Viewliner I sleepers (the most numerous) in Phase IVb: a blue band through
+// the lower windows under red, white, red pinstripes; the logo, name over
+// travelmark, white on the band by the door. Viewliner II diners and baggage
+// cars in the stripes they came in: red over white over blue across the
+// windows, the logo on the stripes.
+const VL2 = { red: "#d9352a", blue: "#2457b5" };
+const VL2_STRIPES = (low) => [[7.3, 0.72, VL2.blue], [8.02, 0.73, "#ffffff"], [8.75, 0.72, VL2.red], [low, 0.15, VL2.red]];
+const viewBase = { roof: 14.0, sill: 4.1, endR: 1.2, eave: 13.0, roofBand: "#cfd4d9", flutes: [[13.1, 13.95], [5.25, 7.25]],
+  trucks: { centers: 59.5, wb: 8.5, d: 36 } };
+const viewDoor = (x) => ({ x, w: 2.7, h: 6.8, glassY: 0.6, glassH: 0.28 });
+// Lower and upper windows in columns: centers, width.
+const viewWins = (centers, w) => centers.map((m) => pane2(m - w / 2, 7.55, w, 2.05) + pane2(m - w / 2, 10.6, w, 1.7, 0.3)).join("");
+export const viewlinerSleeper = (c) => coachCar(c, { ...viewBase, doors: [viewDoor(81.1)],
+  badge: { x: 76.3, y: 8.55, h: 1.7, dark: true, logo: "amtrak-stack" },
+  stripes: [[5.0, 0.15, AMTRAK.red], [7.25, 2.6, IVB_BLUE], [9.92, 0.13, AMTRAK.red], [10.05, 0.17, "#ffffff"], [10.22, 0.13, AMTRAK.red]],
+  extra: () => viewWins([4.6, 11.4, 18.2, 25.1, 31.9, 38.7, 47.2, 56.2, 63.1, 70.15], 5.45) });
+// Diner: the kitchen at one end, windowless but for small vents high up; the
+// door, a tall louver, then six columns of windows over the tables.
+export const viewlinerDiner = (c) => coachCar(c, { ...viewBase, doors: [viewDoor(35.4)],
+  badge: { x: 30.5, y: 8.8, h: 0.75, logo: "amtrak" }, stripes: VL2_STRIPES(5.0),
+  extra: () => [9.5, 15.1, 30.3].map((x) => louver(x - 0.4, 11.3, 0.8, 1.2, 0.25)).join("") + louver(41.2, 7.5, 1.2, 4.85, 0.35) +
+    viewWins([45.1, 52.1, 59.1, 66.1, 73.1, 80.1], 5.6) });
+// Baggage car: no windows; a wide two-leaf door each side, off-center, with
+// a small window in each leaf; mushroom vents on the roof.
+const bagDoor = (x) => ({ x, w: 6.4, h: 7.55, leaves: 2, glassY: 0.58, glassH: 0.34, grabs: false });
+export const viewlinerBaggage = (c) => coachCar(c, { ...viewBase, doors: [bagDoor(13.3), bagDoor(59.6)],
+  badge: { x: 39.65, y: 8.78, h: 0.85, logo: "amtrak" }, stripes: VL2_STRIPES(4.85),
+  extra: () => [2.2, 24.8, 46.4, 68.1].map((x) => path(poly([[x - 0.8, 13.95], [x - 0.8, 14.2], ["q", x - 0.8, 14.5, x, 14.5], ["q", x + 0.8, 14.5, x + 0.8, 14.2], [x + 0.8, 13.95]]), C.steelShade, 0.5)).join("") });
 
 // ===================== Commuter bi-levels =====================
 // bilevel(c, spec) draws a two-level car from measurements:
@@ -1410,18 +1455,25 @@ export function talgo(c) {
 
 // ===================== Auto Train =====================
 // Johnstown America auto carriers (Amtrak 9200-9279): 89 ft, about 20 ft
-// tall, solid aluminum sides on a bi-level rack, end doors; Phase V gray
-// with a red stripe.
+// tall, fully enclosed: unpainted aluminum side sheets between posts about
+// 4 ft apart, a slotted skirt along the bottom over the flatcar's side sill,
+// an arched roof corrugated across the car, bi-fold doors in the ends. A thin
+// red line over the skirt; the logo, name over travelmark, high on the side
+// toward one end.
 export function autorack(c) {
-  const { L } = c, sill = 3.6, roof = 19.9, x0 = 0.6, x1 = L - 0.6;
+  const { L } = c, sill = 2.6, roof = 19.9, eave = 17.6, skirt = 4.3, x0 = 0.6, x1 = L - 0.6;
   const d = poly([[x0, sill], [x1, sill], [x1, roof - 0.5], ["q", x1, roof, x1 - 0.6, roof], [x0 + 0.6, roof], ["q", x0, roof, x0, roof - 0.5]]);
-  let s = truck(L / 2 - 32.5, { wb: 5.8, d: 36, kind: "car", top: sill }) + truck(L / 2 + 32.5, { wb: 5.8, d: 36, kind: "car", top: sill });
-  let liv = rect(0, 0, L, 21, "#c3c8ce") + rect(0, 5.0, L, 0.45, AMTRAK.red);
-  const segs = [];
-  for (let x = 3.2; x < L - 2; x += 2.6) segs.push([x, sill + 0.3, x, roof - 0.4]);
-  liv += lines(segs, "rgba(0,0,0,0.12)", 0.5) + line(0, 11.6, L, 11.6, "rgba(0,0,0,0.25)", 0.8);
-  s += path(d, "#c3c8ce") + clipped(d, liv) + outlineOf(d);
-  s += badge(c, L / 2, 15.0, 2.6);                                   // high on the side
+  let s = rect(x0 + 0.4, 2.0, x1 - x0 - 0.8, 0.6, "currentColor", 0, 'opacity="0.85"');      // flatcar side sill
+  s += truck(L / 2 - 32.5, { wb: 5.8, d: 36, kind: "car", top: 2.4 }) + truck(L / 2 + 32.5, { wb: 5.8, d: 36, kind: "car", top: 2.4 });
+  let liv = rect(0, 0, L, 21, "#d3d7db") + rect(0, eave, L, 3, "#bfc4ca") + rect(0, sill, L, skirt - sill, "#a9afb6");
+  const posts = [], ribs = [], slots = [];
+  for (let x = x0 + 2.2; x < x1 - 1; x += 4.2) posts.push([x, skirt, x, eave]);
+  for (let x = x0 + 0.3; x < x1; x += 0.35) ribs.push([x, eave + 0.1, x, roof]);
+  for (let x = x0 + 0.9; x < x1 - 0.5; x += 1.05) slots.push([x, sill + 0.25, x, skirt - 0.3]);
+  liv += lines(posts, "rgba(0,0,0,0.2)", 0.7) + lines(ribs, "rgba(0,0,0,0.12)", 0.4) + lines(slots, "#3a3f45", 1.4);
+  liv += line(0, eave, L, eave, "rgba(0,0,0,0.25)", 0.6) + rect(0, skirt + 0.1, L, 0.18, AMTRAK.red);
+  s += path(d, "#d3d7db") + clipped(d, liv) + outlineOf(d);
+  s += badge(c, 30.5, 11.6, 4.3, { logo: "amtrak-stack" });          // high on the side, toward one end
   return s;
 }
 
