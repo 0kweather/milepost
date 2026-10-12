@@ -692,43 +692,39 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .consist .car figcaption { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Typical equipment: an "i" at the top left whose tip says the cars may not
    be the real ones. */
-.consist-info {
-  position: relative;
-  flex: none;
-  align-self: flex-start;
-  margin-left: -5px; /* line the glyph up with the cars' left edge */
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--muted);
-  cursor: help;
+/* Tapping a car opens a card about its model; the card leads to its page. */
+.consist .car { cursor: pointer; border-radius: 4px; }
+.consist .car:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.consist .car[aria-pressed="true"] svg { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.model-card {
+  margin-top: var(--s2);
+  padding: var(--s3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--hover);
+  font-size: var(--fs-sm);
 }
-.consist-info:hover, .consist-info:focus-visible { color: var(--text); background: var(--hover); }
-.consist-info .tip {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 5;
-  width: 220px;
-  padding: var(--s2) 10px;
-  border-radius: var(--r-sm);
-  background: var(--panel-solid);
-  box-shadow: var(--shadow);
-  color: var(--muted);
-  font-size: var(--fs-xs);
-  line-height: 1.4;
-  text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s, visibility 0.12s;
-}
-.consist-info .tip strong { color: var(--text); font-weight: 600; }
-.consist-info:hover .tip, .consist-info:focus .tip { opacity: 1; visibility: visible; }
+.model-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s2); }
+.model-card-head strong { font-weight: 600; color: var(--text); }
+.model-card-head span { display: block; font-size: var(--fs-xs); color: var(--muted); }
+.model-card-head .model-num { display: inline; font-variant-numeric: tabular-nums; }
+.icon-btn.sm { width: 24px; height: 24px; flex: none; }
+.facts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s2) 0 0; }
+.facts div { min-width: 0; }
+.facts dt { font-size: var(--fs-xs); color: var(--muted); }
+.facts dd { margin: 0; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.facts.wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); margin: var(--s3) 0; }
+.link-btn { padding: 0; margin-top: var(--s2); border: 0; background: none; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--accent); cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.back-link { margin: 0 0 var(--s3); }
+.model-page h2 { margin: var(--s3) 0 2px; font-size: var(--fs-lg); }
+.model-sub { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.model-art { overflow: hidden; color: var(--car-ink); }
+.model-art svg { display: block; max-width: 100%; height: auto; }
+.model-about { margin: 0 0 var(--s3); font-size: var(--fs-sm); line-height: 1.5; }
+.model-source { margin: 0 0 var(--s3); font-size: var(--fs-xs); color: var(--muted); }
+.model-note { padding: var(--s3); border-radius: var(--r-md); background: var(--hover); font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
+.model-note strong { color: var(--text); font-weight: 600; }
 
 .hero, .meta, .estimate-note, .consist { flex: none; }
 .hero { padding: 6px 0 var(--s4); border-bottom: 1px solid var(--line); }

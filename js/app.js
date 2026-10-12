@@ -4,7 +4,7 @@ import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
-import { consistOf, consistHtml } from "./consist.js?v=dev";
+import { consistOf, consistHtml, carSvg, modelIds } from "./consist.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -54,6 +54,9 @@ const state = {
   hideEstimated: store.get("tt-hide-estimated", false),
   // While tracking a train, show only the tracked ones (and the selected one).
   onlyTracked: store.get("tt-only-tracked", false),
+  // The car tapped in the selected train's drawing: { id (train), i (car),
+  // page (its full model page instead of the train) }, or null.
+  car: null,
   // Times as 18:05 instead of 6:05 PM.
   clock24: store.get("tt-clock24", false),
   // Times shown in: "" the viewer's own zone, "station" each stop's local
@@ -1192,6 +1195,7 @@ function renderDetail() {
     el.innerHTML = '<p class="empty">This train isn’t reporting right now. It may have finished its trip.</p>';
     return;
   }
+  if (state.car?.page && state.car.id === t.id) return renderModelPage(t, el);
   loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
@@ -1235,23 +1239,97 @@ function renderDetail() {
 // A wifi-style signal mark beside the time of the train's last GPS report.
 const SIGNAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-label="GPS"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.8 6.2a9 9 0 0 1 12.4 0"/><path d="M4.1 8.7a5.6 5.6 0 0 1 7.8 0"/></g><circle cx="8" cy="11.6" r="1.4" fill="currentColor"/></svg>`;
 
+const CLOSE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+
 const INFERRED_TITLE = "Worked out by Trainsheet from GPS; not yet reported by the railroad";
 
 // The train's cars, drawn right under its status: live where the railroad
-// reports them; otherwise what typically runs on the route, marked with an
-// "i" icon at the top left whose tip says the count and types may not be accurate.
-const INFO_ICON = `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="6.1" r="1.15" fill="currentColor"/><path d="M10 9v5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+// reports them, otherwise what typically runs on the route. Tapping a car
+// opens a card about its model under the drawing; the card leads to the
+// model's full page.
 function consistSection(t) {
   const c = consistOf(t);
   if (!c) return "";
   const a = AGENCIES[t.agency];
+  const open = state.car?.id === t.id ? state.car.i : null;
+  let strip = consistHtml(c, a.color);
+  if (open != null) strip = strip.replace(`data-car="${open}" `, `data-car="${open}" aria-pressed="true" `);
+  return `<div class="consist">
+    <div class="consist-strip">${strip}</div>
+    ${open != null ? modelCard(t, c, open) : ""}</div>`;
+}
+
+// ---------- Train models ----------
+
+// Fact sheets for each model (data/models.json), loaded on first use.
+let modelsData = null;
+function models() {
+  if (!modelsData) {
+    modelsData = {};
+    fetch("data/models.json?v=dev").then((r) => r.json()).then((d) => {
+      modelsData = d;
+      if (state.car) renderDetail();
+    }).catch((err) => console.warn("models", err));
+  }
+  return modelsData;
+}
+function modelOf(c, i) {
+  const all = models();
+  return modelIds(c, i).map((id) => all[id]).find(Boolean) || null;
+}
+
+const factText = {
+  topSpeedMph: (v) => (state.units === "km" ? `${Math.round(v * KM_PER_MI)} km/h` : `${v} mph`),
+  powerHp: (v) => (state.units === "km" ? `${Math.round(v * 0.7457).toLocaleString()} kW` : `${v.toLocaleString()} hp`),
+  seats: (v) => `${v}`,
+  lengthFt: (v) => (state.units === "km" ? `${(v * 0.3048).toFixed(1)} m` : `${Math.round(v)} ft`),
+};
+const FACT_LABELS = { built: "Built", fleet: "Fleet", topSpeedMph: "Top speed", powerHp: "Power", seats: "Seats", lengthFt: "Length" };
+function facts(m, keys) {
+  return keys.filter((k) => m[k] != null && m[k] !== "")
+    .map((k) => `<div><dt>${FACT_LABELS[k]}</dt><dd>${esc(factText[k] ? factText[k](m[k]) : m[k])}</dd></div>`).join("");
+}
+
+// The card under the drawing: what the car is, and a few numbers.
+function modelCard(t, c, i) {
+  const m = modelOf(c, i), car = c.cars[i];
+  const name = m?.model || car?.type?.name || "This car";
+  const sub = m ? [m.type, m.built].filter(Boolean).join(" · ") : "";
+  const keys = m?.powerHp ? ["topSpeedMph", "powerHp", "fleet"] : ["seats", "topSpeedMph", "fleet"];
+  return `<div class="model-card">
+    <div class="model-card-head">
+      <div><strong>${esc(name)}</strong>${car?.number ? ` <span class="model-num">${esc(car.number)}</span>` : ""}${sub ? `<span>${esc(sub)}</span>` : ""}</div>
+      <button type="button" class="icon-btn sm" data-car-close aria-label="Close">${CLOSE_ICON}</button>
+    </div>
+    ${m ? `<dl class="facts">${facts(m, keys)}</dl>` : ""}
+    <button type="button" class="link-btn" data-model-more>More about the ${esc(m?.model || car?.type?.name || "car")} ›</button>
+  </div>`;
+}
+
+// The model's full page, in place of the train's: a large drawing, every
+// fact, a short history and its source, and whether the cars shown are this
+// train's own or only what usually runs.
+function renderModelPage(t, el) {
+  const c = consistOf(t);
+  const i = state.car.i, m = c && modelOf(c, i), car = c?.cars[i];
+  if (!c || !car) { state.car = null; return renderDetail(); }
+  const a = AGENCIES[t.agency];
+  const width = Math.min(560, Math.max(240, el.clientWidth - 8));
   const why = !c.typical ? ""
     : c.reported ? `${a.short}’s feed names one car, ${c.reported.number} (${c.reported.name}); the rest is what typically runs on this line.`
     : `${a.short} doesn’t report this train’s cars; this is what typically runs on this route.`;
-  const info = c.typical
-    ? `<button type="button" class="consist-info" aria-label="Car count and type may not be accurate">${INFO_ICON}<span class="tip" aria-hidden="true"><strong>Car count and type may not be accurate.</strong> ${esc(why)}</span></button>`
-    : "";
-  return `<div class="consist">${info}<div class="consist-strip">${consistHtml(c, a.color)}</div></div>`;
+  const source = m?.source ? (() => { try { const h = new URL(m.source).hostname.replace(/^www\./, ""); return /wikipedia/.test(h) ? "Wikipedia" : h; } catch { return "Source"; } })() : null;
+  el.innerHTML = `
+    <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.number ? `Train ${t.number}` : trainTitle(t))}</button>
+    <div class="model-page">
+      <div class="model-art">${carSvg(c, i, a.color, width)}</div>
+      <h2>${esc(m?.model || car.type?.name || "This car")}</h2>
+      <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number ? ` · No. ${esc(car.number)}` : ""}</p>
+      ${m ? `<dl class="facts wide">${facts(m, ["built", "fleet", "topSpeedMph", "powerHp", "seats", "lengthFt"])}</dl>` : ""}
+      ${m?.about ? `<p class="model-about">${esc(m.about)}</p>` : ""}
+      ${source ? `<p class="model-source">Source: <a href="${esc(m.source)}" target="_blank" rel="noopener">${esc(source)}</a></p>` : ""}
+      ${c.typical ? `<div class="model-note"><strong>Car count and type may not be accurate.</strong> ${esc(why)}${c.summary ? ` Typical for this route: ${esc(c.summary)}.` : ""}</div>` : ""}
+    </div>`;
 }
 
 function fmtIn(ms) {
@@ -1630,6 +1708,7 @@ function showDetailView(open) {
 function select(id, { fly = true } = {}) {
   state.returnTo = null;
   $("back-btn").lastChild.textContent = " All trains";
+  if (state.selected !== id) state.car = null;
   state.selected = id;
   state.station = null;
   state.predictions = null;
@@ -1825,7 +1904,21 @@ on("train-detail", "keydown", (e) => {
   }
 });
 
+function openCar(fig) {
+  const i = Number(fig.dataset.car);
+  state.car = state.car?.id === state.selected && state.car.i === i ? null : { id: state.selected, i, page: false };
+  renderDetail();
+}
+on("train-detail", "keydown", (e) => {
+  const fig = e.target.closest?.("[data-car]");
+  if (fig && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openCar(fig); }
+});
 on("train-detail", "click", (e) => {
+  const fig = e.target.closest("[data-car]");
+  if (fig) return openCar(fig);
+  if (e.target.closest("[data-car-close]")) { state.car = null; return renderDetail(); }
+  if (e.target.closest("[data-model-more]") && state.car) { state.car.page = true; renderDetail(); $("train-detail").scrollTop = 0; return; }
+  if (e.target.closest("[data-model-back]") && state.car) { state.car.page = false; return renderDetail(); }
   if (e.target.closest("[data-notices-toggle]")) {
     state.noticesCollapsed = !state.noticesCollapsed;
     store.set("tt-notices-collapsed", state.noticesCollapsed);

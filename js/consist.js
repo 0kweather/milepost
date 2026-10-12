@@ -304,10 +304,10 @@ const art = (key) => MODELS[key] || MODELS.coach;
 // Markup for the consist strip: one drawing per car, with its number under it
 // when the railroad reported one.
 let renderSeq = 0;
-export function consistHtml(c, color) {
+// How each car of a consist is drawn: its type and model, its length, and
+// the drawing context (which way it faces, its cabs, its neighbors).
+function carsOf(c, color) {
   const n = c.cars.length;
-  // Identical cars (same model, same ends) are drawn once and reused.
-  const drawn = new Map(), uid = `tsc${++renderSeq}`;
   // Married pairs: a car whose neighbor carries the next or previous number is
   // half of a pair (0: the front half, 1: its mate, drawn facing backward); a
   // numbered car with no mate beside it is a single, with a cab at each end.
@@ -336,6 +336,27 @@ export function consistHtml(c, color) {
       coupledR: flip ? i > 0 : i < n - 1,
     };
     if (flip) ctx.cabL = true;
+    return { t, model, L, ctx, flip, number };
+  });
+}
+
+// One car's drawing (without its id or reuse), as SVG content in feet.
+function drawCar({ t, model, L, ctx, flip }, { couplers = true } = {}) {
+  let drawing = themable(model.draw(ctx));
+  // Locomotives draw no gangway: where one is coupled to the next unit,
+  // draw its coupler out to the face so the two visibly connect.
+  if (couplers && LOCOMOTIVE.has(t.kind)) {
+    if (ctx.coupledL) drawing += locoCoupler(0, -1);
+    if (ctx.coupledR) drawing += locoCoupler(L, 1);
+  }
+  return flip ? `<g transform="matrix(-1 0 0 1 ${L} 0)">${drawing}</g>` : drawing;
+}
+
+export function consistHtml(c, color) {
+  // Identical cars (same model, same ends) are drawn once and reused.
+  const drawn = new Map(), uid = `tsc${++renderSeq}`;
+  return carsOf(c, color).map((car, i) => {
+    const { t, model, L, ctx, flip, number } = car;
     const sig = [t.key, flip, ctx.lead, ctx.cabL, ctx.cabR, ctx.pan, ctx.pair, ctx.coupledL, ctx.coupledR, model.variant ? model.variant(ctx) : ""].join();
     let drawing;
     if (drawn.has(sig)) {
@@ -343,20 +364,31 @@ export function consistHtml(c, color) {
     } else {
       const id = `${uid}-${drawn.size}`;
       drawn.set(sig, id);
-      drawing = themable(model.draw(ctx));
-      // Locomotives draw no gangway: where one is coupled to the next unit,
-      // draw its coupler out to the face so the two visibly connect.
-      if (LOCOMOTIVE.has(t.kind)) {
-        if (ctx.coupledL) drawing += locoCoupler(0, -1);
-        if (ctx.coupledR) drawing += locoCoupler(L, 1);
-      }
-      if (flip) drawing = `<g transform="matrix(-1 0 0 1 ${L} 0)">${drawing}</g>`;
-      drawing = `<g id="${id}">${drawing}</g>`;
+      drawing = `<g id="${id}">${drawCar(car)}</g>`;
     }
     const label = esc([t.name, number].filter(Boolean).join(" "));
-    return `<figure class="car" title="${label}">
+    // Tapping a car shows what it is (app.js).
+    return `<figure class="car" data-car="${i}" role="button" tabindex="0" title="${label}">
       <svg viewBox="0 0 ${L} ${HEIGHT_FT}" width="${Math.round(L * PX_PER_FT)}" height="${HEIGHT_FT * PX_PER_FT}" role="img" aria-label="${label}"><g transform="matrix(1 0 0 -1 0 ${HEIGHT_FT})">${drawing}</g></svg>
       ${number ? `<figcaption>${esc(number)}</figcaption>` : ""}
     </figure>`;
   }).join("");
+}
+
+// A single car of a consist, drawn on its own (no couplers to its
+// neighbors), `width` px wide.
+export function carSvg(c, i, color, width) {
+  const car = carsOf(c, color)[i];
+  if (!car) return "";
+  const { L, t } = car;
+  return `<svg class="car-portrait" viewBox="0 0 ${L} ${HEIGHT_FT}" width="${width}" height="${Math.round((width * HEIGHT_FT) / L)}" role="img" aria-label="${esc(t.name)}"><g transform="matrix(1 0 0 -1 0 ${HEIGHT_FT})">${drawCar(car, { couplers: false })}</g></svg>`;
+}
+
+// Where to look up car i's fact sheet (data/models.json), most specific
+// first: model@railroad/route, model@railroad, model. The generic "coach"
+// is an Amfleet I except on the Piedmont.
+export function modelIds(c, i) {
+  const key = c.cars[i]?.type?.key || "coach";
+  const k = key === "coach" && !(c.agency === "amtrak" && c.route === "Piedmont") ? "amfleet" : key;
+  return [`${k}@${c.agency}/${c.route || ""}`, `${k}@${c.agency}`, k];
 }
