@@ -7,6 +7,8 @@
 // few seconds so heavy traffic doesn't multiply upstream requests.
 //
 //   GET /status      -> { feeds: { septa: true, metra: false, ... } }
+//   GET /njt-board/:code -> one NJ Transit station's DepartureVision board
+//                       (tracks and statuses), as JSON.
 //   GET /feed/:id    -> the upstream feed, byte for byte. For railroads that
 //                       publish positions and predicted stop times as two
 //                       GTFS-realtime feeds, both, back to back: concatenated
@@ -158,6 +160,20 @@ function minutesUntil(text, now) {
 
 let njtMem = null; // { st, at, json }
 
+// One station's departure board, for its tracks: a station's page asks for
+// it. Kept 30 seconds per station.
+const boardMem = new Map(); // code -> { at, json }
+const BOARD_FULL_Q = "query($s:String!){getTrainDepartureScreens(station:$s){items{trainID line destination status track departureDate}}}";
+async function njtBoard(code) {
+  const hit = boardMem.get(code);
+  if (hit && Date.now() - hit.at < 30 * 1000) return hit.json;
+  const data = await njtGql(BOARD_FULL_Q, { s: code });
+  const json = { at: Date.now(), items: (data?.getTrainDepartureScreens?.items || []).map(({ trainID, line, destination, status, track, departureDate }) =>
+    ({ trainID, line, destination, status, track: track || null, departureDate })) };
+  boardMem.set(code, { at: Date.now(), json });
+  return json;
+}
+
 async function fetchNjtDv(ctx) {
   const now = Date.now();
   if (njtMem && now - njtMem.at < 15 * 1000) return Response.json(njtMem.json);
@@ -213,6 +229,16 @@ export default {
     if (pathname === "/status") {
       const feeds = Object.fromEntries(Object.entries(FEEDS).map(([id, f]) => [id, Boolean(f(env))]));
       return Response.json({ feeds }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+    }
+
+    const board = pathname.match(/^\/njt-board\/([A-Z0-9]{2,3})$/);
+    if (board) {
+      if (!NJT_STATIONS.includes(board[1])) return new Response("Unknown station", { status: 404, headers: CORS });
+      try {
+        return Response.json(await njtBoard(board[1]), { headers: { ...CORS, "Cache-Control": "public, max-age=30" } });
+      } catch (err) {
+        return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
+      }
     }
 
     const match = pathname.match(/^\/feed\/([a-z0-9-]+)$/);

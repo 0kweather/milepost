@@ -612,6 +612,16 @@ a { color: var(--accent); }
 .served li { display: flex; gap: var(--s3); align-items: flex-start; font-size: var(--fs-sm); }
 .served .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: var(--s1); }
 .served .sub { color: var(--muted); font-size: var(--fs-xs); }
+/* Station facts under its name: local time, step-free access. */
+.station-facts { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin: var(--s1) 0 0; font-size: var(--fs-xs); color: var(--muted); }
+.station-facts .access { display: inline-flex; align-items: center; gap: 4px; }
+.station-facts .access.yes { color: var(--good); }
+/* Departures / arrivals beside the list's heading. */
+.deps-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-top: var(--s4); }
+.deps-head .section-title { margin: 0; }
+.segmented.sm { margin: 0; padding: 2px; }
+.segmented.sm button { padding: 3px var(--s3); font-size: var(--fs-xs); }
+.dep .what .sub .track { color: var(--text); font-weight: 600; }
 
 .deps { display: grid; gap: 2px; margin: var(--s2) calc(-1 * var(--s2)) 0; flex: none; }
 

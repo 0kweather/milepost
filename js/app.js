@@ -2,7 +2,7 @@ import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v
 import { loadStations, trainsDue, mbtaPredictions, meters, norm } from "./stations.js?v=dev";
 import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
-import { trainNotices } from "./notices.js?v=dev";
+import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds } from "./consist.js?v=dev";
 
@@ -57,6 +57,11 @@ const state = {
   // The car tapped in the selected train's drawing: { id (train), i (car),
   // page (its full model page instead of the train) }, or null.
   car: null,
+  // A station's page lists departures or arrivals.
+  stationView: "dep",
+  // The open station's notices and (NJ Transit) its departure board's tracks:
+  // { id, notices: [...], tracks: Map(train number -> track) }.
+  stationExtras: null,
   // Times as 18:05 instead of 6:05 PM.
   clock24: store.get("tt-clock24", false),
   // Times shown in: "" the viewer's own zone, "station" each stop's local
@@ -1164,12 +1169,15 @@ function loadNotices(t) {
 }
 
 function noticesHtml(t) {
-  const list = state.notices.id === t.id ? state.notices.list : [];
+  return noticesBlock(state.notices.id === t.id ? state.notices.list : [], t.route);
+}
+// A foldable list of notices (folded or not as the viewer last left it).
+function noticesBlock(list, route = null, title = "Service notices") {
   if (!list.length) return "";
   const open = !state.noticesCollapsed;
   return `<div class="notices${open ? "" : " collapsed"}">
     <h3 class="section-title"><button type="button" class="notices-toggle" data-notices-toggle aria-expanded="${open}">
-      Service notices <span class="notices-count">${list.length}</span>
+      ${esc(title)} <span class="notices-count">${list.length}</span>
       <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button></h3>
     ${open ? list.map((n) => `<div class="notice">
@@ -1179,7 +1187,7 @@ function noticesHtml(t) {
         ${n.description && n.description !== n.header
           ? `<details><summary>More</summary><p>${esc(n.description).replace(/\n+/g, "<br>")}</p></details>` : ""}
         ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">Details</a>` : ""}
-        ${n.scope === "line" && t.route ? `<span class="notice-scope">${esc(t.route)}</span>` : ""}
+        ${n.scope === "line" && route ? `<span class="notice-scope">${esc(route)}</span>` : ""}
       </div>
     </div>`).join("") : ""}
   </div>`;
@@ -1357,17 +1365,30 @@ function lateText(min) {
   return { text: `${Math.round(min)} min late`, cls: min <= 20 ? "warn" : "bad" };
 }
 
-function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred }) {
+function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred, track }) {
   const when = time
     ? `<span class="when"><strong>${fmtTime(new Date(time).toISOString(), tz)}</strong><span>${fmtIn(time)}</span></span>`
     : '<span class="when"><strong>Next</strong><span>stop</span></span>';
   const inner = `${when}
     ${plate(badge, color, "sm")}
-    <span class="what"><span class="title">${esc(title)}</span><span class="sub">${esc(sub || "")}</span></span>
+    <span class="what"><span class="title">${esc(title)}</span><span class="sub">${track ? `<strong class="track">Track ${esc(track)}</strong> · ` : ""}${esc(sub || "")}</span></span>
     ${status ? `<span class="status ${statusCls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(status)}</span>` : "<span></span>"}`;
   return id
     ? `<button class="dep" data-select="${esc(id)}">${inner}</button>`
     : `<div class="dep">${inner}</div>`;
+}
+
+const WHEELCHAIR_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="4" r="2" fill="currentColor"/><path d="M10 7.5v6h5.5l2.5 5.5M10 10.5h5M7.8 11.3a5.5 5.5 0 1 0 7.7 6.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// A clock time in a given zone, in the chosen 12- or 24-hour style.
+const clockIn = (ms, tz) => {
+  try { return new Date(ms).toLocaleTimeString([], { ...clockOptions(), timeZone: tz }); } catch { return ""; }
+};
+// The station's local time, when it isn't what the page's times are shown in.
+function localTimeNote(st) {
+  if (!st.tz || state.timeZone === "station") return "";
+  const now = Date.now(), shown = clockIn(now, state.timeZone || undefined), there = clockIn(now, st.tz);
+  return there && there !== shown ? `Local time ${there}` : "";
 }
 
 function renderStation() {
@@ -1375,34 +1396,43 @@ function renderStation() {
   const el = $("train-detail");
   if (!st) return;
   const trains = [...state.trains.values()].filter(visible);
+  const arrivals = state.stationView === "arr";
+  const extras = state.stationExtras?.id === st.id ? state.stationExtras : null;
 
-  // Live departures: MBTA predictions where available, then trains on the map
-  // that are due here.
+  // Live trains: MBTA predictions where available, then trains on the map
+  // that stop here. Departures leave out trains ending here; arrivals leave
+  // out trains starting here.
   const rows = [];
   const listed = new Set();
   for (const p of state.predictions || []) {
+    const time = arrivals ? p.arr : p.dep;
+    if (!time) continue;
     const t = p.trainId && state.trains.get(p.trainId);
     if (t) listed.add(t.id);
     rows.push({
-      sort: p.time,
+      sort: time,
       html: departureRow({
-        id: t?.id, color: AGENCIES.mbta.color, badge: p.number || "MBTA", title: p.headsign ? `to ${p.headsign}` : p.route,
-        sub: p.route, time: p.time, tz: p.tz, status: p.status || "", statusCls: "neutral",
+        id: t?.id, color: AGENCIES.mbta.color, badge: p.number || "MBTA",
+        title: arrivals && t?.origin ? `from ${t.origin}` : p.headsign ? `to ${p.headsign}` : p.route,
+        sub: p.route, time, tz: p.tz, status: p.status || "", statusCls: "neutral", track: p.track,
       }),
     });
   }
   for (const d of trainsDue(st, trains)) {
     if (listed.has(d.train.id) || (state.predictions && d.train.agency === "mbta")) continue;
+    if (arrivals ? d.originates : d.terminates) continue;
     listed.add(d.train.id);
     const t = d.train, a = AGENCIES[t.agency];
+    const time = (arrivals ? d.arr : d.dep) ?? d.time;
     const late = d.here ? { text: "At station", cls: "good" } : lateText(d.lateMin);
     rows.push({
-      sort: d.time ?? Date.now(),
+      sort: time ?? Date.now(),
       html: departureRow({
         id: t.id, color: a.color, badge: t.number || a.short,
-        title: d.terminates ? (t.origin ? `from ${t.origin}` : "Terminates here") : t.destination ? `to ${t.destination}` : trainTitle(t),
-        sub: [d.terminates && "Arriving", a.short, t.route].filter(Boolean).join(" · "),
-        time: d.time, tz: d.tz, status: late.text, statusCls: late.cls, inferred: Boolean(t.inferred) && !d.here,
+        title: arrivals ? (t.origin ? `from ${t.origin}` : trainTitle(t)) : t.destination ? `to ${t.destination}` : trainTitle(t),
+        sub: [a.short, t.route].filter(Boolean).join(" · "),
+        time, tz: d.tz, status: late.text, statusCls: late.cls, inferred: Boolean(t.inferred) && !d.here,
+        track: d.track || (t.agency === "njt" && extras?.tracks?.get(String(t.number))) || null,
       }),
     });
   }
@@ -1414,8 +1444,13 @@ function renderStation() {
     // "City Terminal Zone" is an LIRR scheduling zone, not a line riders know.
     const named = (m.lines || []).filter((l) => l !== "City Terminal Zone");
     const ls = named.length ? named.join(", ") : a.kind === "intercity" ? "Intercity trains" : "";
-    return `<li><span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${ls ? `<br><span class="sub">${esc(ls)}</span>` : ""}</span></li>`;
+    const daily = m.daily ? `${m.daily} train${m.daily === 1 ? "" : "s"} a weekday` : "";
+    const sub = [ls, daily].filter(Boolean).join(" · ");
+    return `<li><span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span></li>`;
   }).join("");
+  const local = localTimeNote(st);
+  const access = st.access === 1 ? `<span class="access yes">${WHEELCHAIR_ICON}Step-free access</span>`
+    : st.access === 0 ? `<span class="access no">${WHEELCHAIR_ICON}Not step-free</span>` : "";
 
   el.innerHTML = `
     <div class="hero">
@@ -1424,12 +1459,20 @@ function renderStation() {
         Station${st.place ? ` · ${esc(st.place)}` : ""}
       </div>
       <h2>${esc(st.name)}</h2>
+      ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
     </div>
     <ul class="served">${lines}</ul>
-    <h3 class="section-title">Next trains</h3>
+    ${noticesBlock(extras?.notices || [], null, "Station notices")}
+    <div class="deps-head">
+      <h3 class="section-title">Next trains</h3>
+      <div class="segmented two sm" id="station-view">
+        <button data-station-view="dep" aria-pressed="${!arrivals}">Departures</button>
+        <button data-station-view="arr" aria-pressed="${arrivals}">Arrivals</button>
+      </div>
+    </div>
     <div class="deps">
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
-        : `<p class="empty">${loading ? "Loading live departures…" : "No live trains are reporting a stop here right now."}</p>`}
+        : `<p class="empty">${loading ? "Loading live trains…" : `No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.`}</p>`}
     </div>
     <p class="estimate-note">Times are live predictions from each railroad.</p>`;
 }
@@ -1756,6 +1799,19 @@ async function refreshPredictions(st) {
   }
   if (state.station === st.id) renderDetail();
 }
+// A station's notices, and its NJ Transit departure board for the tracks
+// (through the relay).
+async function refreshStationExtras(st) {
+  const njt = st.members.find((m) => m.agency === "njt" && m.code);
+  const [notices, board] = await Promise.all([
+    stationNotices(st).catch(() => []),
+    njt && RELAY ? fetch(`${RELAY.replace(/\/$/, "")}/njt-board/${encodeURIComponent(njt.code)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
+  ]);
+  if (state.station !== st.id) return;
+  const tracks = new Map((board?.items || []).filter((x) => x.track).map((x) => [String(x.trainID), x.track]));
+  state.stationExtras = { id: st.id, notices, tracks };
+  renderDetail();
+}
 
 function selectStation(id, { fly = true } = {}) {
   const st = state.stations.get(id);
@@ -1769,10 +1825,13 @@ function selectStation(id, { fly = true } = {}) {
   showDetailView(true);
   renderDetail();
   clearInterval(predictionTimer);
-  if (st.agencies.includes("mbta")) {
-    refreshPredictions(st);
-    predictionTimer = setInterval(() => refreshPredictions(st), 30000);
-  }
+  if (state.stationExtras?.id !== id) state.stationExtras = null;
+  refreshStationExtras(st);
+  if (st.agencies.includes("mbta")) refreshPredictions(st);
+  predictionTimer = setInterval(() => {
+    if (st.agencies.includes("mbta")) refreshPredictions(st);
+    refreshStationExtras(st);
+  }, 30000);
   if (fly) {
     map.flyTo({ center: [stationPos(st).lon, stationPos(st).lat], zoom: Math.max(map.getZoom(), 12), padding: panelPadding(), duration: 900 });
   }
@@ -1926,6 +1985,8 @@ on("train-detail", "keydown", (e) => {
   if (fig && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openCar(fig); }
 });
 on("train-detail", "click", (e) => {
+  const view = e.target.closest("[data-station-view]");
+  if (view) { state.stationView = view.dataset.stationView; return renderDetail(); }
   const fig = e.target.closest("[data-car]");
   if (fig) return openCar(fig);
   if (e.target.closest("[data-car-close]")) { state.car = null; return renderDetail(); }

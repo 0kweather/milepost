@@ -138,6 +138,11 @@ function stopTimeUpdate(r) {
     else if (f === 3) s.departure = stopTimeEvent(r.sub());
     else if (f === 4) s.stopId = r.string();
     else if (f === 5) s.skipped = r.varint() === 1;
+    // The MTA's railroad extension (LIRR, Metro-North): track and status.
+    else if (f === 1005) r.sub().each((g, w, e) => {
+      if (g === 1) s.track = e.string() || null;
+      else if (g === 2) s.trainStatus = e.string() || null;
+    });
   });
   return s;
 }

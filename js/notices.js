@@ -69,3 +69,32 @@ export async function trainNotices(t) {
     .sort((a, b) => (a.scope === "train" ? 0 : 1) - (b.scope === "train" ? 0 : 1))
     .slice(0, MAX_NOTICES);
 }
+
+// Official notices about a station: track and platform changes, elevator and
+// escalator outages, work affecting it. From the MBTA's alerts (commuter
+// rail and the station's elevators and escalators; North Station's subway
+// alerts left out) and the MTA's LIRR and Metro-North feeds.
+// Returns [{ header, description, url }].
+export async function stationNotices(st) {
+  const lists = await Promise.all(st.members.map(async (m) => {
+    if (m.agency === "mbta") {
+      const url = `https://api-v3.mbta.com/alerts?filter%5Bstop%5D=${encodeURIComponent(m.id)}&filter%5Bdatetime%5D=NOW`;
+      const data = await getJson(url);
+      return (data.data || [])
+        .map(({ attributes: a }) => a)
+        .filter((a) => (a.informed_entity || []).some((x) => x.route_type === 2 || x.facility))
+        .map((a) => ({ header: a.header, description: a.description || "", url: a.url || null }));
+    }
+    if (m.agency === "lirr" || m.agency === "mnr") {
+      const url = `https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2F${m.agency}-alerts.json`;
+      const data = await getJson(url);
+      return (data.entity || [])
+        .map((e) => e.alert)
+        .filter((a) => a && activeNow(a.active_period) && (a.informed_entity || []).some((x) => x.stop_id === m.id))
+        .map((a) => ({ header: english(a.header_text), description: english(a.description_text), url: null }));
+    }
+    return [];
+  }).map((p) => p.catch(() => [])));
+  const seen = new Set();
+  return lists.flat().filter((n) => n.header && !seen.has(n.header) && seen.add(n.header)).slice(0, MAX_NOTICES);
+}

@@ -135,6 +135,7 @@ function parseAmtraker(json) {
             arr: old ? null : s.arr || null, dep: old ? null : s.dep || null, schArr: s.schArr || null, schDep: s.schDep || null,
             status: ni < 0 ? (s.status === "Departed" ? "past" : "future") : j < ni ? "past" : j === ni ? "next" : "future",
             here: j === ni && s.status === "Station", // standing at this station right now
+            track: s.platform || null,
           };
         }),
       }));
@@ -318,6 +319,7 @@ function mtaStops(agency, list, lookup, now, nextStop, dwellingAt) {
     arr: s.arrival?.time ? new Date(s.arrival.time * 1000).toISOString() : null,
     dep: s.departure?.time ? new Date(s.departure.time * 1000).toISOString() : null,
     status: s === nextStop ? "next" : evTime(s) < now ? "past" : "future",
+    track: s.track || null,
   }));
 }
 

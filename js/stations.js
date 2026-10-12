@@ -33,9 +33,10 @@ export async function loadStations() {
     if (!AGENCIES[agency]) continue;
     // Busyness is counted differently per railroad; compare within each one.
     const maxBusy = Math.max(1, ...list.map((r) => r[7] || 0));
-    for (const [id, name, lat, lon, lines, place, code, busy] of list) {
+    for (const [id, name, lat, lon, lines, place, code, busy, daily, access, tz] of list) {
       members.push({ agency, id, key: stopKey(agency, id), name, lat, lon, lines, place, norm: norm(name),
-                     code: code || "", busy: (busy || 0) / maxBusy, trips: busy || 0 });
+                     code: code || "", busy: (busy || 0) / maxBusy, trips: busy || 0,
+                     daily: daily ?? null, access: access ?? null, tz: tz || null });
     }
   }
   members.sort((a, b) => PRIORITY.indexOf(a.agency) - PRIORITY.indexOf(b.agency));
@@ -74,6 +75,10 @@ export async function loadStations() {
     s.agencies = [...new Set(s.members.map((m) => m.agency))];
     s.major = s.agencies.some((a) => INTERCITY.has(a));
     s.names = new Set(s.members.map((m) => m.norm));
+    // Step-free if any of its railroads' platforms are; not if all known ones aren't.
+    const access = s.members.map((m) => m.access).filter((a) => a != null);
+    s.access = access.length ? (access.includes(1) ? 1 : 0) : null;
+    s.tz = s.members.find((m) => m.tz)?.tz || null;
     // Label priority: how busy its busiest railroad says it is, nudged up
     // for intercity service and for hubs shared by several railroads.
     s.rank = Math.max(...s.members.map((m) => m.busy)) + (s.major ? 0.3 : 0) + 0.25 * (s.agencies.length - 1);
@@ -120,8 +125,12 @@ export function trainsDue(station, trains, now = Date.now()) {
       const lateMin = stop.scheduled ? Math.round((time - Date.parse(stop.scheduled)) / 60000) : t.inferred ? t.delayMin : null;
       due.push({
         train: t, time, tz: stop.tz, lateMin,
+        // When it gets here and when it leaves, where the feed says.
+        arr: Date.parse(stop.arr || "") || null, dep: Date.parse(stop.dep || "") || null,
         here: stop.here || (stop.status === "next" && t.statusText?.startsWith("At ")),
         terminates: stop === t.stops[t.stops.length - 1],
+        originates: stop === t.stops[0],
+        track: stop.track || null,
       });
     } else if (t.currentStop && station.names.has(norm(t.currentStop))) {
       due.push({ train: t, time: null, lateMin: t.delayMin, here: true });
@@ -136,7 +145,7 @@ export function trainsDue(station, trains, now = Date.now()) {
 // Live MBTA commuter rail predictions for a station (parent "place-…" id).
 export async function mbtaPredictions(placeId) {
   const url = `https://api-v3.mbta.com/predictions?filter%5Bstop%5D=${encodeURIComponent(placeId)}` +
-    "&filter%5Broute_type%5D=2&include=trip,route&sort=departure_time";
+    "&filter%5Broute_type%5D=2&include=trip,route,stop&sort=departure_time";
   const json = await (await fetch(url)).json();
   const inc = new Map((json.included || []).map((x) => [`${x.type}:${x.id}`, x]));
   const now = Date.now();
@@ -146,9 +155,13 @@ export async function mbtaPredictions(placeId) {
       const time = Date.parse(a.departure_time || a.arrival_time);
       const trip = inc.get(`trip:${p.relationships.trip?.data?.id}`);
       const route = inc.get(`route:${p.relationships.route?.data?.id}`);
+      const stop = inc.get(`stop:${p.relationships.stop?.data?.id}`);
       const vehicle = p.relationships.vehicle?.data?.id;
       return {
         time,
+        arr: Date.parse(a.arrival_time || "") || null,
+        dep: Date.parse(a.departure_time || "") || null,
+        track: stop?.attributes?.platform_code || null,
         tz: "America/New_York",
         number: trip?.attributes?.name,
         headsign: trip?.attributes?.headsign,
@@ -158,6 +171,6 @@ export async function mbtaPredictions(placeId) {
         departing: !a.departure_time ? false : true,
       };
     })
-    .filter((p) => p.time && p.time > now - 60000 && p.departing)
-    .slice(0, 10);
+    .filter((p) => p.time && p.time > now - 60000)
+    .slice(0, 24);
 }
