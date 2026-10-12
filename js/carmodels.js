@@ -1608,6 +1608,8 @@ function ventureCabPaint(c, g) {
 }
 // VIA's cab car.
 const viaVentureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, paint: ventureCabPaint, cabLen: 12,
+  // The air-conditioning cover at the cab end sits behind the sloping nose.
+  roofItems: [[14, 12, 0.3], [67.6, 16, 0.3]],
   // VIA: nine windows a little closer set than the coaches'.
   rows: [{ xs: seq(23.5, 6.0, 9), y: 7.15, w: 4.4, h: 2.75, r: 0.45 }],
   // VIA: yellow letters on the window band just behind the cab, a big red
