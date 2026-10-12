@@ -17,11 +17,27 @@ const LOGOS = {
   "mta-inverse": [0.91, false], metra: [3.68, true], caltrain: [1.77, false],
   metrolink: [7.75, true], rtd: [2.2, false], capmetro: [4.14, false], trirail: [4.4, false],
   smart: [3.31, false], frontrunner: [12.85, true],
+  // Amtrak's state-supported services.
+  surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
+  "via-leaf": [0.84, false],
+};
+// Lettering with no logo file: Piedmont's F59s carry "North Carolina" in
+// script on the side.
+const LETTERING = {
+  "north-carolina": { text: "North Carolina", aspect: 5.6, color: "#1f3f8f",
+    font: 'font-family="Georgia, Times New Roman, serif" font-style="italic"' },
+  // VIA's Venture coaches: the name spaced out along the yellow band.
+  "via-rail-canada": { text: "VIA RAIL CANADA", aspect: 16, color: "#33373c",
+    font: 'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="600" letter-spacing="0.5em"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 
 const n = (v) => Math.round(v * 1000) / 1000;
 function image(key, x, y, h, dark) {
+  if (LETTERING[key]) {
+    const l = LETTERING[key];
+    return `<text x="${n(x)}" y="${n(y + h * 0.32)}" font-size="${n(h)}" fill="${dark ? "#ffffff" : l.color}" text-anchor="middle" ${l.font}>${l.text}</text>`;
+  }
   if (!LOGOS[key]) return "";
   const [aspect, white] = LOGOS[key];
   const w = h * aspect;
@@ -36,20 +52,26 @@ export function logoOf(c) {
 }
 
 // How wide a logo of height h is, in feet (0 if the railroad has none).
-export const logoWidth = (c, h, key = logoOf(c)) => (key === "amtrak-stack" ? h * 1.25 : key ? LOGOS[key][0] * h : 0);
+const COMPOSITE = { "amtrak-stack": 1.25, "amtrak-midwest": 4.2 };
+export const logoWidth = (c, h, key = logoOf(c)) =>
+  COMPOSITE[key] ? COMPOSITE[key] * h : LETTERING[key] ? LETTERING[key].aspect * h : key ? LOGOS[key][0] * h : 0;
 
 // The railroad's logo centered at (x, y), h feet tall.
 //   dark: it sits on dark paint (white version where there is one);
 //   logo: a particular logo instead of the railroad's usual one, or
 //     "amtrak-stack" for the wordmark over the travelmark (Phase VII
-//     locomotives);
+//     locomotives), or "amtrak-midwest": the Amtrak logo with "MIDWEST"
+//     spaced out under its name, as on the Midwest Chargers;
 //   skip: agencies to leave out.
 export function badge(c, x, y, h, { dark = false, logo = null, skip = [] } = {}) {
   const key = logo || logoOf(c);
-  if (!key || skip.includes(c.agency)) return "";
+  if (!key || skip.includes(c.agency) || !(LOGOS[key] || LETTERING[key] || COMPOSITE[key])) return "";
   const body = key === "amtrak-stack"
     ? image("amtrak-word", 0, -h * 0.36, h * 0.2, dark) + image("amtrak-mark", 0, h * 0.14, h * 0.62, dark)
-    : image(key, 0, 0, h, dark);
+    : key === "amtrak-midwest"
+      ? image("amtrak", 0, -h * 0.2, h * 0.45, dark) +
+        `<text x="${n(h * 2.02)}" y="${n(h * 0.42)}" font-size="${n(h * 0.3)}" fill="${dark ? "#ffffff" : "#004d6e"}" text-anchor="end" letter-spacing="${n(h * 0.12)}" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="600">MIDWEST</text>`
+      : image(key, 0, 0, h, dark);
   return `<g transform="translate(${n(x)} ${n(y)}) scale(${c.mirrored ? -1 : 1} -1)">${body}</g>`;
 }
 

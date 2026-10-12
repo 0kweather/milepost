@@ -16,7 +16,8 @@ let clipSeq = 0;
 // a list, or a function of the car giving either), or false/null for a car
 // with no logo on its side. Without one it goes in the clearest band of side
 // near the middle of the car, clear of the doors. spec.badgeDark: it sits on
-// dark paint (a boolean, or a function of the car).
+// dark paint (a boolean, or a function of the car); spec.badgeLogo: which
+// logo goes there (or a function of the car) when not the railroad's own.
 function spots(c, b) {
   return [].concat(typeof b === "function" ? b(c) : b).filter(Boolean);
 }
@@ -28,8 +29,9 @@ function carBadge(c, spec, { rows, doors, sill, top }) {
   const lo = c.cabL && spec.cabLen ? (spec.end ?? 0.7) + spec.cabLen + 2 : 0;
   const x = Math.max(lo + 4, c.agency === "amtrak" || c.agency === "via" ? c.L * 0.3 : c.L / 2);
   const near = rows.filter(([y, h, xs]) => !xs || xs.some(([a, b]) => b > x - 12 && a < x + 12));
-  const spot = spotOnCar(c, { x, sill, top: top(x), rows: near.map(([y, h]) => [y, h]), doors });
-  return spot ? badge(c, spot.x, spot.y, spot.h, { dark }) : "";
+  const logo = (typeof spec.badgeLogo === "function" ? spec.badgeLogo(c) : spec.badgeLogo) || null;
+  const spot = spotOnCar(c, { x, sill, top: top(x), rows: near.map(([y, h]) => [y, h]), doors, logo });
+  return spot ? badge(c, spot.x, spot.y, spot.h, { dark, logo }) : "";
 }
 // Clips livery to the body outline so stripes and swooshes can be drawn freely.
 function clipped(outline, inner) {
@@ -268,6 +270,12 @@ export function coachCar(c, spec) {
 // gives 40.8 ft between truck centers and 44 in wheels.
 // Phase VII (ALC-42): two blues split by a curved white stripe, black around
 // the cab glass flanked by white and red, red and white sill stripes.
+// A stripe framing a Charger's cab glass, as seen from the side: up the lower
+// nose and as a cap over the cab roof (VIA yellow, Cascades tan).
+const noseStripe = (color) =>
+  path(poly([[1.5, 5.0], [2.15, 9.1], [2.65, 9.35], [3.5, 9.35], [2.7, 5.0]]), color) +
+  path(poly([[4.95, 13.25], [5.7, 14.5], [12.0, 14.5], [12.0, 13.25]]), color);
+
 export function charger(c, { phase7 = false } = {}) {
   const { L } = c, sill = 4.3, roof = 14.33;
   const cone = c.agency === "brightline";
@@ -277,9 +285,10 @@ export function charger(c, { phase7 = false } = {}) {
   // Amtrak's state-supported routes keep their sponsors' liveries.
   const scheme = cone ? "brightline" : c.agency === "via" ? "via" : c.agency === "mnr" ? "mnr" : !amtrak ? "plain"
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
-    : route === "Pacific Surfliner" ? "surfliner" : "phase7";
+    : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
-  const base = { phase7: AMTRAK.sky, brightline: "#ffd100", via: "#b9bec4", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce" }[scheme] || c.color;
+  const base = { phase7: AMTRAK.sky, brightline: "#ffd100", via: "#2c2f33", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
+    cascades: "#1d4a45" }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
   let s = "";
@@ -294,6 +303,13 @@ export function charger(c, { phase7 = false } = {}) {
   s += truck(L / 2 - 20.4, { wb: 9.8, d: 44, kind: "loco", top: sill, shoe }) + truck(L / 2 + 20.4, { wb: 9.8, d: 44, kind: "loco", top: sill, shoe });
   let liv = rect(0, 0, L, roof + 1, base);
   switch (scheme) {
+    case "cascades":
+      // Amtrak Cascades (Airo ALC-42E): teal green with a big cream panel
+      // along the side, brown and white sill stripes, tan edging the cab glass.
+      liv += path("M16.5 7.4Q16.5 4.9 19 4.9L58 4.9L58 13.3L19 13.3Q16.5 13.3 16.5 10.8Z", "#efe9dc");
+      liv += rect(0, sill, L, 0.45, "#5a3a2c") + rect(0, sill + 0.45, L, 0.2, "#f4f1ea");
+      liv += noseStripe("#b08a5a");
+      break;
     case "mnr":
       // Metro-North: a blue cab and nose; silver behind, over a blue band edged in red.
       liv += rect(0, sill, L, 3.0, "#1f4fbf") + path(`M14 ${sill + 3.0}L${L} ${sill + 3.0}L${L} ${sill + 3.35}L22 ${sill + 3.35}Q17 ${sill + 3.5} 14 ${sill + 4.6}Z`, AMTRAK.red);
@@ -314,8 +330,8 @@ export function charger(c, { phase7 = false } = {}) {
       liv += rect(0, sill, L, 0.9, "#3a3d41");
       break;
     case "via":
-      // VIA yellow, charcoal, gray and black, front to back.
-      liv += rect(0, sill, L, 3.2, "#33373c") + rect(0, sill + 3.2, L, 0.5, "#f5c400") + rect(0, roof - 1.2, L, 2, "#33373c");
+      // VIA's SCV-42: charcoal, a light gray roof, yellow edging the cab glass.
+      liv += rect(0, roof - 0.5, L, 1.5, "#8d939a") + noseStripe("#f5c400");
       break;
     case "midwest": {
       // Blue front fading through a halftone into a gray side; red sill stripe.
@@ -355,12 +371,17 @@ export function charger(c, { phase7 = false } = {}) {
   // The railroad's logo. Phase VII: name over travelmark, just behind the
   // cab. Brightline: its wordmark on the rear half. VIA: an enormous "VIA"
   // behind the cab. Metro-North: the MTA disc behind the cab door. The
-  // state liveries: the name mid-side on the gray.
+  // state-supported services: their own logos mid-side on the gray; Cascades:
+  // its name in white high behind the cab.
   const mark = {
     phase7: { x: 20, y: 9.2, h: 3.6, dark: true, logo: "amtrak-stack" },
     brightline: { x: 56, y: 8.5, h: 3.0 },
     via: { x: 39, y: 8.3, h: 5.0, logo: "via-mark" },
     mnr: { x: 16.5, y: 8.2, h: 1.7 },
+    midwest: { x: 37, y: 9.6, h: 2.2, logo: "amtrak-midwest" },
+    california: { x: 36, y: 9.8, h: 2.8, logo: "amtrak-california" },
+    surfliner: { x: 36, y: 9.5, h: 1.6, logo: "surfliner" },
+    cascades: { x: 33, y: 9.4, h: 3.6, logo: "cascades-dark" },
   }[scheme] || { x: 40, y: 9.0, h: 1.7 };
   s += badge(c, mark.x, mark.y, mark.h, mark);
   s += outlineOf(d);
@@ -754,10 +775,10 @@ const calCab = (c, { x0 }) => {
   let s = rect(x0, 9.9, 0.42, 3.6, C.black) + win(x0 + 0.8, 10.6, 2.8, 2.6, 0.35);
   return s;
 };
-export const californiaCar = (c) => bilevel(c, { ...CALCAR, paint: calPaint });
-export const californiaCab = (c) => bilevel(c, { ...CALCAR, paint: calPaint, cab: calCab, cabLen: 5 });
+export const californiaCar = (c) => bilevel(c, { ...CALCAR, paint: calPaint, badgeLogo: "amtrak-california" });
+export const californiaCab = (c) => bilevel(c, { ...CALCAR, paint: calPaint, cab: calCab, cabLen: 5, badgeLogo: "amtrak-california" });
 // Surfliner: white lettering in the blue upper band, above the windows.
-const surfBadge = { x: 42.5, y: 14.1, h: 1.1, dark: true };
+const surfBadge = { x: 42.5, y: 14.1, h: 1.1, dark: true, logo: "surfliner" };
 export const surfliner = (c) => bilevel(c, { ...CALCAR, paint: surfPaint, badge: surfBadge });
 export const surflinerCab = (c) => bilevel(c, { ...CALCAR, paint: surfPaint, cab: calCab, cabLen: 5, badge: surfBadge });
 
@@ -1076,10 +1097,17 @@ function venturePaint(c, g) {
       return s;
     }
     case "via":
-      return s + rect(0, 6.8, L, 3.45, "#1d1f22") + rect(0, 10.25, L, 1.4, "#f5c400");
+      // VIA's Venture: light gray; a thin yellow line under a charcoal window
+      // band; a yellow band above it to the roof.
+      return s + rect(0, 6.55, L, 0.2, "#f5c400") + rect(0, 6.8, L, 3.5, "#2b2e32") + rect(0, 10.3, L, 2.4, "#f5c400");
     case "amtrak":
       if (c.route === "Amtrak Cascades") {
-        return s + rect(0, 6.75, L, 3.5, AMTRAK.navy) + path(`M0 6.75L9 6.75L13 10.25L0 10.25Z`, "#3fae49") + path(`M${L} 6.75L${L - 9} 6.75L${L - 13} 10.25L${L} 10.25Z`, "#3fae49") + rect(0, 4.3, L, 0.3, AMTRAK.red);
+        // Airo: brown and white sill stripes, a wide cream band, the windows on
+        // mocha, evergreen above; Mount Rainier and Mount Hood at one end.
+        return s + rect(0, 4.3, L, 0.5, "#5a3a2c") + rect(0, 4.8, L, 0.2, "#f4f1ea") + rect(0, 5.0, L, 1.9, "#efe9dc") +
+          rect(0, 6.9, L, 3.3, "#5b3b36") + rect(0, 10.2, L, 2.6, "#1f4a40") +
+          path(`M${L - 15} 10.2L${L - 12} 11.5L${L - 11} 11.0L${L - 9.2} 11.9L${L - 6} 10.2Z`, "#e8efe9") +
+          path(`M${L - 12} 11.5L${L - 11.4} 10.9L${L - 10.4} 10.6L${L - 9.2} 11.9L${L - 9.8} 11.0Z`, "#7fb3a3");
       }
       if (c.route === "San Joaquins") {
         return s + rect(0, 6.75, L, 3.5, "#1d2f5c") + rect(0, 4.3, L, 0.3, "#f5b81c") + rect(0, 4.6, L, 0.25, "#3c5aa6") + rect(0, 4.85, L, 0.2, "#6b3fa0");
@@ -1095,15 +1123,41 @@ function venturePaint(c, g) {
 }
 const ventureDoor = (x) => ({ x, w: 2.9, y0: 4.25, y1: 11.3, glassY: 0.55, glassH: 0.32, grabs: false });
 export const venture = (c) => bilevel(c, { ...VENTURE, paint: venturePaint,
-  badge: (c) => ({ via: { x: 20, y: 12.3, h: 0.8 }, brightline: { x: 6.5, y: 5.2, h: 0.8, dark: true } })[c.agency],
+  badge: (c) => (c.route === "Amtrak Cascades" ? { x: c.L - 8.6, y: 5.95, h: 1.1, logo: "cascades-dark" } // on the cream, by the door
+    : { via: { x: 24, y: 11.5, h: 0.75, logo: "via-rail-canada" }, brightline: { x: 6.5, y: 5.2, h: 0.8, dark: true } }[c.agency]),
+  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : null),
   doors: c.agency === "brightline" || c.agency === "via" ? [ventureDoor(1.2), ventureDoor(80.9)] : [ventureDoor(80.9)] });
-export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, paint: venturePaint, cabLen: 12,
-  badge: (c) => (c.agency === "via" ? { x: 14, y: 9.5, h: 1.5 } : undefined),
-  nose: [[2.2, 3.9], [1.55, 5.0], [1.75, 6.0], [2.15, 9.1], [2.65, 9.35], [5.0, 13.2], ["q", 5.6, 14.0, 7.4, 14.0]],
+// The Venture cab car (VIA's corridor trains, Amtrak Cascades' Airo, Amtrak
+// Midwest): a long streamlined nose sloping from the roof down to a low tip,
+// the windshield in a black mask that wraps back along the side to the cab
+// window, a skirt over the coupler. A cap in the railroad's color runs over
+// the windshield and back along the roof.
+const VENTURE_NOSE = [[3.4, 3.9], [1.3, 4.7], [0.9, 5.8], ["q", 0.85, 6.9, 1.6, 7.6], [7.2, 12.9], ["q", 8.6, 14.0, 11.0, 14.0]];
+const CAP = { via: "#f5c400", "Amtrak Cascades": "#b08a5a" };
+function ventureCabPaint(c, g) {
+  const L = g.L;
+  let s = venturePaint(c, g);
+  if (c.agency === "via") {
+    // The charcoal window band dips to the sill behind the cab.
+    s += path(poly([[13.0, 10.3], [L, 10.3], [L, 6.8], [30, 6.8], [25, 3.9], [18, 3.9]]), "#2b2e32");
+  }
+  const cap = CAP[c.agency] || CAP[c.route];
+  if (cap) s += path(poly([[0.6, 6.4], [1.6, 6.4], [7.5, 12.6], [14, 12.6], [14, 14.5], [6, 14.5]]), cap);
+  s += path(poly([[0, 4.4], [2.6, 4.4], [3.9, 7.0], [12.4, 7.0], [12.4, 12.5], [7.4, 12.5], [1.3, 6.5], [0, 6.5]]), C.black); // the mask
+  return s;
+}
+export const ventureCab = (c) => bilevel({ ...c, cabL: true }, { ...VENTURE, paint: ventureCabPaint, cabLen: 12,
+  // VIA: its yellow logo on the charcoal behind the cab, the red maple leaf at
+  // the far end. Cascades: the name in white high behind the cab.
+  badge: (c) => (c.agency === "via" ? [{ x: 21, y: 8.6, h: 1.5, logo: "via-mark" }, { x: c.L - 4.6, y: 8.3, h: 4.6, logo: "via-leaf" }]
+    : c.route === "Amtrak Cascades" ? { x: 21, y: 11.4, h: 1.9, dark: true, logo: "cascades" } : undefined),
+  badgeLogo: (c) => (MIDWEST_ROUTES.has(c.route) ? "amtrak-midwest" : null),
+  nose: VENTURE_NOSE,
   doors: [ventureDoor(13.2), ventureDoor(80.9)],
-  cab: (c) => {
-    let s = path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black) + path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
-    return s + pilot(1.55, 3.9);
+  cab: () => {
+    let s = path(poly([[1.9, 7.6], [7.0, 12.2], [9.6, 12.2], [9.6, 7.6]]), C.glass) + win(10.2, 8.6, 1.7, 2.8, 0.25);
+    // Skirt over the coupler, down near the rail.
+    return s + path(poly([[3.4, 3.9], [1.3, 4.7], [1.15, 2.6], ["q", 1.2, 1.5, 2.4, 1.4], [7.5, 1.4], [7.5, 3.9]]), "#3a3d41");
   } });
 
 // ===================== VIA Rail's Budd stainless fleet =====================
@@ -1176,7 +1230,7 @@ export const rdc = (c) => bilevel({ ...c, cabL: true }, { ...BUDD, roof: 13.5, b
 // NC By Train (Piedmont) coaches: rebuilt 1950s and 1960s streamlined cars,
 // 85 ft, smooth-sided and painted in the state's blue and silver with a red
 // stripe; a vestibule at each end.
-export const ncdotCoach = (c) => bilevel(c, { ...BUDD, doors: [buddDoor(1.3), buddDoor(81.1)],
+export const ncdotCoach = (c) => bilevel(c, { ...BUDD, doors: [buddDoor(1.3), buddDoor(81.1)], badge: false, // lettering not confirmed
   paint: (c, g) => rect(0, 0, g.L, 17, "#c9cdd2") + rect(0, 0, g.L, 6.6, "#1f3f8f") + rect(0, 6.6, g.L, 0.35, "#c8102e") + rect(0, 12.0, g.L, 2, "#b3b9c0"),
   rows: [{ xs: seq(7.0, 5.12, 14), y: 7.4, w: 4.2, h: 2.6, r: 0.35 }] });
 
@@ -1524,7 +1578,8 @@ export const f40c = (c) => f40(c, { mbta: true });
 // curves up into a steeply raked two-pane windshield, and the cab roof stands
 // a little above the body behind it.
 export const f59 = (c) => cabUnit(c, {
-  badge: { x: 38.5, y: 9.6, h: 1.3 },
+  // Piedmont's carry "North Carolina" in script on the side.
+  badge: (c) => (c.route === "Piedmont" ? { x: 37.5, y: 9.6, h: 1.5, logo: "north-carolina" } : { x: 38.5, y: 9.6, h: 1.3 }),
   roof: 15.0, sill: 4.6, rearR: 0.9,
   nose: [[2.4, 4.6], ["q", 1.5, 4.9, 1.45, 6.4], ["q", 1.5, 8.6, 2.6, 10.0], [5.2, 14.4], ["q", 5.8, 15.55, 7.4, 15.55], [12.4, 15.55], ["q", 13.2, 15.55, 13.4, 15.0]],
   glass: [[[2.95, 10.45], [5.05, 14.0], [5.8, 14.0], [5.8, 10.45]]],
