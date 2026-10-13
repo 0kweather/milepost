@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-13 (Sounder without a key)";
+const RELAY_VERSION = "2026-10-13 (ACE test)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -69,6 +69,9 @@ const FEEDS = {
   },
   caltrain: (env) => env.API_511_KEY && feed511("CT", env),
   smart: (env) => env.API_511_KEY && feed511("SA", env),
+  // ACE (Altamont Corridor Express) through 511, once a minute: 511 limits
+  // requests per key per hour, shared with Caltrain and SMART.
+  ace: (env) => env.API_511_KEY && { ...feed511("CE", env), ttl: 60 },
   metrolink: (env) =>
     env.METROLINK_API_KEY && {
       url: "https://metrolink-gtfsrt.gbsdigital.us/feed/gtfsrt-vehicles",
