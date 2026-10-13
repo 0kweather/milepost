@@ -1596,16 +1596,6 @@ function renderRailroad() {
   for (const [k, l] of lines) if (!l.running && runningKeys.some((r) => k.includes(r) || r.includes(k))) lines.delete(k);
   const lineList = [...lines.values()].sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
 
-  // Fleet: each line's typical train; lines that run the same one share it.
-  const fleet = new Map(); // summary -> { route, names, c }
-  for (const l of lineList.length ? lineList : [{ name: null }]) {
-    const c = consistOf(fleetTrain(id, l.name));
-    if (!c) continue;
-    const k = c.summary || c.cars.map((x) => x.type?.name).join("|");
-    if (!fleet.has(k)) fleet.set(k, { route: l.name, names: [], c });
-    if (l.name) fleet.get(k).names.push(l.name);
-  }
-
   // Equipment: every car type it runs, from its lines' typical trains, the
   // trains running now (Amtrak's equipment goes by train, not line) and its
   // fleet roster, each drawn once and opening its model page.
@@ -1642,8 +1632,6 @@ function renderRailroad() {
   // Busiest: most of its trains on a weekday (else its timetable's stops a week).
   const busy = (st) => { const m = st.members.find((x) => x.agency === id); return [m?.daily || 0, m?.trips || 0]; };
   const busiest = [...stations].sort((x, y) => busy(y)[0] - busy(x)[0] || busy(y)[1] - busy(x)[1]).slice(0, 5);
-  const typicalHtml = [...fleet.values()].filter(({ c }) => c.summary).map(({ names, c }) => `<li>
-      ${names.length && lineList.length > 1 ? `<strong>${esc(names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", "))}</strong><br>` : ""}<span class="sub">${esc(c.summary)}</span></li>`).join("");
 
   el.innerHTML = `
     <div class="hero">
@@ -1665,7 +1653,6 @@ function renderRailroad() {
       </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
       : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>`)}
     ${equipment ? rrSection("fleet", "Fleet", kinds.size, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${equipment}</div>`) : ""}
-    ${typicalHtml ? rrSection("typical", "Typical trains", fleet.size, `<ul class="rr-typical">${typicalHtml}</ul>`) : ""}
     ${busiest.length ? rrSection("stations", "Stations", stations.length, `<p class="rr-hint">The busiest:</p>
       <div class="rr-stations">${busiest.map((st) => `<button class="result" data-station="${esc(st.id)}">
         <span class="station-icon" style="--c:${a.color}"></span>

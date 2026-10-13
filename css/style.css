@@ -1136,10 +1136,6 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .rr-car image { filter: brightness(var(--car-logo-dim)); }
 .rr-car .title { font-weight: 600; }
 .rr-car .sub { font-size: var(--fs-xs); color: var(--muted); }
-.rr-typical { list-style: none; margin: var(--s2) 0 0; padding: 0; flex: none; }
-.rr-typical li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
-.rr-typical li:last-child { border-bottom: 0; }
-.rr-typical .sub { color: var(--muted); }
 .rr-sec { flex: none; }
 .rr-count { min-width: 16px; padding: 0 5px; border-radius: var(--r-pill); background: var(--hover); color: var(--muted); text-align: center; line-height: 16px; }
 .rr-sec.collapsed .chev { transform: rotate(-90deg); }
