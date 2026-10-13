@@ -16,7 +16,7 @@
 
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }, for feeds with a ttl
-const RELAY_VERSION = "2026-10-13 (VRE)";
+const RELAY_VERSION = "2026-10-13 (VRE, Sounder)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -53,6 +53,17 @@ const FEEDS = {
       // Predicted stop times, for each train's upcoming stops.
       also: [`https://gtfspublic.metrarr.com/gtfs/public/tripupdates?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`],
     },
+  // Sound Transit (OneBusAway): the whole agency's feeds, cut to Sounder's
+  // routes. Its key comes free by email (oba_api_key@soundtransit.org).
+  sounder: (env) => {
+    if (!env.SOUND_TRANSIT_KEY) return null;
+    const q = `40.pb?key=${encodeURIComponent(env.SOUND_TRANSIT_KEY)}`;
+    return {
+      url: `https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/${q}`,
+      also: [`https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/${q}`],
+      routes: ["SNDR_EV", "SNDR_TL"],
+    };
+  },
   caltrain: (env) => env.API_511_KEY && feed511("CT", env),
   smart: (env) => env.API_511_KEY && feed511("SA", env),
   metrolink: (env) =>

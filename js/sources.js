@@ -831,20 +831,6 @@ async function parseSunRail(list) {
   });
 }
 
-// ---------- Sounder (Sound Transit's OneBusAway feeds) ----------
-
-// Sound Transit's GTFS-realtime for the whole agency (buses and Link too),
-// read directly: positions and trip updates, joined into one feed.
-const SOUND_TRANSIT = "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/";
-async function fetchSounder() {
-  const parts = await Promise.all(["vehicle-positions", "trip-updates"].map(async (f) => {
-    const res = await fetch(`${SOUND_TRANSIT}${f}-for-agency/40.pb`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.arrayBuffer();
-  }));
-  return new Blob(parts).arrayBuffer();
-}
-
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
@@ -1080,10 +1066,9 @@ export const SOURCES = [
     },
   },
   {
-    // Read directly; Sound Transit's feeds allow browsers.
-    id: "sounder", agencies: ["sounder"], interval: 30,
+    // Sound Transit's GTFS-realtime (OneBusAway), through the relay with its key.
+    id: "sounder", agencies: ["sounder"], format: "pb", interval: 30, relay: true, needsKey: "SOUND_TRANSIT_KEY",
     credit: { label: "Sound Transit", href: "https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd" },
-    load: fetchSounder,
     parse: async (buf) => {
       const number = (v) => /_(\d+)$/.exec(v.trip?.tripId || "")?.[1] || null;
       return gtfsVehicles("sounder", buf, {
