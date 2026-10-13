@@ -16,8 +16,9 @@ Output: {agency: [[id, name, lat, lon, [lines...], place, code, busy, daily, acc
     ids where the feed has them (LIRR, Metro-North, MBTA).
 
     python3 scripts/build_stations.py
+    python3 scripts/build_stations.py vre sounder   # just these, into the existing file
 """
-import csv, datetime, io, json, pathlib, re, urllib.parse, urllib.request, zipfile
+import csv, datetime, io, json, pathlib, re, sys, urllib.parse, urllib.request, zipfile
 from collections import defaultdict
 
 MDB = "https://files.mobilitydatabase.org/{}/latest.zip"
@@ -47,6 +48,14 @@ GTFS = {
     # "PENN - WASHINGTON" -> "Penn Line"
     "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", rail,
              lambda r: long_name(r).split(" - ")[0].title() + " Line", lambda s: marc_station(s)),
+    "vre": ("https://gtfs.vre.org/containercdngtfsupload/google_transit.zip", rail, long_name),
+    # Sound Transit's rail feed also has Link light rail.
+    "sounder": ("https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", lambda r: r["route_id"].startswith("SNDR_"),
+                lambda r: r.get("route_short_name") or long_name(r)),
+    "southshore": ("https://www.mysouthshoreline.com/google/google_transit.zip", rail, long_name),
+    "sunrail": ("https://corporate.sunrail.com/gtfs/google_transit.zip", rail, lambda r: "SunRail"),
+    "railrunner": ("https://mjcaction.com/MJC_GTFS_Public/nmrailrunner_google_transit.zip", lambda r: r["route_id"] == "rr",
+                   lambda r: "Rail Runner"),
 }
 
 
@@ -238,15 +247,27 @@ def njt_departurevision():
         return {s["atisID"]: (s["pentaStationID"], s["accessible"]) for s in json.load(r)["data"]["getTrainScheduleStationsRailForDV"]}
 
 
-result = dict(intercity_stations())
+# Station names that repeat the railroad or the word "Station".
+NAME_SUFFIX = {"railrunner": re.compile(r"\s+Rail Runner Station$"), "sounder": re.compile(r"(\s+Sounder)?(\s+Station)?$")}
+NAME_FIX = {"L Enfant": "L'Enfant"}
+
+# Named railroads only: rebuild just those, keeping the rest of the file.
+only = sys.argv[1:]
+path = pathlib.Path(__file__).resolve().parent.parent / "data" / "stations.json"
+result = json.loads(path.read_text()) if only else dict(intercity_stations())
 for agency, (url, keep, line_name, *group) in GTFS.items():
+    if only and agency not in only:
+        continue
     try:
         result[agency] = gtfs_stations(url, keep, line_name, *group)
+        for row in result[agency]:  # "Belen Rail Runner Station" -> "Belen"
+            row[1] = NAME_SUFFIX[agency].sub("", row[1]) if agency in NAME_SUFFIX else row[1]
+            row[1] = NAME_FIX.get(row[1], row[1])
         print(f"{agency}: {len(result[agency])} stations")
     except Exception as err:  # keep going; one broken feed shouldn't block the rest
         print(f"{agency}: FAILED {err}")
 try:
-    dv = njt_departurevision()
+    dv = njt_departurevision() if not only or "njt" in only else {}
     for row in result.get("njt", []):
         if row[0] in dv:
             row[6] = row[6] or dv[row[0]][0]
@@ -255,10 +276,9 @@ except Exception as err:
     print(f"njt DepartureVision: FAILED {err}")
 # CT Rail's stations come from its timetable build (scripts/build_ct.py).
 ct = pathlib.Path(__file__).resolve().parent.parent / "data" / "ctrail.json"
-if ct.exists():
+if ct.exists() and not only:
     result["ctrail"] = json.loads(ct.read_text())["stations"]
 print({k: len(v) for k, v in result.items()})
 
-path = pathlib.Path(__file__).resolve().parent.parent / "data" / "stations.json"
 path.write_text(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
 print(f"wrote {path} ({path.stat().st_size // 1024} KB)")

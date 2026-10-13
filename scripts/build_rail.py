@@ -36,7 +36,8 @@ CODES = {
 }
 ORDER = ["amtrak", "via", "brightline"]  # intercity first, then commuter networks alphabetically
 COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "rtd", "frontrunner",
-                     "capmetro", "trirail", "caltrain", "smart", "metrolink", "ctrail"}
+                     "capmetro", "trirail", "caltrain", "smart", "metrolink", "ctrail",
+                     "marc", "vre", "sounder", "southshore", "sunrail", "railrunner"}
 # CTrail's Hartford Line trains run on Amtrak's New Haven-Springfield line,
 # which NTAD files as Amtrak's alone: (south, west, north, east).
 HARTFORD_LINE = (41.30, -72.95, 42.105, -72.585)

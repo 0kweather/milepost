@@ -15,7 +15,8 @@
 //                       protobuf messages read as one feed with every entity.
 
 const CACHE_SECONDS = 15;
-const RELAY_VERSION = "2026-10-13 (FrontRunner via Transitland)";
+const feedMem = new Map(); // feed -> { at, bytes, type }, for feeds with a ttl
+const RELAY_VERSION = "2026-10-13 (VRE)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -38,6 +39,8 @@ const FEEDS = {
     url: "https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc-vp.pb",
     also: ["https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc-tu.pb"],
   }),
+  // VRE's official GTFS-realtime (no CORS headers); it asks for no more than one fetch a minute.
+  vre: () => ({ url: "https://gtfs.vre.org/containercdngtfsupload/VehiclePositionFeed", also: ["https://gtfs.vre.org/containercdngtfsupload/TripUpdateFeed"], ttl: 60 }),
   // NJ Transit: scraped from DepartureVision (below); no key needed.
   njt: () => ({ njtDv: true }),
   // GO Transit: scraped from GO Tracker (below); no key needed.
@@ -338,6 +341,12 @@ export default {
     const cacheKey = new Request(new URL(`/feed/${match[1]}`, request.url).toString());
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
+    // Feeds that ask to be fetched at most every `ttl` seconds are kept in
+    // memory (the edge cache does nothing on workers.dev).
+    const kept = spec.ttl && feedMem.get(match[1]);
+    if (kept && Date.now() - kept.at < spec.ttl * 1000) {
+      return new Response(kept.bytes, { headers: { ...CORS, "Content-Type": kept.type, "Cache-Control": `public, max-age=${CACHE_SECONDS}` } });
+    }
 
     const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
@@ -360,10 +369,15 @@ export default {
       if (spec.routes) body = keepRoutes(new Uint8Array(await new Response(body).arrayBuffer()), spec.routes);
     }
 
+    const type = upstream.headers.get("Content-Type") || "application/octet-stream";
+    if (spec.ttl) {
+      body = new Uint8Array(await new Response(body).arrayBuffer());
+      feedMem.set(match[1], { at: Date.now(), bytes: body, type });
+    }
     const response = new Response(body, {
       headers: {
         ...CORS,
-        "Content-Type": upstream.headers.get("Content-Type") || "application/octet-stream",
+        "Content-Type": type,
         "Cache-Control": `public, max-age=${CACHE_SECONDS}`,
       },
     });

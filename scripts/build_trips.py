@@ -9,8 +9,9 @@ stations on the map, and give trains a number and destination. Run
 occasionally (timetables change a few times a year):
 
     python3 scripts/build_trips.py
+    python3 scripts/build_trips.py vre sounder   # just these, into the existing file
 """
-import csv, io, json, pathlib, re, urllib.request, zipfile
+import csv, io, json, pathlib, re, sys, urllib.request, zipfile
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 # The station IDs the map uses (data/stations.json), per railroad: some use
@@ -28,6 +29,8 @@ FEEDS = {
     "metra": ("https://schedules.metrarail.com/gtfs/schedule.zip", None),
     "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", None),
     "frontrunner": (MDB.format("mdb-170"), {"41065"}),  # UTA's feed also covers TRAX and buses
+    "vre": ("https://gtfs.vre.org/containercdngtfsupload/google_transit.zip", None),
+    "sounder": ("https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", {"SNDR_EV", "SNDR_TL"}),  # not Link
 }
 
 
@@ -97,6 +100,8 @@ def build(agency, url, routes):
         name = p["stop_name"].strip()
         if agency == "marc":  # per-direction stops fold into one station
             station, name = marc_station(name)
+        if agency == "sounder":  # "Kent Sounder Station" -> "Kent"
+            name = re.sub(r"(\s+Sounder)?(\s+Station)?$", "", name)
         stops[sid] = [name, round(float(p["stop_lat"]), 5), round(float(p["stop_lon"]), 5), station]
         # Some realtime feeds use stop codes instead of IDs.
         if r.get("stop_code") and r["stop_code"] not in stops:
@@ -105,8 +110,10 @@ def build(agency, url, routes):
 
 
 SEQUENCED = {"frontrunner"}
-out = {k: build(k, u, routes) for k, (u, routes) in FEEDS.items()}
+only = sys.argv[1:]
 path = DATA / "trips.json"
+out = json.loads(path.read_text()) if only else {}
+out.update({k: build(k, u, routes) for k, (u, routes) in FEEDS.items() if not only or k in only})
 path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
 print(f"wrote {path} ({path.stat().st_size // 1024} KB)")
 for k, v in out.items():

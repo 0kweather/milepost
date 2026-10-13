@@ -22,15 +22,20 @@ export const AGENCIES = {
   go:         { name: "GO Transit",          short: "GO",       region: "Toronto",             color: "#3f9c35", kind: "commuter" },
   ctrail:     { name: "CT Rail",             short: "CT Rail",  region: "Connecticut",         color: "#9e1b32", kind: "commuter" },
   marc:       { name: "MARC Train",          short: "MARC",     region: "Maryland",            color: "#f58025", kind: "commuter" },
+  vre:        { name: "Virginia Railway Express", short: "VRE",  region: "Northern Virginia",   color: "#a6192e", kind: "commuter" },
   septa:      { name: "SEPTA Regional Rail", short: "SEPTA",    region: "Philadelphia",        color: "#5b6e7f", kind: "commuter" },
   metra:      { name: "Metra",               short: "Metra",    region: "Chicago",             color: "#0096d6", kind: "commuter" },
+  southshore: { name: "South Shore Line",    short: "South Shore", region: "Chicago–South Bend", color: "#8d1b3d", kind: "commuter" },
   rtd:        { name: "RTD Commuter Rail",   short: "RTD",      region: "Denver",              color: "#2e9bd6", kind: "commuter" },
   frontrunner:{ name: "UTA FrontRunner",     short: "FrontRunner", region: "Salt Lake City",   color: "#8e44ad", kind: "commuter" },
+  railrunner: { name: "Rail Runner Express", short: "Rail Runner", region: "New Mexico",        color: "#c1121f", kind: "commuter" },
   capmetro:   { name: "CapMetro Rail",       short: "CapMetro", region: "Austin",              color: "#e0218a", kind: "commuter" },
   trirail:    { name: "Tri-Rail",            short: "Tri-Rail", region: "South Florida",       color: "#2ba84a", kind: "commuter" },
+  sunrail:    { name: "SunRail",             short: "SunRail",  region: "Orlando",             color: "#e6731c", kind: "commuter" },
   caltrain:   { name: "Caltrain",            short: "Caltrain", region: "San Francisco",       color: "#e31837", kind: "commuter" },
   smart:      { name: "SMART",               short: "SMART",    region: "Sonoma–Marin",        color: "#3f9b3f", kind: "commuter" },
   metrolink:  { name: "Metrolink",           short: "Metrolink", region: "Los Angeles",        color: "#00a3ad", kind: "commuter" },
+  sounder:    { name: "Sounder",             short: "Sounder",  region: "Seattle",             color: "#2a7f9e", kind: "commuter" },
 };
 
 const STALE_SECONDS = 20 * 60;
@@ -312,17 +317,18 @@ function tripProgress(stops, now, lookup) {
   return { at: s, lat: p[1], lon: p[2], prev: s, next: s, list, dwelling: true };
 }
 
-function mtaStops(agency, list, lookup, now, nextStop, dwellingAt) {
+function mtaStops(agency, list, lookup, now, nextStop, dwellingAt, tz = "America/New_York") {
   return list.map((s) => ({
     here: s === dwellingAt,
     key: `${agency}:${s.stopId}`,
     name: lookup[s.stopId][0],
-    tz: "America/New_York",
+    tz,
     time: new Date(evTime(s) * 1000).toISOString(),
     arr: s.arrival?.time ? new Date(s.arrival.time * 1000).toISOString() : null,
     dep: s.departure?.time ? new Date(s.departure.time * 1000).toISOString() : null,
     status: s === nextStop ? "next" : evTime(s) < now ? "past" : "future",
     track: s.track || null,
+    scheduled: s.scheduled ? new Date(s.scheduled * 1000).toISOString() : null,
   }));
 }
 
@@ -657,11 +663,194 @@ async function parseCtrail(board) {
   return out;
 }
 
+// ---------- Timetables (data/schedules, scripts/build_schedules.py) ----------
+
+// Railroads whose live data names a train but not its stops (South Shore,
+// SunRail), or that have no live data (Rail Runner), use their timetable.
+const schedules = {};
+const loadSchedule = (agency) => (schedules[agency] ??= fetch(`data/schedules/${agency}.json?v=dev`).then((r) => r.json()));
+const clocks = {};
+// Minutes past midnight at epoch second `sec` in time zone `tz`.
+function localMinutes(sec, tz) {
+  clocks[tz] ??= new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" });
+  const p = Object.fromEntries(clocks[tz].formatToParts(new Date(sec * 1000)).map((x) => [x.type, +x.value || 0]));
+  return p.hour * 60 + p.minute + p.second / 60;
+}
+// "9:44AM" or "11:14 am" in `tz` as epoch seconds, the occurrence nearest `ref`.
+function clockTime(text, ref, tz) {
+  const m = /^(\d{1,2}):(\d{2})\s*([AP])M$/i.exec(String(text || "").trim());
+  if (!m) return null;
+  const mins = (+m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0)) * 60 + +m[2];
+  const t = Math.round(ref + (mins - localMinutes(ref, tz)) * 60);
+  return t - ref > 43200 ? t - 86400 : ref - t > 43200 ? t + 86400 : t;
+}
+
+// A train number's run going now: today's, or yesterday's still running past
+// midnight ({ day: the service day's midnight, line, pat }), or null.
+// `slack`: seconds before its first departure and after its last arrival
+// that still count.
+function runNow(tt, number, now, slack) {
+  const midnight = Math.round(now - localMinutes(now, tt.tz) * 60);
+  const start = Date.parse(`${tt.start}T00:00:00Z`) / 1000;
+  for (const day of [midnight, midnight - 86400]) {
+    const idx = Math.round((day - start) / 86400);
+    // Past the timetable's two weeks: the same weekday in its second week.
+    const bit = idx >= 0 && idx < 14 ? idx : 7 + ((((idx - 7) % 7) + 7) % 7);
+    const p = (tt.trips[number] || []).find(([mask]) => (mask >> bit) & 1);
+    if (p && now >= day + p[2][0][2] * 60 - slack && now <= day + p[2][p[2].length - 1][1] * 60 + slack) {
+      return { day, line: p[1], pat: p[2] };
+    }
+  }
+  return null;
+}
+
+// A run's stop times, shifted by `delay` seconds; `live` (stop id -> epoch
+// second) holds the railroad's own predictions where it gives them.
+function runStops(run, delay = 0, live = {}, tracks = {}) {
+  return run.pat.map(([id, arr, dep]) => {
+    const a = live[id] ?? run.day + arr * 60 + delay;
+    return { stopId: id, arrival: { time: a }, departure: { time: Math.max(a, run.day + dep * 60 + delay) },
+             scheduled: run.day + dep * 60, track: tracks[id] || null };
+  });
+}
+
+// A train with a GPS position whose stops come from its run: the stop it's
+// heading to (by id) is next, the ones before it are past.
+function gpsRunTrain(agency, tt, number, run, fields, { delay = 0, live = {}, tracks = {}, nextId = null, now }) {
+  const stops = run ? runStops(run, delay, live, tracks) : [];
+  let next = stops.findIndex((s) => s.stopId === nextId);
+  if (next < 0) next = stops.findIndex((s) => s.arrival.time >= now - 30);
+  const nextStop = next >= 0 ? stops[next] : null;
+  const name = (s) => tt.stops[s.stopId][0];
+  const delayMin = run ? delay / 60 : null;
+  return train({
+    id: `${agency}:${number}`, agency, number, route: run?.line || null, bearing: null,
+    origin: stops[0] ? name(stops[0]) : null, destination: stops.length ? name(stops[stops.length - 1]) : null,
+    nextStop: nextStop ? name(nextStop) : null,
+    delayMin, statusText: delayMin != null ? delayText(delayMin) : null,
+    stops: stops.length
+      ? mtaStops(agency, stops, tt.stops, now, nextStop, null, tt.tz).map((s, i) => ({ ...s, status: next < 0 || i < next ? "past" : i === next ? "next" : "future" }))
+      : null,
+    ...fields,
+  });
+}
+
+// Rail Runner: no live data, so each train is placed from its timetable.
+async function timetableTrains(agency) {
+  const tt = await loadSchedule(agency);
+  const now = nowSec(), out = [];
+  for (const number of Object.keys(tt.trips)) {
+    const run = runNow(tt, number, now, 120);
+    if (!run) continue;
+    const stops = runStops(run);
+    const prog = tripProgress(stops, now, tt.stops);
+    if (!prog) continue;
+    const nextStop = prog.dwelling ? prog.at : prog.next;
+    const name = (st) => tt.stops[st.stopId][0];
+    out.push(train({
+      id: `${agency}:${number}`, agency, number, route: run.line,
+      lat: prog.lat, lon: prog.lon, bearing: prog.bearing ?? null,
+      origin: name(prog.list[0]), destination: name(prog.list[prog.list.length - 1]), nextStop: name(nextStop),
+      statusText: prog.dwelling ? `At ${name(prog.at)}` : "Scheduled",
+      updated: now * 1000, estimated: true, leg: prog.leg || null,
+      stops: mtaStops(agency, prog.list, tt.stops, now, nextStop, prog.dwelling ? prog.at : null, tt.tz),
+      _progress: { stops, lookup: tt.stops },
+    }));
+  }
+  return out;
+}
+
+// ---------- South Shore Line (its ETA SPOT tracker) ----------
+
+// The tracker South Shore links from its site: each train's position, number,
+// one car's number, minutes off schedule, and its next few stops with
+// predicted times and tracks. The full stop list comes from the timetable.
+const SOUTH_SHORE = "https://southshore.etaspot.net/service.php?service=get_vehicles&includeETAData=1&inService=1&orderedETAArray=1&token=TESTING";
+
+async function parseSouthShore(json) {
+  const tt = await loadSchedule("southshore");
+  const now = nowSec();
+  return (json.get_vehicles || []).filter((v) => v.inService && valid(v.lat, v.lng)).map((v) => {
+    const number = String(v.tripID || v.scheduleNumber);
+    const run = runNow(tt, number, now, 3 * 3600);
+    const live = {}, tracks = {};
+    for (const m of v.minutesToNextStops || []) {
+      const t = clockTime(m.time, now, tt.tz);
+      if (t) live[`s${m.stopID}`] = t;
+      if (m.track) tracks[`s${m.stopID}`] = String(m.track);
+    }
+    // onSchedule: minutes ahead of schedule (negative when late).
+    const delay = Number.isFinite(v.onSchedule) ? Math.max(0, -v.onSchedule) * 60 : 0;
+    return gpsRunTrain("southshore", tt, number, run, {
+      lat: v.lat, lon: v.lng,
+      updated: Math.min(v.receiveTime || now * 1000, Date.now()),
+      cars: v.equipmentID ? { numbers: [String(v.equipmentID)], complete: false } : null,
+    }, { delay, live, tracks, nextId: v.nextStopExtID, now });
+  });
+}
+
+// ---------- SunRail (its website's train status) ----------
+
+// sunrail.com's train status: each train's position, number, speed, next
+// station with its predicted time there, and one equipment number. It needs
+// a token from the same API, good for 12 hours.
+const SUNRAIL = "https://sunrail.com/wp-json/sunrail/v1/";
+let sunrailToken = null; // { value, until }
+
+async function fetchSunRail() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!sunrailToken || Date.now() > sunrailToken.until) {
+      const n = await (await fetch(`${SUNRAIL}nonce`, { cache: "no-store" })).json();
+      sunrailToken = { value: n.nonce, until: Date.now() + (Math.min(n.expires_in || 3600, 43200) - 600) * 1000 };
+    }
+    const res = await fetch(`${SUNRAIL}train_feed`, { headers: { "X-WP-Nonce": sunrailToken.value }, cache: "no-store" });
+    if (res.status === 401 || res.status === 403) { sunrailToken = null; continue; }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+  throw new Error("SunRail refused the token");
+}
+
+async function parseSunRail(list) {
+  const tt = await loadSchedule("sunrail");
+  const now = nowSec();
+  return (Array.isArray(list) ? list : []).filter((t) => valid(+t.Lat, +t.Long) && t.TripId).map((t) => {
+    const number = String(t.TripId);
+    const run = runNow(tt, number, now, 3 * 3600);
+    // Its delay: the predicted time at its next station against the timetable's.
+    const at = clockTime(t.ArrivalTime, now, tt.tz);
+    const sched = run?.pat.find(([id]) => id === String(t.NextStation));
+    const late = at && sched ? at - (run.day + sched[1] * 60) : null;
+    const delay = late != null && Math.abs(late) < 3 * 3600 ? Math.max(0, late) : 0;
+    return gpsRunTrain("sunrail", tt, number, run, {
+      lat: +t.Lat, lon: +t.Long,
+      speedMph: Number.isFinite(t.Speed) ? t.Speed : null,
+      updated: now * 1000,
+      cars: t.Id ? { numbers: [String(t.Id)], complete: false } : null,
+    }, { delay, live: at ? { [String(t.NextStation)]: at } : {}, nextId: String(t.NextStation), now });
+  });
+}
+
+// ---------- Sounder (Sound Transit's OneBusAway feeds) ----------
+
+// Sound Transit's GTFS-realtime for the whole agency (buses and Link too),
+// read directly: positions and trip updates, joined into one feed.
+const SOUND_TRANSIT = "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/";
+async function fetchSounder() {
+  const parts = await Promise.all(["vehicle-positions", "trip-updates"].map(async (f) => {
+    const res = await fetch(`${SOUND_TRANSIT}${f}-for-agency/40.pb`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.arrayBuffer();
+  }));
+  return new Blob(parts).arrayBuffer();
+}
+
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
 // carry only IDs (scripts/build_trips.py).
-const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago", marc: "America/New_York", frontrunner: "America/Denver" };
+const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago", marc: "America/New_York", frontrunner: "America/Denver",
+                     vre: "America/New_York" };
 let tripsStatic = null;
 const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r) => r.json()));
 
@@ -672,7 +861,9 @@ function addTrip(t, agency, tripId, tu, west, now) {
   const info = west.trips[tripId];
   // Some feeds (UTA) name a stop only by its place in the trip.
   const bySeq = info?.[2];
-  const stopsOf = (tu?.stops || []).map((s) => (s.stopId || !bySeq ? s : { ...s, stopId: bySeq[s.seq] }));
+  const stopsOf = (tu?.stops || []).map((s) => (s.stopId || !bySeq ? s : { ...s, stopId: bySeq[s.seq] }))
+    // A departure before its arrival (Sound Transit's at last stops) is noise.
+    .map((s) => (s.departure?.time && s.arrival?.time && s.departure.time < s.arrival.time ? { ...s, departure: null } : s));
   const list = stopsOf.filter((s) => !s.skipped && west.stops[s.stopId] && evTime(s));
   if (info?.[1]) t.destination = info[1];
   else if (list.length) t.destination = west.stops[list[list.length - 1].stopId][0];
@@ -701,7 +892,7 @@ function addTrip(t, agency, tripId, tu, west, now) {
   }
 }
 
-function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination, west: lookup, zeroHeading = false } = {}) {
+function gtfsVehicles(agency, buf, { keep = () => true, route, number, destination, west: lookup, zeroHeading = false, idOf } = {}) {
   const feed = decodeFeed(buf);
   const now = nowSec();
   const tripUpdates = new Map(feed.tripUpdates.filter((u) => u.trip?.tripId).map((u) => [u.trip.tripId, u]));
@@ -711,7 +902,8 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
     const p = v.position;
     if (!p || !valid(p.lat, p.lon) || !keep(v)) continue;
     if (v.timestamp && now - v.timestamp > STALE_SECONDS) continue;
-    const key = v.vehicle?.id || v.trip?.tripId || `${p.lat},${p.lon}`;
+    // Some feeds' vehicle ids change between refreshes (Sounder's): use the train's.
+    const key = idOf?.(v) || v.vehicle?.id || v.trip?.tripId || `${p.lat},${p.lon}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(train({
@@ -873,6 +1065,52 @@ export const SOURCES = [
     id: "go", agencies: ["go"], format: "json", interval: 20, relay: true,
     credit: { label: "GO Tracker", href: "https://www.gotracker.ca/gotracker/web/" },
     parse: parseGo,
+  },
+  {
+    // Official GTFS-realtime (no CORS headers, so through the relay).
+    id: "vre", agencies: ["vre"], format: "pb", interval: 60, relay: true,
+    credit: { label: "VRE", href: "https://www.vre.org/" },
+    parse: async (buf) => {
+      const west = (await loadTrips()).vre;
+      return gtfsVehicles("vre", buf, {
+        route: (v) => ({ 2: "Fredericksburg Line", 4: "Manassas Line" })[v.trip?.routeId] || null,
+        number: (v) => west.trips[v.trip?.tripId]?.[0] || null,
+        west,
+      });
+    },
+  },
+  {
+    // Read directly; Sound Transit's feeds allow browsers.
+    id: "sounder", agencies: ["sounder"], interval: 30,
+    credit: { label: "Sound Transit", href: "https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd" },
+    load: fetchSounder,
+    parse: async (buf) => {
+      const number = (v) => /_(\d+)$/.exec(v.trip?.tripId || "")?.[1] || null;
+      return gtfsVehicles("sounder", buf, {
+        keep: (v) => /^SNDR_/.test(v.trip?.routeId || ""),
+        route: (v) => ({ SNDR_EV: "N Line", SNDR_TL: "S Line" })[v.trip?.routeId] || "Sounder",
+        number, idOf: number,
+        west: (await loadTrips()).sounder,
+      });
+    },
+  },
+  {
+    // South Shore's own tracker, read directly (it allows browsers).
+    id: "southshore", agencies: ["southshore"], format: "json", interval: 30, url: SOUTH_SHORE,
+    credit: { label: "South Shore Line", href: "https://www.mysouthshoreline.com/" },
+    parse: parseSouthShore,
+  },
+  {
+    // sunrail.com's train status, read directly.
+    id: "sunrail", agencies: ["sunrail"], interval: 30,
+    credit: { label: "SunRail", href: "https://sunrail.com/" },
+    load: fetchSunRail, parse: parseSunRail,
+  },
+  {
+    // No live data published: placed from the timetable.
+    id: "railrunner", agencies: ["railrunner"], interval: 60,
+    credit: { label: "Rail Runner timetable", href: "https://riometro.org/" },
+    load: async () => null, parse: () => timetableTrains("railrunner"),
   },
   {
     // No live positions published: the timetable, adjusted by MTA TrainTime's
