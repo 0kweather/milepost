@@ -1653,7 +1653,12 @@ function frameFocus() {
   for (const t of focusTrains()) if (Number.isFinite(t.lat)) b.extend([t.lon, t.lat]);
   if (b.isEmpty()) return;
   const pad = panelPadding();
-  map.fitBounds(b, { padding: { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) }, maxZoom: 11, duration: 900 });
+  let padding = { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) };
+  // Where the margins leave no room to fit it, use smaller ones (else the map
+  // wouldn't move at all).
+  if (!map.cameraForBounds(b, { padding })) padding = { top: 20, right: 20, bottom: Math.min(padding.bottom, innerHeight / 3), left: Math.min(padding.left, innerWidth / 3) };
+  map.stop(); // whatever was moving the map gives way
+  map.fitBounds(b, { padding, maxZoom: 11, duration: 900 });
 }
 
 // A page section under a heading that folds it away (with its count, so a
