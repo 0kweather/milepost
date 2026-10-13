@@ -1348,12 +1348,12 @@ function renderDetail() {
   el.dataset.train = t.id;
   el.innerHTML = `
     <div class="hero">
-      <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}" title="${esc(a.name)}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
+      <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
       <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route
         // The title is the train's line: it opens the line's page (or, with
         // no line, the railroad's).
-        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" title="${esc(t.route)}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
-        : `<button type="button" class="hero-link" data-railroad="${t.agency}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
+        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
+        : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
         ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(t.statusText)}</span>` : ""}

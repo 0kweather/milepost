@@ -1192,5 +1192,10 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 
 /* A train page's railroad and title open the railroad's and the line's pages. */
 .hero-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
-.hero-link:hover, .hero-link:focus-visible { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; outline: none; }
-.hero-go { margin-left: 6px; color: var(--faint); font-weight: 400; }
+.hero-link { transition: color 0.15s ease; }
+.hero-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+/* On hover the title takes its line's color and its arrow slides along. */
+.hero-link:hover { color: var(--hc, inherit); }
+.agency-name.hero-link:hover { opacity: 0.8; }
+.hero-go { display: inline-block; margin-left: 3px; color: var(--faint); font-weight: 400; transition: transform 0.15s ease, color 0.15s ease; }
+.hero-link:hover .hero-go { transform: translateX(3px); color: var(--hc, inherit); }
