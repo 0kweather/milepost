@@ -900,7 +900,8 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 
 /* Each stop opens its station. */
 .stops li.link { cursor: pointer; border-radius: var(--r-sm); }
-.stops li.link:hover > span:first-child, .stops li.link:focus-visible > span:first-child {
+/* The name follows the stop's circle. */
+.stops li.link:hover > span:nth-child(2), .stops li.link:focus-visible > span:nth-child(2) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-underline-offset: 2px;

@@ -1258,7 +1258,21 @@ function noticesBlock(list, route = null, title = "Service notices") {
 }
 
 const stripScroll = new Map();
+// A press in the panel holds off feed redraws until it's released: replacing
+// the row under the pointer between press and release loses the tap.
+let pressing = false, redrawAfterPress = false;
+on("train-detail", "pointerdown", () => { pressing = true; });
+for (const type of ["pointerup", "pointercancel"]) {
+  document.addEventListener(type, () => {
+    if (!pressing) return;
+    pressing = false;
+    // After the click this release makes has been handled.
+    if (redrawAfterPress) setTimeout(() => { redrawAfterPress = false; renderDetail(); });
+  });
+}
+
 function renderDetail() {
+  if (pressing) { redrawAfterPress = true; return; }
   if (state.railroad) return renderRailroad();
   if (state.station) return renderStation();
   const t = state.trains.get(state.selected);
