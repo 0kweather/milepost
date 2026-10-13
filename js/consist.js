@@ -49,6 +49,15 @@ const FLEETS = {
     [600, 646, "mp40"], [647, 647, "mp54ac"], [648, 666, "mp40"], [667, 682, "mp54ac"],
     [300, 380, "bilevelCab"], [2000, 2857, "bilevel"], [4000, 4225, "bilevel"], [4500, 4533, "bilevel"],
   ],
+  // CT Rail (Wikipedia, "Hartford Line" and "Shore Line East"): P40DC
+  // 6700-6711, GP40-3H 6694-6699; Mafersa cab cars 1701-1719 (odd) and
+  // coaches 1730-1774 (even). The M8s Shore Line East ran in 2022-26 came
+  // from the shared Metro-North pool.
+  ctrail: [
+    [6700, 6711, "p40"], [6694, 6699, "gp40h"],
+    [1701, 1719, "mafersaCab"], [1730, 1774, "mafersa"],
+    [9101, 9580, "m8"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -61,6 +70,7 @@ const TYPES = {
   alp46: { name: "ALP-46 electric locomotive", kind: "electric", pan: true },
   acelaPower: { name: "Avelia Liberty power car", kind: "electric", pan: true, paint: "#e6eaee" },
   genesis: { name: "P42 Genesis locomotive", kind: "diesel" },
+  p40: { name: "P40DC Genesis locomotive", kind: "diesel" },
   alc42: { name: "ALC-42 Charger locomotive", kind: "diesel" },
   charger: { name: "Siemens Charger locomotive", kind: "diesel" },
   p32: { name: "P32AC-DM dual-mode locomotive", kind: "diesel" },
@@ -73,6 +83,7 @@ const TYPES = {
   f40: { name: "F40PH diesel locomotive", kind: "diesel" },
   f40c: { name: "F40PH-3C diesel locomotive", kind: "diesel" },
   gp40: { name: "GP40MC diesel locomotive", kind: "diesel" },
+  gp40h: { name: "GP40-3H diesel locomotive", kind: "diesel" },
   hsp46: { name: "HSP46 diesel locomotive", kind: "diesel" },
   bl36: { name: "BL36PH diesel locomotive", kind: "diesel" },
   f125: { name: "F125 diesel locomotive", kind: "diesel" },
@@ -112,6 +123,8 @@ const TYPES = {
   ventureCab: { name: "Venture cab car", kind: "coach", cab: true },
   shoreliner: { name: "Shoreliner coach", kind: "coach" },
   shorelinerCab: { name: "Shoreliner cab car", kind: "coach", cab: true },
+  mafersa: { name: "Mafersa coach", kind: "coach" },
+  mafersaCab: { name: "Mafersa cab car", kind: "coach", cab: true },
   coach: { name: "Coach", kind: "coach" },
   buddBaggage: { name: "Baggage car", kind: "coach", baggage: true },
   buddCoach: { name: "Stainless coach", kind: "coach" },
@@ -302,6 +315,15 @@ function typicalFor(t, reported) {
     // MP40PH-3C or MP54AC; the reported locomotive picks which.
     case "go": return set("MP54AC or MP40PH-3C locomotive with BiLevel coaches and a cab car, usually 12 cars",
       [reported === "mp40" ? "mp40" : "mp54ac", 1], ["bilevel", 11], ["bilevelCab", 1]);
+    // CT Rail: both lines run push-pull sets, a P40DC (some trains a
+    // GP40-3H) with Mafersa coaches and a cab car; Shore Line East went back
+    // to them in 2026 after four years of M8 electric cars.
+    case "ctrail": {
+      if (reported === "m8") return set("M8 electric cars, usually 4", ["m8", 4]);
+      const gp = reported === "gp40h";
+      return set(`${gp ? "GP40-3H" : "P40DC"} locomotive with Mafersa coaches and a cab car`,
+        [gp ? "gp40h" : "p40", 1], ["mafersa", 3], ["mafersaCab", 1]);
+    }
     default: return null;
   }
 }

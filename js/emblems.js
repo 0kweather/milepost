@@ -19,6 +19,9 @@ const LOGOS = {
   smart: [3.31, false], frontrunner: [12.85, true], marc: [3.85, true],
   // GO Transit's "GO"; in the older locomotive scheme's green.
   go: [2.09, true], "go-teal": [2.09, false],
+  // CT Rail: the mark (its lens stays red on the white version, as painted)
+  // and "CT rail".
+  ctrail: [4.91, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   // Caltrans' mark and name (Charger and Venture sides); the San Joaquins
