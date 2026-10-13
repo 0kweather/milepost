@@ -38,7 +38,7 @@ export function startTour(app) {
     },
     {
       title: "Railroads",
-      text: "Every railroad on the map, with how many of its trains are running. Tap one to hide or show its trains, or its arrow to zoom to them.",
+      text: "Every railroad on the map, with how many of its trains are running. Tap one to hide or show its trains, or its circled i for its page: what's running, its lines, its fleet and its stations.",
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet("expanded"); },
       target: "#agencies",
     },

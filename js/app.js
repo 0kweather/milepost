@@ -41,6 +41,7 @@ const state = {
   selected: null,        // selected train id
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
+  railroad: null,        // railroad whose page is open
   predictions: null,     // live MBTA predictions for the selected station
   showStations: store.get("tt-stations", true),
   // Mark trains late when GPS shows a delay their railroad hasn't reported
@@ -935,6 +936,12 @@ async function start() {
       computePositions();
       redrawStations();
       if (wantedStation) selectStation(wantedStation);
+      else if (AGENCIES[wantedRailroad]) {
+        // Framed once the map is ready (a shared link may open before it is).
+        openRailroad(wantedRailroad, { fly: false });
+        const frame = () => frameRailroad(wantedRailroad);
+        mapLoaded ? frame() : map.once("load", frame);
+      }
       renderResults();
     })
     .catch((err) => console.warn("stations", err));
@@ -993,7 +1000,7 @@ setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 // ---------- Rendering: list ----------
 
 const CHECK = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="#fff" d="m9.5 16.2-4.2-4.2-1.4 1.4 5.6 5.6 11-11-1.4-1.4z"/></svg>';
-const ZOOM = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 1 7 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 0 1 7-7Zm0 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></svg>';
+const INFO = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.25" fill="currentColor"/></svg>';
 
 function agencyCounts() {
   const counts = {};
@@ -1029,7 +1036,7 @@ function renderAgencies() {
             <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)}</span></span>
             ${count}
           </button>
-          <button class="zoom" data-zoom="${id}" title="Show ${esc(a.short)} trains" aria-label="Zoom to ${esc(a.name)}">${ZOOM}</button>
+          <button class="zoom" data-railroad="${id}" title="About ${esc(a.short)}" aria-label="About ${esc(a.name)}">${INFO}</button>
         </div>`);
     }
   }
@@ -1204,6 +1211,7 @@ function noticesBlock(list, route = null, title = "Service notices") {
 
 const stripScroll = new Map();
 function renderDetail() {
+  if (state.railroad) return renderRailroad();
   if (state.station) return renderStation();
   const t = state.trains.get(state.selected);
   const el = $("train-detail");
@@ -1356,7 +1364,7 @@ function renderModelPage(t, el) {
     : `${a.short} doesn’t report this train’s cars; this is what typically runs on this route.`;
   const source = m?.source ? (() => { try { const h = new URL(m.source).hostname.replace(/^www\./, ""); return /wikipedia/.test(h) ? "Wikipedia" : h; } catch { return "Source"; } })() : null;
   el.innerHTML = `
-    <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.number ? `Train ${t.number}` : trainTitle(t))}</button>
+    <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.backLabel || (t.number ? `Train ${t.number}` : trainTitle(t)))}</button>
     <div class="model-page">
       <div class="model-art">${carSvg(c, i, a.color, width)}</div>
       <h2>${esc(m?.model || car.type?.name || "This car")}</h2>
@@ -1364,7 +1372,7 @@ function renderModelPage(t, el) {
       ${m ? `<dl class="facts wide">${facts(m, ["built", "fleet", "topSpeedMph", "powerHp", "seats", "lengthFt"])}</dl>` : ""}
       ${m?.about ? `<p class="model-about">${esc(m.about)}</p>` : ""}
       ${source ? `<p class="model-source">Source: <a href="${esc(m.source)}" target="_blank" rel="noopener">${esc(source)}</a></p>` : ""}
-      ${c.typical ? `<div class="model-note"><strong>Car count and type may not be accurate.</strong> ${esc(why)}${c.summary ? ` Typical for this route: ${esc(c.summary)}.` : ""}</div>` : ""}
+      ${c.typical && !t.fleet ? `<div class="model-note"><strong>Car count and type may not be accurate.</strong> ${esc(why)}${c.summary ? ` Typical for this route: ${esc(c.summary)}.` : ""}</div>` : ""}
     </div>`;
 }
 
@@ -1491,6 +1499,138 @@ function renderStation() {
         : `<p class="empty">${loading ? "Loading live trains…" : `No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.`}</p>`}
     </div>
     <p class="estimate-note">Times are live predictions from each railroad.</p>`;
+}
+
+// ---------- Railroad pages ----------
+// From the i beside each railroad: the map frames its network; the page shows
+// what's running, its lines, its fleet, its busiest stations and where the
+// data comes from.
+
+function openRailroad(id, { fly = true } = {}) {
+  if (!AGENCIES[id]) return;
+  if (state.hidden.has(id)) {
+    state.hidden.delete(id);
+    store.set("tt-hidden", [...state.hidden]);
+    redraw();
+    redrawStations();
+    redrawRail();
+  }
+  clearInterval(predictionTimer);
+  Object.assign(state, { selected: null, station: null, predictions: null, car: null, returnTo: null, railroad: id });
+  $("back-btn").lastChild.textContent = " All trains";
+  setFollow(false);
+  setUrlSelection();
+  applySelectionFilter();
+  showDetailView(true);
+  renderAll();
+  if (fly) frameRailroad(id);
+  if (isPhone) setSheet("");
+}
+
+// Its stations and running trains, framed beside the panel.
+function frameRailroad(id) {
+  const b = new maplibregl.LngLatBounds();
+  for (const st of state.stations.values()) if (st.agencies.includes(id)) b.extend([stationPos(st).lon, stationPos(st).lat]);
+  for (const t of state.trains.values()) if (t.agency === id && Number.isFinite(t.lat)) b.extend([t.lon, t.lat]);
+  if (b.isEmpty()) return;
+  const pad = panelPadding();
+  map.fitBounds(b, { padding: { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) }, maxZoom: 11, duration: 900 });
+}
+
+// A stand-in train for a line's typical consist, so its cars draw and open
+// model pages like a live train's.
+const fleetTrain = (id, route) => ({ id: `fleet:${id}:${route || ""}`, agency: id, route: route || null, number: null,
+  fleet: true, backLabel: AGENCIES[id].name, cars: null, stops: null });
+// "Framingham / Worcester Line" and "Framingham/Worcester Line" are one line.
+const lineKey = (l) => String(l).toLowerCase().replace(/\bline\b/g, "").replace(/[^a-z0-9]/g, "");
+
+function renderRailroad() {
+  const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
+  if (state.car?.page && state.car.fleet != null) return renderModelPage(fleetTrain(id, state.car.fleet), el);
+  const src = SOURCES.find((s) => s.agencies.includes(id));
+  const avail = src ? sourceAvailability(src) : { ok: false };
+  const status = state.sourceStatus[src?.id];
+  const trains = [...state.trains.values()].filter((t) => t.agency === id);
+  const late = trains.filter((t) => t.delayMin > 5).length;
+  const onTime = trains.filter((t) => t.delayMin != null && t.delayMin <= 5).length;
+  const estimated = trains.filter((t) => t.estimated).length;
+  const stations = [...state.stations.values()].filter((st) => st.agencies.includes(id));
+
+  // Lines: from its stations' timetables and the routes its trains report.
+  const lines = new Map(); // key -> { name, running }
+  for (const st of stations) {
+    for (const m of st.members) {
+      if (m.agency !== id) continue;
+      for (const l of m.lines || []) if (l && l !== "City Terminal Zone" && !lines.has(lineKey(l))) lines.set(lineKey(l), { name: l, running: 0 });
+    }
+  }
+  for (const t of trains) {
+    if (!t.route) continue;
+    const k = lineKey(t.route);
+    if (!lines.has(k)) lines.set(k, { name: t.route, running: 0 });
+    lines.get(k).running++;
+  }
+  // A timetable's longer name for a running line ("Franklin / Foxboro Line"
+  // for "Franklin Line") folds into it.
+  const runningKeys = [...lines].filter(([, l]) => l.running).map(([k]) => k);
+  for (const [k, l] of lines) if (!l.running && runningKeys.some((r) => k.includes(r) || r.includes(k))) lines.delete(k);
+  const lineList = [...lines.values()].sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
+
+  // Fleet: each line's typical train; lines that run the same one share it.
+  const fleet = new Map(); // summary -> { route, names, c }
+  for (const l of lineList.length ? lineList : [{ name: null }]) {
+    const c = consistOf(fleetTrain(id, l.name));
+    if (!c) continue;
+    const k = c.summary || c.cars.map((x) => x.type?.name).join("|");
+    if (!fleet.has(k)) fleet.set(k, { route: l.name, names: [], c });
+    if (l.name) fleet.get(k).names.push(l.name);
+  }
+
+  const stat = (n, label, cls = "") => `<div class="rr-stat ${cls}"><strong>${n}</strong><span>${label}</span></div>`;
+  const source = !avail.ok ? avail.reason || "Not connected"
+    : estimated && estimated === trains.length ? "Positions estimated from predicted times"
+    : trains.length ? "Live GPS positions" : "No trains reporting right now";
+  const updated = status?.at ? ` · updated ${fmtAgo(status.at)}` : "";
+  const running = [...trains].sort((x, y) => String(x.route || "").localeCompare(String(y.route || "")) ||
+    String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
+  // Busiest: most of its trains on a weekday (else its timetable's stops a week).
+  const busy = (st) => { const m = st.members.find((x) => x.agency === id); return [m?.daily || 0, m?.trips || 0]; };
+  const busiest = [...stations].sort((x, y) => busy(y)[0] - busy(x)[0] || busy(y)[1] - busy(x)[1]).slice(0, 5);
+  const fleetHtml = [...fleet.values()].map(({ route, names, c }) => `
+    <div class="rr-fleet">
+      ${names.length && lineList.length > 1 ? `<p class="rr-fleet-lines">${esc(names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", "))}</p>` : ""}
+      <div class="consist-strip" data-fleet="${esc(route || "")}">${consistHtml(c, a.color)}</div>
+      ${c.summary ? `<p class="rr-fleet-sum">${esc(c.summary)}</p>` : ""}
+    </div>`).join("");
+
+  el.innerHTML = `
+    <div class="hero">
+      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${a.kind === "intercity" ? "Intercity" : "Commuter rail"} · ${esc(a.region)}</div>
+      <h2>${esc(a.name)}</h2>
+      <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
+    </div>
+    <div class="rr-stats">
+      ${stat(trains.length, trains.length === 1 ? "train running" : "trains running")}
+      ${stat(onTime, "on time", "good")}
+      ${stat(late, "over 5 min late", late ? "warn" : "")}
+    </div>
+    ${lineList.length > 1 ? `<h3 class="section-title">Lines</h3>
+      <ul class="rr-lines">${lineList.map((l) => `<li><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"}</span></li>`).join("")}</ul>` : ""}
+    <h3 class="section-title">Running now</h3>
+    <div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
+        ${plate(t.number || a.short, a.color, "sm")}
+        <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
+        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
+      </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
+      : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>
+    ${fleetHtml ? `<h3 class="section-title">Fleet</h3><p class="rr-hint">What usually runs on each line. Tap a car to read about it.</p>${fleetHtml}` : ""}
+    ${busiest.length ? `<h3 class="section-title">Stations</h3>
+      <p class="rr-hint">${stations.length} station${stations.length === 1 ? "" : "s"}; the busiest:</p>
+      <div class="rr-stations">${busiest.map((st) => `<button class="result" data-station="${esc(st.id)}">
+        <span class="station-icon" style="--c:${a.color}"></span>
+        <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, (() => { const d = st.members.find((m) => m.agency === id)?.daily; return d ? `${d} ${a.short} trains a weekday` : ""; })()].filter(Boolean).join(" · "))}</span></span>
+        <span></span></button>`).join("")}</div>` : ""}
+    ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
 
 // ---------- Tracked trains ----------
@@ -1668,7 +1808,7 @@ function renderAll() {
   renderAgencies();
   renderResults();
   renderCredits();
-  if (state.selected || state.station) renderDetail();
+  if (state.selected || state.station || state.railroad) renderDetail();
 }
 
 
@@ -1741,7 +1881,9 @@ function setUrlSelection() {
   const url = new URL(location.href);
   url.searchParams.delete("train");
   url.searchParams.delete("station");
+  url.searchParams.delete("railroad");
   if (state.selected) url.searchParams.set("train", state.selected);
+  if (state.railroad) url.searchParams.set("railroad", state.railroad);
   if (state.station) url.searchParams.set("station", state.station);
   history.replaceState(null, "", url);
 }
@@ -1756,6 +1898,7 @@ function showDetailView(open) {
 
 function select(id, { fly = true } = {}) {
   state.returnTo = null;
+  state.railroad = null;
   $("back-btn").lastChild.textContent = " All trains";
   if (state.selected !== id) state.car = null;
   state.selected = id;
@@ -1811,6 +1954,7 @@ function selectStation(id, { fly = true } = {}) {
   const st = state.stations.get(id);
   if (!st) return;
   state.selected = null;
+  state.railroad = null;
   state.station = id;
   state.predictions = null;
   setFollow(false);
@@ -1837,13 +1981,17 @@ function closeDetail() {
   const back = state.returnTo;
   state.returnTo = null;
   $("back-btn").lastChild.textContent = " All trains";
-  // Back to the station a train was opened from, or the train a station was.
+  // Back to the station a train was opened from, or the train a station was,
+  // or the railroad page either was.
+  if (back?.railroad && !state.railroad) return openRailroad(back.railroad, { fly: false });
   if (state.selected && typeof back === "string" && state.stations.has(back)) return selectStation(back, { fly: false });
   if (state.station && back?.train && state.trains.has(back.train)) {
     state.station = null;
     return select(back.train, { fly: false });
   }
   state.station = null;
+  state.railroad = null;
+  state.car = null;
   select(null);
 }
 
@@ -1966,6 +2114,14 @@ on("tracked", "keydown", (e) => {
 
 function openCar(fig) {
   const i = Number(fig.dataset.car);
+  // A car in a railroad page's fleet: straight to its model page.
+  const fleet = fig.closest("[data-fleet]");
+  if (fleet && state.railroad) {
+    state.car = { id: `fleet:${state.railroad}:${fleet.dataset.fleet}`, i, page: true, fleet: fleet.dataset.fleet };
+    renderDetail();
+    $("train-detail").scrollTop = 0;
+    return;
+  }
   state.car = state.car?.id === state.selected && state.car.i === i ? null : { id: state.selected, i, page: false };
   renderDetail();
 }
@@ -2016,7 +2172,11 @@ on("train-detail", "click", (e) => {
   if (fig) return openCar(fig);
   if (e.target.closest("[data-car-close]")) { state.car = null; return renderDetail(); }
   if (e.target.closest("[data-model-more]") && state.car) { state.car.page = true; renderDetail(); $("train-detail").scrollTop = 0; return; }
-  if (e.target.closest("[data-model-back]") && state.car) { state.car.page = false; return renderDetail(); }
+  if (e.target.closest("[data-model-back]") && state.car) {
+    if (state.car.fleet != null) state.car = null; // back to the railroad page
+    else state.car.page = false;
+    return renderDetail();
+  }
   if (e.target.closest("[data-notices-toggle]")) {
     state.noticesCollapsed = !state.noticesCollapsed;
     store.set("tt-notices-collapsed", state.noticesCollapsed);
@@ -2032,13 +2192,21 @@ on("train-detail", "click", (e) => {
   if (stop) return untrack(stop.dataset.untrack);
   const b = e.target.closest("[data-select]");
   if (b) {
-    const from = state.station;
+    const from = state.station, railroad = state.railroad;
     select(b.dataset.select);
-    state.returnTo = from; // "back" from this train goes to the station
-    $("back-btn").lastChild.textContent = from ? " Station" : " All trains";
+    // "back" from this train goes to the station or railroad it was opened from
+    state.returnTo = railroad ? { railroad } : from;
+    $("back-btn").lastChild.textContent = railroad ? ` ${AGENCIES[railroad].short}` : from ? " Station" : " All trains";
   }
   const st = e.target.closest("[data-station]");
-  if (st) selectStation(st.dataset.station);
+  if (st) {
+    const railroad = state.railroad;
+    selectStation(st.dataset.station);
+    if (railroad) {
+      state.returnTo = { railroad };
+      $("back-btn").lastChild.textContent = ` ${AGENCIES[railroad].short}`;
+    }
+  }
 });
 on("follow-btn", "click", () => {
   setFollow(!state.follow);
@@ -2069,7 +2237,7 @@ on("results", "click", (e) => {
 
 on("agencies", "click", (e) => {
   const toggle = e.target.closest("[data-toggle]");
-  const zoom = e.target.closest("[data-zoom]");
+  const info = e.target.closest("[data-railroad]");
   if (toggle) {
     const id = toggle.dataset.toggle;
     state.hidden.has(id) ? state.hidden.delete(id) : state.hidden.add(id);
@@ -2078,22 +2246,8 @@ on("agencies", "click", (e) => {
     redrawStations();
     redrawRail();
     renderAll();
-  } else if (zoom) {
-    const id = zoom.dataset.zoom;
-    const pts = [...state.trains.values()].filter((t) => t.agency === id);
-    if (!pts.length) return toast(`No ${AGENCIES[id].short} trains are reporting right now.`);
-    if (state.hidden.has(id)) {
-      state.hidden.delete(id);
-      store.set("tt-hidden", [...state.hidden]);
-      redraw();
-      redrawStations();
-      redrawRail();
-      renderAll();
-    }
-    const b = new maplibregl.LngLatBounds();
-    for (const t of pts) b.extend([t.lon, t.lat]);
-    map.fitBounds(b, { padding: { ...panelPadding(), top: 60, right: 60, bottom: Math.max(60, panelPadding().bottom), left: Math.max(60, panelPadding().left + 40) }, maxZoom: 10, duration: 900 });
-    if (isPhone) setSheet("collapsed");
+  } else if (info) {
+    openRailroad(info.dataset.railroad);
   }
 });
 
@@ -2292,6 +2446,7 @@ function toast(msg) {
 
 // Open a shared link to a specific train once its feed has loaded.
 const wantedStation = new URL(location.href).searchParams.get("station");
+const wantedRailroad = new URL(location.href).searchParams.get("railroad");
 const wanted = new URL(location.href).searchParams.get("train");
 if (wanted) {
   const wait = setInterval(() => {

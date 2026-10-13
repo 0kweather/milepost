@@ -140,6 +140,7 @@ a { color: var(--accent); }
 }
 
 .icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn[hidden] { display: none; }
 .icon-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: transparent; }
 
 .search-row {
@@ -1112,3 +1113,22 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .tour-card h3 { margin: var(--s1) 0 0; font-size: var(--fs-md); }
 .tour-card p { margin: var(--s1) 0 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); }
 .tour-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s3); }
+
+/* ---------- Railroad pages ---------- */
+
+.rr-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin-top: var(--s3); flex: none; }
+.rr-stat { padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--hover); }
+.rr-stat strong { display: block; font-size: var(--fs-xl); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.rr-stat span { font-size: var(--fs-xs); color: var(--muted); }
+.rr-stat.good strong { color: var(--good); }
+.rr-stat.warn strong { color: var(--warn); }
+.rr-lines { list-style: none; margin: var(--s2) 0 0; padding: 0; flex: none; }
+.rr-lines li { display: flex; justify-content: space-between; gap: var(--s3); padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-base); }
+.rr-lines li:last-child { border-bottom: 0; }
+.rr-lines .sub { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+.rr-trains, .rr-stations { display: grid; gap: 2px; margin: var(--s2) calc(-1 * var(--s2)) 0; flex: none; }
+.rr-trains > .sub { margin: var(--s1) var(--s2); font-size: var(--fs-sm); color: var(--muted); }
+.rr-hint { margin: 2px 0 0; font-size: var(--fs-xs); color: var(--muted); flex: none; }
+.rr-fleet { margin-top: var(--s3); flex: none; }
+.rr-fleet-lines { margin: 0 0 2px; font-size: var(--fs-sm); font-weight: 600; }
+.rr-fleet-sum { margin: 2px 0 0; font-size: var(--fs-xs); color: var(--muted); }
