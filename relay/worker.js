@@ -24,7 +24,9 @@ const FEEDS = {
     also: ["https://open-data.rtd-denver.com/files/gtfs-rt/rtd/TripUpdate.pb"],
     routes: ["A", "113B", "113G", "117N"],
   }),
-  uta: () => ({ url: "https://apps.rideuta.com/tms/gtfs/Vehicle" }),
+  // UTA refuses requests from Cloudflare's servers, so with a Transitland
+  // API key the relay reads Transitland's copies of UTA's feeds (below).
+  uta: (env) => (env.TRANSITLAND_API_KEY ? { transitland: "f-9x0-uta~rt" } : { url: "https://apps.rideuta.com/tms/gtfs/Vehicle" }),
   capmetro: () => ({
     url: "https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream",
     also: ["https://data.texas.gov/download/rmk2-acnw/application%2Foctet-stream"],
@@ -166,6 +168,46 @@ function minutesUntil(text, now) {
 
 let njtMem = null; // { st, at, json }
 
+// ---------- Transitland (UTA) ----------
+// Transitland keeps copies of UTA's GTFS-realtime feeds and serves them with
+// an API key. Its free tier allows 10,000 requests a month, so positions are
+// refreshed at most every 5 minutes and predicted stop times every 15, only
+// while FrontRunner runs (about 4 a.m. to 1 a.m. Mountain time, Monday to
+// Saturday): roughly 8,000 a month. Between refreshes the last copies are
+// served. (Each Worker instance keeps its own copies, so a busy day with
+// several instances uses more.)
+const TL_EVERY = { vehicle_positions: 5 * 60 * 1000, trip_updates: 15 * 60 * 1000 };
+const tlMem = {}; // "feed/type" -> { at, bytes }
+const mountain = new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23" });
+function frontRunnerRunning(now) {
+  const p = Object.fromEntries(mountain.formatToParts(new Date(now)).map((x) => [x.type, x.value]));
+  const min = +p.hour * 60 + +p.minute;
+  // Saturday service runs past midnight into Sunday's small hours.
+  if (p.weekday === "Sun") return min < 90;
+  return min >= 240 || (p.weekday !== "Mon" && min < 90);
+}
+async function fetchTransitland(feed, env) {
+  const now = Date.now(), running = frontRunnerRunning(now);
+  const parts = await Promise.all(Object.entries(TL_EVERY).map(async ([type, every]) => {
+    const key = `${feed}/${type}`, hit = tlMem[key];
+    if (hit && (now - hit.at < every || !running)) return hit.bytes;
+    if (!running) return new Uint8Array(0);
+    try {
+      const res = await fetch(`https://transit.land/api/v2/rest/feeds/${encodeURIComponent(feed)}/download_latest_rt/${type}.pb`, {
+        headers: { apikey: env.TRANSITLAND_API_KEY, "User-Agent": "Trainsheet relay (https://trainsheet.com)" },
+      });
+      if (!res.ok) throw new Error(`Transitland HTTP ${res.status}`);
+      tlMem[key] = { at: now, bytes: new Uint8Array(await res.arrayBuffer()) };
+    } catch (err) {
+      if (!hit) throw err;
+      hit.at = now - every + 60 * 1000; // keep the last copy; try again in a minute
+    }
+    return tlMem[key].bytes;
+  }));
+  // Positions, then predicted stop times: read as one feed.
+  return new Response(new Blob(parts), { headers: { "Content-Type": "application/octet-stream" } });
+}
+
 // ---------- GO Transit (GO Tracker) ----------
 // GO Tracker (gotracker.ca), GO's public live map, reads each line's trains
 // from a small web service as XML: GPS position, train number, line, delay,
@@ -298,6 +340,7 @@ export default {
     try {
       upstream = spec.njtDv ? await fetchNjtDv(ctx)
         : spec.goTracker ? Response.json(await fetchGoTracker())
+        : spec.transitland ? await fetchTransitland(spec.transitland, env)
         : await fetch(spec.url, { headers });
     } catch (err) {
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });

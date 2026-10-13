@@ -581,7 +581,7 @@ async function parseGo(json) {
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
 // carry only IDs (scripts/build_trips.py).
-const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago", marc: "America/New_York" };
+const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago", marc: "America/New_York", frontrunner: "America/Denver" };
 let tripsStatic = null;
 const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r) => r.json()));
 
@@ -590,7 +590,10 @@ const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r)
 // timetable. Feeds drop stops a train has left, so only what's ahead shows.
 function addTrip(t, agency, tripId, tu, west, now) {
   const info = west.trips[tripId];
-  const list = (tu?.stops || []).filter((s) => !s.skipped && west.stops[s.stopId] && evTime(s));
+  // Some feeds (UTA) name a stop only by its place in the trip.
+  const bySeq = info?.[2];
+  const stopsOf = (tu?.stops || []).map((s) => (s.stopId || !bySeq ? s : { ...s, stopId: bySeq[s.seq] }));
+  const list = stopsOf.filter((s) => !s.skipped && west.stops[s.stopId] && evTime(s));
   if (info?.[1]) t.destination = info[1];
   else if (list.length) t.destination = west.stops[list[list.length - 1].stopId][0];
   if (!list.length) return;
@@ -725,13 +728,19 @@ export const SOURCES = [
     }),
   },
   {
-    id: "uta", agencies: ["frontrunner"], format: "pb", interval: 30, relay: true,
-    credit: { label: "UTA", href: "https://developer.rideuta.com" },
-    parse: (buf) => gtfsVehicles("frontrunner", buf, {
+    // UTA's GTFS-realtime feeds, which refuse the relay's servers; the relay
+    // reads Transitland's copies instead (refreshed every few minutes, to stay
+    // within its free quota). Route and departure data provided by
+    // permission of UTA.
+    id: "uta", agencies: ["frontrunner"], format: "pb", interval: 60, relay: true,
+    credit: { label: "UTA (via Transitland)", href: "https://www.transit.land/feeds/f-9x0-uta~rt" },
+    parse: async (buf) => gtfsVehicles("frontrunner", buf, {
       // FrontRunner consists report as L1, L2, ...; TRAX and buses use numeric ids.
       keep: (v) => /^L\d+$/.test(v.vehicle?.id || ""),
       route: () => "FrontRunner",
       number: () => null,
+      // Stops and times from the trip updates and UTA's timetable.
+      west: (await loadTrips()).frontrunner,
     }),
   },
   {

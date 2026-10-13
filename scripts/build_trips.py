@@ -2,7 +2,8 @@
 feeds (through the relay) carry only IDs: Caltrain, SMART, Metrolink, RTD,
 CapMetro and Metra.
 
-Their realtime feeds (through the relay) carry only stop and trip IDs, so the
+Trips are [number, headsign] (plus {stop_sequence: stop_id} where the realtime
+feed gives only sequences). Their realtime feeds (through the relay) carry only stop and trip IDs, so the
 map needs each railroad's static GTFS to name stops, match them to the
 stations on the map, and give trains a number and destination. Run
 occasionally (timetables change a few times a year):
@@ -26,6 +27,7 @@ FEEDS = {
     "capmetro": (MDB.format("mdb-150"), {"550"}),
     "metra": ("https://schedules.metrarail.com/gtfs/schedule.zip", None),
     "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", None),
+    "frontrunner": (MDB.format("mdb-170"), {"41065"}),  # UTA's feed also covers TRAX and buses
 }
 
 
@@ -60,14 +62,24 @@ def headsign(h):
 def build(agency, url, routes):
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=120).read()))
-    # MARC's headsigns are bare city names in capitals ("BALTIMORE"); its
-    # trains' last stops name their destinations better.
-    trips = {r["trip_id"]: [r.get("trip_short_name") or "", "" if agency == "marc" else headsign(r.get("trip_headsign") or "")]
+    # MARC's headsigns are bare city names in capitals ("BALTIMORE"),
+    # FrontRunner's read "To Ogden"; their trains' last stops name their
+    # destinations better.
+    trips = {r["trip_id"]: [r.get("trip_short_name") or "", "" if agency in ("marc", "frontrunner") else headsign(r.get("trip_headsign") or "")]
              for r in rows(zf, "trips.txt") if routes is None or r["route_id"] in routes}
     # Only the stops those trips use (a whole bus network's stops would be huge).
     used = None
     if routes is not None:
-        used = {r["stop_id"] for r in rows(zf, "stop_times.txt") if r["trip_id"] in trips}
+        used = set()
+        for r in rows(zf, "stop_times.txt"):
+            if r["trip_id"] in trips:
+                used.add(r["stop_id"])
+                # UTA's trip updates name stops only by their place in the trip,
+                # so FrontRunner trips carry their stops by sequence.
+                if agency in SEQUENCED:
+                    if len(trips[r["trip_id"]]) < 3:
+                        trips[r["trip_id"]].append({})
+                    trips[r["trip_id"]][2][r["stop_sequence"]] = r["stop_id"]
     raw = {r["stop_id"]: r for r in rows(zf, "stops.txt") if r.get("stop_lat")}
     # Each stop (platforms included) points at its station: the parent station
     # where there is one, which is the ID the map's station list uses.
@@ -78,6 +90,9 @@ def build(agency, url, routes):
         parent = r.get("parent_station") or sid
         known = STATIONS.get(agency, set())
         station = parent if parent in known or sid not in known else sid
+        # FrontRunner's timetable includes crew relief points; only stations count.
+        if agency in SEQUENCED and station not in known:
+            continue
         p = raw.get(parent, r)
         name = p["stop_name"].strip()
         if agency == "marc":  # per-direction stops fold into one station
@@ -89,6 +104,7 @@ def build(agency, url, routes):
     return {"stops": stops, "trips": trips}
 
 
+SEQUENCED = {"frontrunner"}
 out = {k: build(k, u, routes) for k, (u, routes) in FEEDS.items()}
 path = DATA / "trips.json"
 path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))

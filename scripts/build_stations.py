@@ -134,6 +134,9 @@ def gtfs_stations(url, keep, line_name, group=None):
     lines, visits, daily = defaultdict(set), defaultdict(int), defaultdict(set)
     for st in rows(zf, "stop_times.txt"):
         line = trip_line.get(st["trip_id"])
+        # Timing and crew relief points (no boarding, no alighting) aren't stations.
+        if st.get("pickup_type") == "1" and st.get("drop_off_type") == "1":
+            continue
         if line:
             s = stops.get(st["stop_id"])
             if s:
