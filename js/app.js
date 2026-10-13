@@ -2360,7 +2360,7 @@ map.once("load", () => (mapLoaded = true));
     const c = consistOf({ id: "loading", agency, route });
     if (!c) return;
     el.innerHTML = consistHtml(c, AGENCIES[agency].color);
-    el.style.setProperty("--pass", `${((innerWidth + el.scrollWidth) / 260).toFixed(1)}s`);
+    el.style.setProperty("--pass", `${((innerWidth + el.scrollWidth) / 450).toFixed(1)}s`);
     // Run the pass again from the start for this train.
     el.style.animation = "none";
     void el.offsetWidth;
