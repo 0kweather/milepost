@@ -1066,8 +1066,8 @@ export const SOURCES = [
     },
   },
   {
-    // Sound Transit's GTFS-realtime (OneBusAway), through the relay with its key.
-    id: "sounder", agencies: ["sounder"], format: "pb", interval: 30, relay: true, needsKey: "SOUND_TRANSIT_KEY",
+    // Sound Transit's GTFS-realtime (OneBusAway), through the relay.
+    id: "sounder", agencies: ["sounder"], format: "pb", interval: 30, relay: true,
     credit: { label: "Sound Transit", href: "https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd" },
     parse: async (buf) => {
       const number = (v) => /_(\d+)$/.exec(v.trip?.tripId || "")?.[1] || null;

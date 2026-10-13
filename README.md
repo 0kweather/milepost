@@ -25,7 +25,7 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | Metrolink | Los Angeles | Metrolink GTFS-realtime | relay + free key |
 | MARC | Maryland | MARC GTFS-realtime | relay |
 | Virginia Railway Express | Northern Virginia | VRE GTFS-realtime | relay |
-| Sounder | Seattle | Sound Transit GTFS-realtime (OneBusAway) | relay + free key |
+| Sounder | Seattle | Sound Transit GTFS-realtime (OneBusAway; its terms ask for a free key, sent once set) | relay |
 | South Shore Line | Chicago–South Bend | South Shore's ETA SPOT tracker, plus its timetable (`scripts/build_schedules.py`) | direct |
 | SunRail | Orlando | sunrail.com's train status, plus its timetable | direct |
 | Rail Runner Express | New Mexico | Timetable only (no live data published); positions estimated | direct |

@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-13 (shared copies, stale on refusal)";
+const RELAY_VERSION = "2026-10-13 (Sounder without a key)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -56,10 +56,11 @@ const FEEDS = {
       ttl: 30, // Metra refuses requests that come too often
     },
   // Sound Transit (OneBusAway): the whole agency's feeds, cut to Sounder's
-  // routes. Its key comes free by email (oba_api_key@soundtransit.org).
+  // routes. Fetched from here it answers without a key (it refused browsers
+  // on trainsheet.com); with SOUND_TRANSIT_KEY set (free by email,
+  // oba_api_key@soundtransit.org, as its terms ask) the key is sent too.
   sounder: (env) => {
-    if (!env.SOUND_TRANSIT_KEY) return null;
-    const q = `40.pb?key=${encodeURIComponent(env.SOUND_TRANSIT_KEY)}`;
+    const q = env.SOUND_TRANSIT_KEY ? `40.pb?key=${encodeURIComponent(env.SOUND_TRANSIT_KEY)}` : "40.pb";
     return {
       url: `https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/${q}`,
       also: [`https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/${q}`],
