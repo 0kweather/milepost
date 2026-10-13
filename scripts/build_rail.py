@@ -27,7 +27,7 @@ CODE_FIELDS = ["RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in ra
 CODES = {
     "AMTK": "amtrak", "NJT": "njt", "MBTA": "mbta", "SCAX": "metrolink", "MNCW": "mnr", "LI": "lirr",
     "UTF": "frontrunner", "SEPA": "septa", "MARC": "marc", "NIRC": "metra", "VREX": "vre",
-    "SLE": "shoreline", "NICD": "southshore", "JPBX": "caltrain", "SDRX": "sounder", "ACEX": "ace",
+    "SLE": "ctrail", "NICD": "southshore", "JPBX": "caltrain", "SDRX": "sounder", "ACEX": "ace",
     "SFRC": "trirail", "TRCX": "trirail", "CFCR": "sunrail", "NCTD": "coaster", "SMRT": "smart",
     "DRTD": "rtd", "RTDC": "rtd", "CMRX": "capmetro", "TRE": "tre", "DART": "tre",
     "NMRX": "railrunner", "WES": "wes", "TEXR": "texrail",
@@ -36,7 +36,10 @@ CODES = {
 }
 ORDER = ["amtrak", "via", "brightline"]  # intercity first, then commuter networks alphabetically
 COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "rtd", "frontrunner",
-                     "capmetro", "trirail", "caltrain", "smart", "metrolink"}
+                     "capmetro", "trirail", "caltrain", "smart", "metrolink", "ctrail"}
+# CTrail's Hartford Line trains run on Amtrak's New Haven-Springfield line,
+# which NTAD files as Amtrak's alone: (south, west, north, east).
+HARTFORD_LINE = (41.30, -72.95, 42.105, -72.585)
 NEAREST_KM = 4
 
 
@@ -99,6 +102,9 @@ def networks(props, pt):
     if p in ("B", "C") and not commuter:
         commuter = {nearest_commuter(pt) or "commuter"}
     out = (["amtrak"] if p in ("A", "B") else []) + sorted(commuter)
+    s, w, n, e = HARTFORD_LINE
+    if out == ["amtrak"] and s < pt[1] < n and w < pt[0] < e:
+        out.append("ctrail")
     return tuple(sorted(out, key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n)))[:3]
 
 

@@ -20,6 +20,7 @@ export const AGENCIES = {
   mnr:        { name: "Metro-North",         short: "Metro-North", region: "New York",         color: "#d7263d", kind: "commuter" },
   njt:        { name: "NJ Transit Rail",     short: "NJT",      region: "New Jersey",          color: "#f47b20", kind: "commuter" },
   go:         { name: "GO Transit",          short: "GO",       region: "Toronto",             color: "#3f9c35", kind: "commuter" },
+  ctrail:     { name: "CT Rail",             short: "CT Rail",  region: "Connecticut",         color: "#9e1b32", kind: "commuter" },
   marc:       { name: "MARC Train",          short: "MARC",     region: "Maryland",            color: "#f58025", kind: "commuter" },
   septa:      { name: "SEPTA Regional Rail", short: "SEPTA",    region: "Philadelphia",        color: "#5b6e7f", kind: "commuter" },
   metra:      { name: "Metra",               short: "Metra",    region: "Chicago",             color: "#0096d6", kind: "commuter" },
@@ -577,6 +578,85 @@ async function parseGo(json) {
   return out;
 }
 
+// ---------- CT Rail (timetable, with New Haven's live board) ----------
+
+// CTDOT publishes no live positions for its Hartford Line and Shore Line East
+// trains, so they're placed from the timetable (data/ctrail.json,
+// scripts/build_ct.py). MTA TrainTime's New Haven board lists them with a
+// predicted time there, a track, cancellations and bus substitutions: the
+// delay at New Haven shifts the whole trip, and is kept for the rest of the
+// trip once the train has left the board.
+const CT_BOARD = "https://backend-unified.mylirr.org/arrivals/2NH?amtrak=true"; // amtrak=true adds CT Rail
+let ctTimetable = null;
+const loadCt = () => (ctTimetable ??= fetch("data/ctrail.json?v=dev").then((r) => r.json()));
+const ctSeen = new Map(); // "service day:number" -> { delay, gone, held, track } from the board
+
+async function fetchCtBoard() {
+  try {
+    const res = await fetch(CT_BOARD, { headers: { "Accept-Version": "3.0" }, cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn("CT Rail board", err);
+    return null; // the trains still show, on their timetable
+  }
+}
+
+async function parseCtrail(board) {
+  const tt = await loadCt();
+  const now = nowSec();
+  const midnight = Math.round(now - nyMinutes(now) * 60); // New York midnight today
+  const ttStart = Math.floor(Date.parse(`${tt.start}T12:00:00Z`) / 86400000);
+  const live = new Map((board?.arrivals || []).filter((a) => a.branch === "HL" || a.branch === "SLE").map((a) => [String(a.train_num), a]));
+  const out = [];
+  for (const [number, pats] of Object.entries(tt.trips)) {
+    // Today's run, or yesterday's still going after midnight.
+    for (const day of [midnight, midnight - 86400]) {
+      const idx = torontoDay(day + 43200) - ttStart; // same clock as New York
+      const runs = (mask) => idx >= 0 && idx < 14 ? (mask >> idx) & 1 : (mask >> (7 + (((idx - 7) % 7) + 7) % 7)) & 1;
+      const [, line, pat] = pats.find((p) => runs(p[0])) || [];
+      if (!pat || now < day + pat[0][2] * 60 - 3600 || now > day + pat[pat.length - 1][1] * 60 + 4 * 3600) continue;
+      // The board's time at New Haven against the timetable's.
+      const key = `${day}:${number}`, nh = pat.findIndex(([code]) => code === "NHV");
+      const a = live.get(number);
+      if (a && nh >= 0) {
+        const sched = day + (nh === pat.length - 1 ? pat[nh][1] : pat[nh][2]) * 60;
+        if (Math.abs(a.time - sched) < 3 * 3600) {
+          ctSeen.set(key, { delay: Math.max(0, a.time - sched), gone: a.status?.canceled || a.stop_type === "BUS",
+                            held: a.status?.held, track: a.track || null });
+        }
+      }
+      const seen = ctSeen.get(key);
+      if (seen?.gone) break; // cancelled, or a bus today
+      const delay = seen?.delay || 0;
+      const stops = pat.map(([code, arr, dep]) => ({
+        stopId: code, arrival: { time: day + arr * 60 + delay }, departure: { time: day + dep * 60 + delay },
+        track: code === "NHV" ? seen?.track : null,
+      }));
+      const prog = tripProgress(stops, now, tt.stops);
+      if (!prog) break;
+      const first = prog.list[0], last = prog.list[prog.list.length - 1];
+      const nextStop = prog.dwelling ? prog.at : prog.next;
+      const name = (st) => tt.stops[st.stopId][0];
+      const delayMin = seen ? delay / 60 : null;
+      out.push(train({
+        id: `ctrail:${number}`, agency: "ctrail", number, route: line,
+        lat: prog.lat, lon: prog.lon, bearing: prog.bearing ?? null,
+        origin: name(first), destination: name(last), nextStop: name(nextStop),
+        delayMin,
+        statusText: seen?.held ? "Held at New Haven" : prog.dwelling ? `At ${name(prog.at)}` : delayMin != null ? delayText(delayMin) : null,
+        updated: now * 1000,
+        estimated: true,
+        leg: prog.leg || null,
+        stops: mtaStops("ctrail", prog.list, tt.stops, now, nextStop, prog.dwelling ? prog.at : null),
+        _progress: { stops, lookup: tt.stops },
+      }));
+      break;
+    }
+  }
+  return out;
+}
+
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
@@ -795,6 +875,13 @@ export const SOURCES = [
     parse: parseGo,
   },
   {
+    // No live positions published: the timetable, adjusted by MTA TrainTime's
+    // New Haven board (fetched directly; it allows browsers).
+    id: "ctrail", agencies: ["ctrail"], interval: 60,
+    credit: { label: "CTDOT timetable, MTA TrainTime", href: "https://www.hartfordline.com/" },
+    load: fetchCtBoard, parse: parseCtrail,
+  },
+  {
     // Scraped from DepartureVision by the relay; no key needed.
     id: "njt", agencies: ["njt"], format: "json", interval: 30, relay: true,
     credit: { label: "NJ Transit DepartureVision", href: "https://www.njtransit.com/dv-to" },
@@ -820,6 +907,7 @@ export const SOURCES = [
 ];
 
 export async function fetchSource(src, relayBase) {
+  if (src.load) return src.parse(await src.load());
   // A per-feed address in config.js wins (for feeds that block the relay).
   const override = (window.TRAINSHEET_FEEDS || {})[src.id];
   const url = override || (src.relay ? `${relayBase.replace(/\/$/, "")}/feed/${src.id}` : src.url);

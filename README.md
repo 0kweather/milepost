@@ -20,12 +20,13 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | Metra | Chicago | Metra GTFS-realtime | relay + free key |
 | NJ Transit Rail | New Jersey | NJ Transit DepartureVision (scraped; positions estimated from predicted times) | relay |
 | GO Transit | Toronto | GO Tracker (scraped) plus GO's timetable (`scripts/build_go.py`) | relay |
+| CT Rail (Hartford Line, Shore Line East) | Connecticut | CTDOT's timetable (`scripts/build_ct.py`), with delays, tracks and cancellations from MTA TrainTime's New Haven board; positions estimated | direct |
 | Caltrain, SMART | Bay Area | 511 SF Bay | relay + free key |
 | Metrolink | Los Angeles | Metrolink GTFS-realtime | relay + free key |
 
 "Relay" feeds don't send the CORS headers a browser needs, and keyed feeds can't put their key in a public web page, so both go through a tiny Cloudflare Worker (below). Without it, the site still shows everything in the first four rows.
 
-Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't shown. Not yet covered, because they don't publish public vehicle positions: MARC, VRE, Coaster, SunRail, South Shore Line, Rail Runner, and others. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Hartford Line Amtrak trips) do show up.
+Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't shown. Not yet covered, because they don't publish public vehicle positions: MARC, VRE, Coaster, SunRail, South Shore Line, Rail Runner, and others. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Amtrak's own Hartford Line and Valley Flyer trips) do show up.
 
 ## Using it
 

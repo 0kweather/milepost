@@ -253,6 +253,10 @@ try:
             row[9] = 1 if dv[row[0]][1] else 0
 except Exception as err:
     print(f"njt DepartureVision: FAILED {err}")
+# CT Rail's stations come from its timetable build (scripts/build_ct.py).
+ct = pathlib.Path(__file__).resolve().parent.parent / "data" / "ctrail.json"
+if ct.exists():
+    result["ctrail"] = json.loads(ct.read_text())["stations"]
 print({k: len(v) for k, v in result.items()})
 
 path = pathlib.Path(__file__).resolve().parent.parent / "data" / "stations.json"

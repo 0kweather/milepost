@@ -1577,15 +1577,13 @@ function untrack(id, message) {
   renderAll();
 }
 
-// Under the train's name: where it's being tracked to, and a way to stop.
-// Trains with a stop list are tracked from a stop's pin; the rest (most
-// GPS-only railroads) keep a button that tracks without a destination.
+// Under the train's name: where it's being tracked to (stopped from the
+// tracked card's × or the stop's circle). Trains with a stop list are tracked
+// from a stop's circle; the rest (most GPS-only railroads) keep a button that
+// tracks without a destination.
 function trackButton(t) {
   const rec = state.tracked.find((r) => r.id === t.id);
-  if (rec) {
-    return `<span class="tracking-note">Tracking${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>
-      <button class="btn small" data-untrack="${esc(t.id)}">Stop</button>`;
-  }
+  if (rec) return `<span class="tracking-note">Tracking${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>`;
   if (t.stops?.some((s) => s.status !== "past")) return "";
   return `<button class="btn primary small" data-track="${esc(t.id)}">Track this train</button>`;
 }

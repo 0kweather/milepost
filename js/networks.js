@@ -6,7 +6,6 @@ import { AGENCIES } from "./sources.js?v=dev";
 const UNTRACKED = {
   marc:       { name: "MARC",                 color: "#e86a10" },
   vre:        { name: "Virginia Railway Express", color: "#a6192e" },
-  shoreline:  { name: "Shore Line East",      color: "#00838f" },
   southshore: { name: "South Shore Line",     color: "#8d1b3d" },
   sounder:    { name: "Sounder",              color: "#2a7f9e" },
   ace:        { name: "Altamont Corridor Express", color: "#7b3f98" },
