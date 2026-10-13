@@ -1164,3 +1164,10 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .line-stops .stop-dot::before { border-color: var(--line-color); }
 .line-stops li:first-child .stop-dot::before, .line-stops li:last-child .stop-dot::before { background: var(--line-color); }
 .line-stops .time { font-size: var(--fs-xs); }
+
+/* A station's railroads and lines, each opening its page. */
+.served-name { display: flex; align-items: flex-start; gap: var(--s3); }
+.served-name .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; }
+.served-name .sub, .rr-line .sub { color: var(--muted); font-size: var(--fs-xs); }
+.line-swatch { flex: none; width: 14px; height: 4px; border-radius: 2px; margin-top: 8px; }
+.rr-line > .sub { align-self: center; white-space: nowrap; font-size: var(--fs-sm); }

@@ -1304,7 +1304,7 @@ function renderDetail() {
   const leg = (i) => dest < 0 || ahead < 0 ? ""
     : i === dest ? " dest" : i > dest ? " beyond" : i >= ahead ? " ride" : i === ahead - 1 ? " ride-from" : "";
   const stops = t.stops?.length
-    ? `<h3 class="section-title">Stops</h3>${ahead >= 0 && !rec ? '<p class="stops-hint">Tap a stop’s circle to track the train until there.</p>' : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
+    ? rrSection("stops", "Stops", t.stops.length, `${ahead >= 0 && !rec ? '<p class="stops-hint">Tap a stop’s circle to track the train until there.</p>' : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
         const late = lateMin > 1
           ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
@@ -1313,7 +1313,7 @@ function renderDetail() {
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
         return `<li class="${s.status}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
-      }).join("")}</ol></div>`
+      }).join("")}</ol></div>`)
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
   // the panel, the cars strip and the stop list (same train only).
@@ -1525,14 +1525,29 @@ function renderStation() {
   rows.sort((x, y) => x.sort - y.sort);
 
   const loading = st.agencies.includes("mbta") && state.predictions === null;
-  const lines = st.members.map((m) => {
+  // Its railroads, each opening its page.
+  const railroads = st.members.map((m) => {
     const a = AGENCIES[m.agency];
-    // "City Terminal Zone" is an LIRR scheduling zone, not a line riders know.
-    const named = (m.lines || []).filter((l) => l !== "City Terminal Zone");
-    const ls = named.length ? named.join(", ") : a.kind === "intercity" ? "Intercity trains" : "";
-    const daily = m.daily ? `${m.daily} train${m.daily === 1 ? "" : "s"} a weekday` : "";
-    const sub = [ls, daily].filter(Boolean).join(" · ");
-    return `<li><span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span></li>`;
+    const sub = [a.kind === "intercity" ? "Intercity trains" : "", m.daily ? `${m.daily} train${m.daily === 1 ? "" : "s"} a weekday` : ""].filter(Boolean).join(" · ");
+    return `<li><button type="button" class="rr-line" data-railroad="${m.agency}"><span class="served-name"><span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span></span><span class="sub">›</span></button></li>`;
+  }).join("");
+  // The lines it's on, each opening its page: from its timetables and the
+  // routes of trains stopping here (Amtrak's, whose stations name no lines).
+  // "City Terminal Zone" is an LIRR scheduling zone, not a line riders know.
+  const catalog = allLines(), onLines = new Map(); // railroad|line -> { agency, name, running }
+  const addLine = (agency, name) => {
+    if (!name || name === "City Terminal Zone") return;
+    const k = lineKey(name);
+    const l = catalog.find((x) => x.agency === agency && sameLine(lineKey(x.name), k)) || { agency, name, running: 0 };
+    onLines.set(`${agency}|${lineKey(l.name)}`, l);
+  };
+  for (const m of st.members) for (const l of m.lines || []) addLine(m.agency, l);
+  for (const t of state.trains.values()) if (t.route && t.stops?.some((s) => st.keys.has(s.key))) addLine(t.agency, t.route);
+  const lineRows = [...onLines.values()].sort((x, y) => y.running - x.running || x.name.localeCompare(y.name)).map((l) => {
+    const a = AGENCIES[l.agency], k = lineKey(l.name);
+    // The line's own color where its trains carry one (GO's, MBTA's).
+    const color = [...state.trains.values()].find((t) => t.agency === l.agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor || a.color;
+    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name"><span class="line-swatch" style="background:${color}"></span><span>${esc(l.name)}<span class="sub"> · ${esc(a.short)}</span></span></span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`;
   }).join("");
   const local = localTimeNote(st);
   const access = st.access === 1 ? `<span class="access yes">${WHEELCHAIR_ICON}Step-free access</span>`
@@ -1547,20 +1562,10 @@ function renderStation() {
       <h2>${esc(st.name)}</h2>
       ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
     </div>
-    <ul class="served">${lines}</ul>
+    ${rrSection("served", "Railroads", st.members.length, `<ul class="rr-lines">${railroads}</ul>`)}
+    ${lineRows ? rrSection("station-lines", "Lines", onLines.size, `<ul class="rr-lines">${lineRows}</ul>`) : ""}
     ${noticesBlock(extras?.notices || [], null, "Station notices")}
-    <div class="deps-head">
-      <h3 class="section-title">Next trains</h3>
-      <div class="segmented two sm" id="station-view">
-        <button data-station-view="dep" aria-pressed="${!arrivals}">Departures</button>
-        <button data-station-view="arr" aria-pressed="${arrivals}">Arrivals</button>
-      </div>
-    </div>
-    <div class="deps">
-      ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
-        : `<p class="empty">${loading ? "Loading live trains…" : `No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.`}</p>`}
-    </div>
-    <p class="estimate-note">Times are live predictions from each railroad.</p>`;
+    ${nextTrainsSection(rows, arrivals, loading)}`;
 }
 
 // ---------- Railroad and line pages ----------
@@ -1946,6 +1951,29 @@ function renderLine() {
     ${rrSection("running", "Running now", trains.length, runningList(a, trains, false))}
     ${stations.length ? rrSection("line-stations", "Stations", stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}
     ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}`;
+}
+
+// A station's next trains: a folding section whose heading also switches
+// between departures and arrivals.
+function nextTrainsSection(rows, arrivals, loading) {
+  const open = !state.rrCollapsed.has("next");
+  return `<section class="rr-sec${open ? "" : " collapsed"}">
+    <div class="deps-head">
+      <h3 class="section-title"><button type="button" class="notices-toggle" data-rr-section="next" aria-expanded="${open}">
+        Next trains <span class="rr-count">${Math.min(rows.length, 14)}</span>
+        <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button></h3>
+      ${open ? `<div class="segmented two sm" id="station-view">
+        <button data-station-view="dep" aria-pressed="${!arrivals}">Departures</button>
+        <button data-station-view="arr" aria-pressed="${arrivals}">Arrivals</button>
+      </div>` : ""}
+    </div>
+    ${open ? `<div class="deps">
+      ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
+        : `<p class="empty">${loading ? "Loading live trains…" : `No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.`}</p>`}
+    </div>
+    <p class="estimate-note">Times are live predictions from each railroad.</p>` : ""}
+  </section>`;
 }
 
 // ---------- Tracked trains ----------
@@ -2515,6 +2543,10 @@ on("train-detail", "click", (e) => {
   }
   const lineBtn = e.target.closest("[data-line]");
   if (lineBtn && state.railroad) return openLine(state.railroad, lineBtn.dataset.line);
+  const openLineBtn = e.target.closest("[data-open-line]");
+  if (openLineBtn) return openLine(openLineBtn.dataset.lineRailroad, openLineBtn.dataset.openLine);
+  const railroadBtn = e.target.closest("[data-railroad]");
+  if (railroadBtn) return openRailroad(railroadBtn.dataset.railroad);
   const section = e.target.closest("[data-rr-section]");
   if (section) {
     const key = section.dataset.rrSection;
