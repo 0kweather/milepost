@@ -344,6 +344,8 @@ a { color: var(--accent); }
   z-index: 6;
   width: 300px;
   max-width: calc(100vw - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--s2) var(--s2) var(--s2);
   border-radius: var(--r-lg);
 }

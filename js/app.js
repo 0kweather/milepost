@@ -2767,11 +2767,17 @@ function toggleMenu(open = $("settings-menu").hidden) {
   menu.hidden = !open;
   btn.setAttribute("aria-expanded", String(open));
   if (!open) return;
-  // Pin the menu under the gear, kept inside the window.
+  // Pin the menu under the gear (or over it, where there's more room), kept
+  // inside the window; taller than the room it has, it scrolls.
   const r = btn.getBoundingClientRect();
+  menu.style.maxHeight = "";
   const w = menu.offsetWidth, h = menu.offsetHeight;
+  const below = innerHeight - r.bottom - 8 - 12, above = r.top - 8 - 12;
+  const under = h <= below || below >= above;
+  const room = under ? below : above;
+  menu.style.maxHeight = `${Math.max(160, room)}px`;
   menu.style.left = `${Math.max(12, Math.min(r.right - w, innerWidth - w - 12))}px`;
-  menu.style.top = `${r.bottom + 8 + h > innerHeight ? Math.max(12, r.top - h - 8) : r.bottom + 8}px`;
+  menu.style.top = `${under ? r.bottom + 8 : Math.max(12, r.top - 8 - Math.min(h, room))}px`;
 }
 on("settings-btn", "click", (e) => {
   e.stopPropagation();
