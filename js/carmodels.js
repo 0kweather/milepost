@@ -113,6 +113,32 @@ const goLetters = (c, x, y, h, text, fill, { weight = 600, spacing = 0 } = {}) =
 // MARC: a blue band over an orange stripe on silver or stainless; the
 // Chargers' blue is a deeper indigo.
 const MARC = { blue: "#2b4fae", indigo: "#363c8e", orange: "#f26f21", silver: "#c4c8cd" };
+// CT Rail (CTDOT): its locomotives black and red, the CTrail mark blown up
+// on the side; the coaches stainless with the old New Haven's red NH.
+const CTRAIL = { red: "#e3262b", black: "#1c1d20", nh: "#e0392e", band: "#2e3134" };
+// The CTrail mark across a locomotive's side, from xa to xb between y0 and
+// y1, the cab to the left: a lens of white toward the cab and one of red
+// toward the rear, crossed by a black X (a broad stroke leaning back, a
+// narrow one nearly upright), on the red forward paint and the black rear.
+function ctMark(xa, xb, y0, y1) {
+  const id = `ts-clip-${++clipSeq}`;
+  const X = (u) => xa + u * (xb - xa), Y = (v) => y1 - v * (y1 - y0);
+  const P = (u, v) => `${X(u).toFixed(2)} ${Y(v).toFixed(2)}`;
+  const outline = `M${P(0.26, 0)}Q${P(-0.16, 0.5)} ${P(0.06, 1)}L${P(0.55, 1)}Q${P(1.42, 0.5)} ${P(0.62, 0)}Z`;
+  // Stroke center lines: u at v (0 top, 1 bottom).
+  const s1 = (v) => 0.68 - 0.53 * v, s2 = (v) => 0.31 + 0.08 * v;
+  const band = (f, w) => `M${P(f(-0.1) - w, -0.1)}L${P(f(-0.1) + w, -0.1)}L${P(f(1.1) + w, 1.1)}L${P(f(1.1) - w, 1.1)}Z`;
+  const red = `M${P(0.36, 0.61)}L${P(s1(-0.1), -0.1)}L${P(1.6, -0.1)}L${P(1.6, 1.1)}L${P(s2(1.1), 1.1)}Z`;
+  return `<clipPath id="${id}"><path d="${outline}"/></clipPath><g clip-path="url(#${id})">` +
+    rect(xa - 1, y0 - 1, xb - xa + 2, y1 - y0 + 2, "#f4f5f6") + path(red, CTRAIL.red) +
+    path(band(s1, 0.05), CTRAIL.black) + path(band(s2, 0.03), CTRAIL.black) + "</g>";
+}
+// Reflective tape along a locomotive's frame: short yellow and white dashes.
+function ctDashes(a, b, y) {
+  let s = "";
+  for (let x = a, k = 0; x < b - 0.6; x += 1.3, k++) s += rect(x, y, 0.62, 0.3, k % 2 ? "#eef0f2" : "#f2c400");
+  return s;
+}
 // The Maryland flag MARC carries high on its equipment, w feet wide, centered
 // at (x, y): Calvert quarters (gold and black pales) and Crossland quarters
 // (red and white), too small to show the crosses.
@@ -190,6 +216,11 @@ export function acs64(c) {
 // stripe; the name over the travelmark, big and blue, behind the cab.
 // The P32AC-DMs (rebuilt 2018-21) wear the heritage scheme instead: silver,
 // a black nose and cab, red, white and blue stripes along the side.
+// CT Rail's P40DCs (6700-6711, ex-Amtrak, rebuilt 2018-24): red below the
+// cab windows from the nose back to the CTrail mark mid-body, black behind
+// it and above, the black coming down over the windshield to the upper
+// headlights; a black sill band with yellow and white tape; the logo in
+// white on the black behind the mark.
 export function genesis(c, s0 = {}) {
   const { L } = c, sill = 4.4, roof = 14.33;
   const d = poly([[2.1, sill], [L - 1.0, sill], [L - 1.0, roof - 1.3], ["q", L - 1.0, roof, L - 2.3, roof], [8.2, roof], ["q", 7.0, roof, 6.5, 12.7],
@@ -202,8 +233,12 @@ export function genesis(c, s0 = {}) {
   s += path(poly([[17.5, sill], [51.5, sill], [51.5, 2.4], ["q", 51.5, 1.5, 50.6, 1.5], [18.4, 1.5], ["q", 17.5, 1.5, 17.5, 2.4]]), "currentColor", 0, 'opacity="0.82"');
   s += rect(33, 2.9, 2.5, 0.9, C.steelDark, 0, 'opacity="0.8"'); // fuel gauge and filler
   s += truck(L / 2 - 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe }) + truck(L / 2 + 21.6, { wb: 9.0, d: 40, kind: "loco", top: sill, shoe: s0.shoe });
-  const mnr = c.agency === "mnr", heritage = amtrak && s0.shoe;
-  let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : mnr ? "#c3c8ce" : c.color);
+  const mnr = c.agency === "mnr", ct = c.agency === "ctrail", heritage = amtrak && s0.shoe;
+  let liv = rect(0, 0, L, roof + 1, amtrak ? AMTRAK.platinum : mnr ? "#c3c8ce" : ct ? CTRAIL.black : c.color);
+  if (ct) {
+    liv += path(`M0 ${sill + 0.85}L0 9.0L3.4 9.0Q6.0 9.3 7.6 10.3L27 10.3L27 ${sill + 0.85}Z`, CTRAIL.red);
+    liv += ctMark(22.3, 29.8, sill + 0.85, 10.3) + ctDashes(2.4, L - 1.5, sill + 0.4);
+  }
   if (mnr) {
     // Metro-North's P32AC-DMs: silver all over; a blue stripe at headlight
     // height (a V across the nose) that broadens behind the cab door into a
@@ -225,7 +260,7 @@ export function genesis(c, s0 = {}) {
   liv += path(poly([[4.25, 10.1], [6.45, 12.55], [7.35, 12.55], [7.35, 10.1]]), C.black);
   liv += path(poly([[4.6, 10.3], [6.4, 12.35], [7.0, 12.35], [7.0, 10.3]]), C.glass);
   liv += win(7.8, 10.4, 2.6, 1.7, 0.2) + win(10.7, 10.4, 1.6, 1.7, 0.2);       // cab side windows
-  s += path(d, amtrak ? AMTRAK.platinum : c.color) + clipped(d, liv);
+  s += path(d, amtrak ? AMTRAK.platinum : ct ? CTRAIL.black : c.color) + clipped(d, liv);
   s += door(12.8, sill + 0.4, 2.2, 6.8, { glassY: 0.6, glassH: 0.2 });          // crew door
   // Radiator air intakes low at the back, a small grille under the cab
   // window, louvers up under the crease behind the cab and near the back.
@@ -238,7 +273,7 @@ export function genesis(c, s0 = {}) {
   for (const x of [55.5, 62]) s += path(`M${x - 2.4} ${roof + 0.25}Q${x} ${roof + 0.95} ${x + 2.4} ${roof + 0.25}Z`, C.steelDark, 0.4);
   // MTA disc behind the cab door; Phase V: name over travelmark behind the
   // cab; heritage: the small travelmark and name toward the back, above the stripes.
-  s += mnr ? badge(c, 16.6, 10.0, 1.0) : heritage ? badge(c, 48, 9.3, 0.75) : badge(c, 21.8, 8.3, 3.9, { logo: "amtrak-stack" });
+  s += mnr ? badge(c, 16.6, 10.0, 1.0) : ct ? badge(c, 34.6, 8.6, 1.05, { dark: true }) : heritage ? badge(c, 48, 9.3, 0.75) : badge(c, 21.8, 8.3, 3.9, { logo: "amtrak-stack" });
   s += outlineOf(d);
   return s;
 }
@@ -1274,7 +1309,7 @@ const PAINT = {
   mbta: (c, g) => rect(0, 0, g.L, 17, "#d3d7dc") + rect(0, 11.95, g.L, 2, C.steelShade) + rect(0, 0, g.L, 4.3, "#b8bdc3") +
     rect(0, 7.5, g.L, 3.2, MBTA.purple) + rect(0, 10.6, g.L, 0.22, MBTA.yellow) + rect(0, 7.4, g.L, 0.22, MBTA.yellow),
   septa: cometPaint(null, { stripe: [9.9, 0.45, "#1f4fa3"], pin: [9.55, 0.3, "#e0352b"] }),
-  ctdot: cometPaint("#c8102e", { stripe: [10.0, 0.2, "#c8102e"] }),
+  ctdot: cometPaint("#c8102e"),
 };
 const single = (paint, { center = false, cab = false, spec = {} } = {}) => (c) => {
   const rows = center ? [{ ...COMET.rows[0], xs: skipAround(COMET.rows[0].xs, 39.4, 45.6) }] : spec.rows ?? COMET.rows;
@@ -1296,8 +1331,70 @@ const shorelinerMnr = (cab) => (c) => bilevel(c, { ...COMET,
   paint: (c, g) => cometPaint(null)(c, g) + rect(4.4, 6.2, 35.5, 3.95, MNR_BLUE) + rect(45.1, 6.2, 35.5, 3.95, MNR_BLUE),
   badge: [{ x: 6.3, y: 8.2, h: 1.1, logo: "mta-inverse" }, { x: 78.7, y: 8.2, h: 1.1, logo: "mta-inverse" }],
 });
-export const shoreliner = (c) => (c.agency === "ctdot" ? single(PAINT.ctdot, { center: true }) : shorelinerMnr(false))(c);
-export const shorelinerCab = (c) => (c.agency === "ctdot" ? single(PAINT.ctdot, { center: true, cab: true }) : shorelinerMnr(true))(c);
+// Shore Line East's own Shoreliner IIIs (CTDOT, 1991; off the line by the
+// time the Mafersa coaches came): no center door, the row of windows in a
+// red band. CTDOT's other Shoreliners run on Metro-North in its colors.
+const ctShore = (c) => c.agency === "ctrail" || c.agency === "ctdot";
+export const shoreliner = (c) => (ctShore(c) ? single(PAINT.ctdot) : shorelinerMnr(false))(c);
+export const shorelinerCab = (c) => (ctShore(c) ? single(PAINT.ctdot, { cab: true }) : shorelinerMnr(true))(c);
+
+// --- Mafersa coaches (CT Rail cab cars 1701-1719, coaches 1730-1774; built
+// in Brazil in 1991-92 for VRE, CTDOT's since 2004): 85 ft 4 in, 13 ft 3.5 in
+// to the roof, 51.5 in floor, Budd-style stainless: fluted below the
+// windows, smooth above, a fluted roof with a louvered A/C hatch at each end.
+// A vestibule at each end with a trap-door step. CTDOT's dress: a black
+// window band from door to door with twelve wide windows and a short one by
+// the B end; the New Haven's NH in red at the A end of the band, the round
+// Connecticut Commuter Rail emblem at the B end; "CONNECTICUT DEPARTMENT OF
+// TRANSPORTATION" on a red letterboard over the middle. Cab cars have the
+// cab at the B end, its end face striped red and white; no CTrail logo on
+// either.
+const MAF = { roof: 13.29, sill: 3.9, cornerR: 1.2, trucks: { centers: 59.5, wb: 8.5, d: 36 }, end: 0.6, diaphragm: [4.3, 12.0], badge: false };
+const MAF_WIN = { y: 7.1, w: 4.45, h: 2.4, r: 0.3 };
+// x positions laid out from the A end; bLeft: the B end drawn on the left.
+function mafersa(c, { cab = false } = {}) {
+  const { L } = c, bLeft = cab;
+  const X = (x, w = 0) => (bLeft ? L - x - w : x);
+  const door = (x) => ({ x: X(x, 2.5), w: 2.5, y0: 4.05, y1: 11.0, glassY: 0.55, glassH: 0.33 });
+  const letters = (x, y, h, t, fill, more = "") =>
+    `<text transform="translate(${x.toFixed(2)} ${y}) scale(${c.mirrored ? -1 : 1} -1)" y="${(h * 0.36).toFixed(2)}" font-size="${h}" text-anchor="middle" fill="${fill}" ${more}>${t}</text>`;
+  const paint = (c, g) => {
+    let p = rect(0, 0, L, 17, "#d6dade") + flutes(0, L, 4.2, 6.6, 0.26) + rect(0, 11.9, L, 2, C.steelShade) + flutes(0, L, 12.1, 13.3, 0.3);
+    p += rect(4.2, 6.85, L - 8.4, 2.9, CTRAIL.band, 0, 'rx="0.15"');
+    // NH, the N over the H, in a slab serif.
+    const font = 'font-weight="900" font-family="Rockwell, Roboto Slab, Georgia, serif"';
+    p += letters(X(6.1), 8.95, 1.75, "N", CTRAIL.nh, font) + letters(X(6.1), 7.62, 1.75, "H", CTRAIL.nh, font);
+    p += circle(X(78.2), 8.3, 0.75, "#ffffff", 0, `stroke="${CTRAIL.nh}" stroke-width="0.2"`) + rect(X(78.2) - 0.42, 8.22, 0.84, 0.16, "#2b2d30");
+    p += rect(L / 2 - 13, 10.05, 26, 1.45, CTRAIL.nh, 0, 'rx="0.72"') +
+      letters(L / 2, 10.77, 0.95, "CONNECTICUT DEPARTMENT OF TRANSPORTATION", "#262626",
+        'textLength="24" lengthAdjust="spacingAndGlyphs" font-weight="700" font-family="Arial Narrow, Helvetica Neue, Arial, sans-serif"');
+    return p;
+  };
+  // Trap-door steps under the vestibules, their risers striped red and white.
+  const trap = (x) => {
+    let s = rect(x + 0.15, 1.5, 2.2, 2.45, "currentColor", 0, 'opacity="0.75"');
+    for (const y of [1.65, 2.45, 3.25]) {
+      s += rect(x + 0.3, y, 1.9, 0.4, "#f2f2f2");
+      for (let k = 0; k < 4; k++) s += path(poly([[x + 0.3 + k * 0.5, y], [x + 0.55 + k * 0.5, y], [x + 0.75 + k * 0.5, y + 0.4], [x + 0.5 + k * 0.5, y + 0.4]]), CTRAIL.nh);
+    }
+    return s;
+  };
+  const louver = (x) => rect(x, 12.4, 3.0, 0.62, C.steelDark, 0.4, 'rx="0.15"') + slats(x, 12.4, 3.0, 0.62, 0.7, "rgba(0,0,0,0.35)");
+  return bilevel(c, { ...MAF, paint,
+    rows: [{ ...MAF_WIN, xs: seq(8.0, 5.55, 12).map((x) => X(x, MAF_WIN.w)) }, { ...MAF_WIN, xs: [X(74.35, 1.4)], w: 1.4 }],
+    doors: [door(1.25), door(81.6)],
+    cabLen: cab ? 3.5 : 0,
+    // The striped cab end seen edge-on; the horns on the roof over it.
+    cab: cab ? (c, { x0 }) => {
+      let s = rect(x0, 3.9, 0.42, 9.0, "#f2f2f2");
+      for (let y = 4.1; y < 12.6; y += 1.1) s += rect(x0, y, 0.42, 0.55, CTRAIL.nh);
+      return s + rect(x0 + 1.0, MAF.roof - 0.1, 1.6, 0.45, C.steelDark, 0.4, 'rx="0.15"');
+    } : null,
+    extra: (c, g) => underframe(18.5, 66.8, MAF.sill, { depth: 1.25, boxes: 3 }) + trap(X(1.25, 2.5)) + trap(X(81.6, 2.5)) + louver(X(5.4, 3.0)) + louver(X(76.9, 3.0)),
+  });
+}
+export const mafersaCoach = (c) => mafersa(c);
+export const mafersaCab = (c) => mafersa(c, { cab: true });
 
 // ===================== Electric multiple units =====================
 
@@ -1339,8 +1436,11 @@ export const m7a = married((c) => bilevel(c, { ...M7, paint: m7Paint,
 // between the doors set in one dark band. Stainless sides; red cab ends whose
 // red runs back along the roof edge to the front door; a broad red stripe
 // under the windows, dark gray from the cab back to the first window.
+// The cars CTDOT assigned to Shore Line East (2022-26) carry, in place of
+// the MTA logo, a black panel with the CTrail logo over "SHORE LINE EAST".
 export const m8 = married((c) => bilevel(c, {
-  badge: { x: 15.4, y: 8.7, h: 0.9 },                                 // cab side of the front door
+  badge: c.agency === "ctrail" ? { x: 15.6, y: 9.1, h: 0.55, dark: true }
+    : { x: 15.4, y: 8.7, h: 0.9 },                                    // cab side of the front door
   roof: 13.0, sill: 3.55, cornerR: 1.2, trucks: { centers: 59.5, wb: 8.5, d: 36, shoe: true }, end: 0.6,
   rows: [{ xs: [9.6], y: 7.6, w: 4.0, h: 2.3, r: 0.35 }, { xs: seq(25.8, 5.75, 6), y: 7.6, w: 5.1, h: 2.3, r: 0.2 },
     { xs: [72.5, 78.2], y: 7.6, w: 4.4, h: 2.3, r: 0.35 }],
@@ -1352,7 +1452,8 @@ export const m8 = married((c) => bilevel(c, {
       rect(25.6, 7.45, 34.25, 2.6, "#1d2024", 0, 'rx="0.3"') +
       [[13.6, 17.6], [22.1, 62.9], [67.4, L]].map(([a, b]) => rect(a, 5.75, b - a, 1.45, "#c8102e")).join("") +   // not across the doors
       path("M0 5.75L13.6 5.75Q15.4 6.475 13.6 7.2L0 7.2Z", "#3a3f45") +
-      path("M0 12.15L16.0 12.15Q17.4 12.15 17.4 13.6L0 13.6Z", "#c8102e");
+      path("M0 12.15L16.0 12.15Q17.4 12.15 17.4 13.6L0 13.6Z", "#c8102e") +
+      (c.agency === "ctrail" ? rect(13.85, 8.05, 3.5, 1.6, CTRAIL.black) + goLetters(c, 15.6, 8.42, 0.3, "SHORE LINE EAST", "#ffffff", { weight: 500, spacing: 0.04 }) : "");
   },
   cab: emuEnd([[3.55, 9.45, "#c8102e"]], { win: [1.8, 7.6, 2.2, 3.2] }),
   extra: (c, g) => (c.mate || c.single ? pantograph(g.L - 10, 13.0, { up: true, facing: -1 }) + rect(g.L - 16, 12.95, 4, 0.5, C.steelDark, 0.4) : ""),
@@ -2471,6 +2572,10 @@ export const f59 = (c) => cabUnit(c, {
 // wide-nose four-window cab at the front; a narrower long hood behind it
 // with side walkways and handrails; flared radiators and three 48 in fans
 // at the rear. About 64 ft, 15 ft 5 in over the cab, 40 in wheels.
+// CT Rail's GP40-3Hs (6694-6699, rebuilt from GP40s for Shore Line East) are
+// drawn on it: black, a red band low along the nose and cab, the long hood
+// red from the cab back to the CTrail mark, black behind it; white
+// handrails, the logo under the cab window.
 export function gp40(c) {
   const { L } = c, deck = 4.85, cabRoof = 15.4, hood = 13.95;
   let s = "";
@@ -2482,7 +2587,7 @@ export function gp40(c) {
   // Cab and nose, long hood.
   const cab = poly([[2.6, deck], [2.6, 9.0], ["q", 2.7, 9.6, 3.4, 9.7], [6.4, 10.0], [6.9, 14.8], ["q", 7.0, cabRoof, 7.8, cabRoof], [13.4, cabRoof], ["q", 14.2, cabRoof, 14.2, 14.6], [14.2, deck]]);
   const hoodD = poly([[14.2, deck], [14.2, hood - 0.5], ["q", 14.2, hood, 14.7, hood], [L - 16.5, hood], [L - 16.0, hood + 0.55], [L - 3.6, hood + 0.55], ["q", L - 3.2, hood + 0.55, L - 3.2, hood], [L - 3.2, deck]]);
-  const mbta = c.agency === "mbta";
+  const mbta = c.agency === "mbta", ct = c.agency === "ctrail";
   // MBTA: the cab purple with a yellow-edged silver band at nose height.
   // On the hood a yellow-edged diagonal runs from the roof behind the cab
   // down to a purple band along the middle of the hood; ahead of it purple,
@@ -2497,8 +2602,10 @@ export function gp40(c) {
     p += rect(0, 7.9, 14.2, 2.1, MBTA.silver) + rect(0, 7.85, 14.2, 0.14, Y) + rect(0, 9.95, 14.2, 0.14, Y);
     p += lines([[d(12.2), 12.2, d(6.65), 6.65], [30.9, 6.65, 33.4, deck]], Y, 1.0) + rect(d(9.15), 9.08, L, 0.14, Y) + rect(30.9, 6.58, L, 0.14, Y);
     return p + w;
-  } : (w) => rect(0, 0, L, 17, c.color || "#1f5fad") + w;
-  s += path(frame, C.black) + rect(1.2, 3.75, L - 2.4, 0.4, MBTA.yellow, 0, 'opacity="0.9"');
+  } : ct ? (w) => rect(0, 0, L, 17, CTRAIL.black) + rect(0, deck, 14.2, 1.65, CTRAIL.red) + rect(14.2, deck, 13, hood - 0.3 - deck, CTRAIL.red) +
+    ctMark(26.6, 40.6, deck, hood - 0.3) + w
+    : (w) => rect(0, 0, L, 17, c.color || "#1f5fad") + w;
+  s += path(frame, C.black) + (ct ? ctDashes(2.0, L - 2.0, 3.95) : rect(1.2, 3.75, L - 2.4, 0.4, MBTA.yellow, 0, 'opacity="0.9"'));
   s += path(hoodD, MBTA.silver) + clipped(hoodD, paint(mbta ? tDisc(32.5, 7.9, 0.62) +
     '<text transform="translate(32.3 10.05) scale(1 -1)" font-size="1.1" text-anchor="middle" letter-spacing="0.75" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#a52a4a">MBTA</text>' : ""));
   // Hood doors, radiator grilles, dynamic brake, fans.
@@ -2508,12 +2615,13 @@ export function gp40(c) {
   s += rect(24, hood - 0.05, 6, 0.6, C.steelDark, 0.4);
   for (const x of [L - 13.5, L - 9.2, L - 5.2]) s += path(`M${x - 1.9} ${hood + 0.55}Q${x} ${hood + 1.25} ${x + 1.9} ${hood + 0.55}Z`, C.steelDark, 0.4);
   s += path(cab, MBTA.silver) + clipped(cab, paint("") + path(poly([[6.7, 10.6], [7.2, 14.4], [7.9, 14.4], [7.9, 10.6]]), C.glass) + win(8.6, 11.3, 2.0, 2.4, 0.2) + win(11.0, 11.3, 2.4, 2.4, 0.2));
+  if (ct) s += badge(c, 10.6, 7.6, 1.0, { dark: true });
   s += outlineOf(hoodD) + outlineOf(cab) + outlineOf(frame);
   // Handrails along the walkway.
   const posts = [];
   for (let x = 15; x < L - 3; x += 6.2) posts.push([x, deck, x, deck + 3.1]);
   posts.push([14.4, deck + 3.1, L - 2.0, deck + 3.1], [L - 2.0, deck, L - 2.0, deck + 3.1], [2.0, deck, 2.0, deck + 3.1], [2.0, deck + 3.1, 2.6, deck + 3.1]);
-  s += lines(posts, "currentColor", 0.6);
+  s += lines(posts, ct ? "#e9ecef" : "currentColor", 0.6);
   s += rect(8.5, cabRoof - 0.05, 1.1, 0.35, "currentColor");
   return s;
 }
@@ -2691,6 +2799,7 @@ export const MODELS = {
   acs64: M(acs64, 66.67),
   alp46: M(alp46, 64),
   genesis: M(genesis, 69, true),
+  p40: M(genesis, 69, true),                      // CT Rail's P40DCs: the same body
   p32: M(p32, 69, true),
   alc42: M(alc42, 71.5, true),
   charger: M(charger, 71.5, true),
@@ -2706,6 +2815,7 @@ export const MODELS = {
   f40c: M(f40c, 64.25, true),
   f59: M(f59, 58.58, true),
   gp40: M(gp40, 64, true),
+  gp40h: M(gp40, 64, true),                       // CT Rail's GP40-3Hs, drawn on the GP40MC
   sd70mach: M(sd70mach, 74.25, true),
   amfleet: M(amfleet1, 85.33),
   amfleet2: M(amfleet2, 85.33),
@@ -2741,6 +2851,8 @@ export const MODELS = {
   pushPullCab: M(septaCab, 85, true),
   shoreliner: M(shoreliner, 85),
   shorelinerCab: M(shorelinerCab, 85, true),
+  mafersa: M(mafersaCoach, 85.33),
+  mafersaCab: M(mafersaCab, 85.33, true),
   m7: M(m7, 85),
   m7a: M(m7a, 85),
   m8: M(m8, 85),
