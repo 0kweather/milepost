@@ -116,6 +116,12 @@ const MARC = { blue: "#2b4fae", indigo: "#363c8e", orange: "#f26f21", silver: "#
 // CT Rail (CTDOT): its locomotives black and red, the CTrail mark blown up
 // on the side; the coaches stainless with the old New Haven's red NH.
 const CTRAIL = { red: "#e3262b", black: "#1c1d20", nh: "#e0392e", band: "#2e3134" };
+// South Shore Line (NICTD): stainless, an orange band edged in maroon; the
+// maroon and orange of its old sign-shaped emblem.
+const NICTD = { orange: "#e8661f", maroon: "#6e1a22" };
+// SunRail: white, a rising sun in two yellows, orange swooshes, a sky-blue
+// horizon over dark green land; its cab cars' ends a greenish yellow.
+const SUNRAIL = { yellow: "#f5bd1a", gold: "#f9d860", orange: "#f08422", sky: "#a6c8ec", green: "#2c6553", cab: "#e3d02a" };
 // The CTrail mark across a locomotive's side, from xa to xb between y0 and
 // y1, the cab to the left: a lens of white toward the cab and one of red
 // toward the rear, crossed by a black X (a broad stroke leaning back, a
@@ -842,9 +848,10 @@ const BOMB = {
   // Metrolink: the name in teal above the end windows at one end.
   // FrontRunner: the name between the decks mid-car. Tri-Rail: its logo high
   // near one end. GO: the logo big on the white band, over the third lower
-  // window.
+  // window. SunRail: its round emblem on the lower level between the B-end
+  // door and end windows.
   badge: (c) => ({ metrolink: { x: 7.4, y: 11.1, h: 0.95, logo: "metrolink-teal" }, frontrunner: { x: 42.5, y: 9.8, h: 0.95 }, trirail: { x: 44, y: 9.2, h: 1.7, logo: "trirail-onnavy" },
-    go: { x: 41.8, y: 8.45, h: 2.3 } })[c.agency],
+    go: { x: 41.8, y: 8.45, h: 2.3 }, sunrail: { x: 64.3, y: 6.0, h: 2.8 } })[c.agency],
   rows: [{ xs: seq(16.9, 5.55, 9), y: 11.6, w: 4.3, h: 2.3, r: 0.35 }, { xs: seq(27.6, 5.55, 4), y: 4.5, w: 4.3, h: 2.5, r: 0.35 },
     { xs: [1.4], y: 6.9, w: 3.9, h: 2.3, r: 0.3 }, { xs: [6.5], y: 6.9, w: 4.3, h: 2.3, r: 0.3 }, { xs: [11.7], y: 6.9, w: 2.9, h: 2.3, r: 0.3 },
     { xs: [68.6], y: 6.9, w: 3.1, h: 2.3, r: 0.3 }, { xs: [73.0], y: 6.9, w: 4.6, h: 2.3, r: 0.3 }, { xs: [79.0], y: 6.9, w: 3.4, h: 2.3, r: 0.3 }],
@@ -906,7 +913,8 @@ function bombPaint(c, g) {
       return s + rect(0, 9.4, L, 1.1, c.color || "#1f5fad");
   }
 }
-export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint }));
+export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : c.agency === "sunrail" ? sunrailBilevel(c)
+  : bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint }));
 // Cab car: the mid-1990s full-width cab in the end section, a flat end with
 // two windows, the engineer's side window behind the corner in place of the
 // first end window.
@@ -915,6 +923,54 @@ export const bombardierCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint
     let s = rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
     return s;
   } });
+
+// A smooth curve through key points [[x, y], ...], eased between them: y at x.
+function eased(pts) {
+  return (x) => {
+    if (x <= pts[0][0]) return pts[0][1];
+    for (let i = 1; i < pts.length; i++) {
+      const [xa, ya] = pts[i - 1], [xb, yb] = pts[i];
+      if (x <= xb) return ya + ((yb - ya) * (1 - Math.cos((Math.PI * (x - xa)) / (xb - xa)))) / 2;
+    }
+    return pts[pts.length - 1][1];
+  };
+}
+// Paint between two eased curves (key points as for eased(), or a number
+// for a level edge), from x = a to b: a swoosh of livery.
+function between(top, bot, fill, a = -1, b = 100) {
+  const f = typeof top === "number" ? () => top : eased(top), g = typeof bot === "number" ? () => bot : eased(bot);
+  const xs = [];
+  for (let x = a; x < b; x += 1) xs.push(x);
+  xs.push(b);
+  return path(poly([...xs.map((x) => [x, f(x)]), ...xs.reverse().map((x) => [x, g(x)])]), fill);
+}
+// A ribbon w ft wide centered on the eased curve through pts.
+const ribbon = (pts, w, fill, a, b) => between(pts.map(([x, y]) => [x, y + w / 2]), pts.map(([x, y]) => [x, y - w / 2]), fill, a, b);
+
+// --- SunRail's BiLevels (Orlando; Bombardier, 2013 on: cab cars 2000-2012,
+// coaches 3000-3009), on the standard plan. White; from the cab end, dark
+// green, sky blue and orange bands sweep down toward the far end, the green
+// running out at the B-end door; a broad yellow swoosh high over the cab
+// end drops between the decks, and a thin one falls from the roof beside
+// the cab end to pass under the upper windows. "SunRail" spaced out in black
+// under the upper windows; the round emblem low near the B end. The cab
+// cars' ends are yellow.
+function sunrailPaint(c, g) {
+  const L = g.L;
+  let s = rect(0, 0, L, 17, "#f4f5f2");
+  s += between([[0, 6.2], [24, 6.0], [50, 3.6], [70, 1.0]], 0, SUNRAIL.green);
+  s += between([[0, 7.4], [24, 7.3], [52, 5.4], [L, 5.2]], [[0, 6.65], [24, 6.5], [52, 4.5], [L, 4.2]], SUNRAIL.sky);
+  s += between([[0, 9.4], [22, 9.4], [50, 7.3], [L, 6.6]], [[0, 7.8], [22, 7.8], [50, 6.0], [L, 5.4]], SUNRAIL.orange);
+  s += between([[0, 12.0], [20, 11.9], [34, 9.4], [60, 8.2], [L, 8.0]], [[0, 10.6], [20, 10.4], [34, 8.4], [60, 7.3], [L, 6.8]], SUNRAIL.yellow);
+  s += ribbon([[10.5, 16.6], [17, 12.6], [28, 9.7], [40, 8.7], [60, 9.6], [L, 10.4]], 0.55, SUNRAIL.yellow, 10, L + 1);
+  return s;
+}
+// The name spaced out under the upper windows, centered at x.
+const sunrailName = (x) => (c) => goLetters(c, x + 0.65, 10.55, 1.15, "SunRail", "#1d1f22", { weight: 600, spacing: 1.3 });
+const sunrailBilevel = (c) => bilevel(c, { ...BOMB, base: "#f4f5f2", paint: sunrailPaint, extra: sunrailName(42.5) });
+// Cab car: the yellow end on the corner post; the engineer's side window.
+const sunrailCab = (c) => bilevel(c, { ...BOMB, base: "#f4f5f2", paint: sunrailPaint, cabLen: 5, extra: sunrailName(35.5),
+  cab: (c, { x0 }) => rect(x0, 3.75, 0.45, 10.2, SUNRAIL.cab) + win(x0 + 0.8, 6.9, 3.0, 2.5, 0.3) });
 
 // --- GO Transit's BiLevels (GO 2000-2857, and Series IX 4000-4225 and
 // 4500-4533 from 2015, built to the same plan). Current scheme: the upper
@@ -1178,11 +1234,18 @@ export const galleryCabCar = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint
 // over six lower ones. The single-arm pantograph sits on a lowered roof
 // section at the inner end, with no upper windows beneath it.
 const HL = { panel: [22.4, 11.0] };
-export const highliner = married((c) => bilevel(c, { ...GALLERY, ...HL, paint: (c, g) => galleryPaint(c, g, HL), cab: galleryCab,
+// South Shore Line (NICTD 301-314, 2009, and 1201-1226 from Metra): the
+// same cars; ahead of the doors a short plain panel with NICTD in maroon in
+// place of Metra's blue one; a maroon band low on the cab ends.
+const nictdHlCab = (c, { x0 }) => rect(x0, 6.4, 0.42, 1.0, NICTD.maroon) + rect(x0, 6.2, 0.42, 0.2, "#5a5f66") +
+  win(x0 + 1.2, 11.9, 1.45, 1.8, 0.25) + win(x0 + 2.75, 11.9, 1.45, 1.8, 0.25);
+export const highliner = married((c) => bilevel(c, { ...GALLERY, ...HL, paint: (c, g) => galleryPaint(c, g, HL) +
+    (c.agency === "southshore" ? rect(27.1, 8.4, 6.8, 2.5, "#e3e6ea", 0.4, 'rx="0.15"') : ""),
+  cab: c.agency === "southshore" ? nictdHlCab : galleryCab,
   rows: [{ xs: [7.1, 12.6, 18.1, 50.1, 55.9, 61.7, 67.5], y: 11.2, w: 4.3, h: 2.3, r: 0.45 },
     { xs: [1.5, 7.1, 12.7, 18.0, 50.1, 55.9, 61.7, 67.5, 73.3, 79.1], y: 5.6, w: 4.3, h: 2.3, r: 0.45 }],
   doors: [{ x: 37.0, w: 4.6, y0: 1.5, y1: 9.3, leaves: 2, glassY: 0.5, glassH: 0.35 }],
-  badge: { x: 27.9, y: 9.5, h: 1.35, dark: true },
+  badge: c.agency === "southshore" ? { x: 30.5, y: 9.65, h: 1.2, logo: "nictd" } : { x: 27.9, y: 9.5, h: 1.35, dark: true },
   extra: (c, g) => rect(36.6, 11.3, 5.4, 2.0, "rgba(20,22,25,0.45)", 0.4) + slats(36.6, 11.3, 5.4, 2.0, 0.3, "rgba(255,255,255,0.2)") +
     rect(g.L - 12.6, 14.6, 11.7, 1.3, "rgba(0,0,0,0.18)") + pantograph(g.L - 7.0, 14.6, { up: true, facing: -1 }) }));
 
@@ -1492,6 +1555,47 @@ export const m3 = married((c) => bilevel(c, {
   },
   cab: emuEnd([[4.3, 2.4, c.agency === "mnr" ? "#1f4fa3" : LIRR.yellow]], { win: [1.0, 7.3, 2.0, 3.4] }),
 }));
+
+// --- Nippon Sharyo single-level cars (South Shore Line, NICTD): 1-48
+// (1982-83, 1992) with a cab at each end, 101-110 (2001) with one, and the
+// unpowered trailers 201-210 (1992). 85 ft, trucks 59 ft 6 in apart on an
+// 8 ft 2.5 in wheelbase, 36 in wheels; fluted stainless. A single-leaf door
+// right at each end, its trap and steps for low platforms showing below the
+// sill; bi-parting high-level doors in the middle; five wide windows each
+// side of them. An orange band edged in maroon runs through the windows; the
+// old "South Shore Line" emblem on it beside the middle doors, NICTD in
+// orange in a gap on the other side. Flat stainless cab ends, orange lines
+// under the front windows and at the headlights. Every powered car raises
+// its own single-arm pantograph on a low deck over one end; an air-
+// conditioning unit on the roof at the other.
+const NS_WIN = [9.9, 15.5, 21.1, 26.7, 32.3];
+function nsCar(c, { trailer = false } = {}) {
+  const L = c.L, trap = (x) => ({ x, w: 2.7, y0: 4.0, y1: 11.1, glassY: 0.5, glassH: 0.36 });
+  return bilevel({ ...c, cabL: !trailer, cabR: !trailer }, {
+    roof: 13.5, sill: 3.9, cornerR: 1.0, trucks: { centers: 59.5, wb: 8.2, d: 36 }, end: 0.6,
+    rows: [{ xs: [...NS_WIN, ...NS_WIN.map((x) => L - x - 3.8)], y: 7.1, w: 3.8, h: 2.5, r: 0.55 }],
+    doors: [trap(1.5), { x: 40.7, w: 3.6, y0: 4.0, y1: 11.1, leaves: 2, glassY: 0.5, glassH: 0.36 }, trap(L - 4.2)],
+    roofItems: trailer ? [[12.5, 8.5, 0.6], [L - 21, 8.5, 0.6]] : [[2.4, 10.4, 0.3], [L - 21, 8.5, 0.6]],
+    diaphragm: [4.25, 11.6],
+    badge: [{ x: 38.45, y: 8.4, h: 0.82, logo: "southshore" }, { x: 46.55, y: 8.4, h: 0.95, logo: "nictd-orange" }],
+    paint: (c, g) => {
+      let s = rect(0, 0, L, 17, "#d3d7dc") + flutes(0, L, 4.3, 6.9, 0.27) + flutes(0, L, 9.8, 12.4, 0.27) + rect(0, 12.4, L, 2, C.steelShade);
+      for (const [a, b] of [[0, 44.6], [48.5, L]]) s += rect(a, 7.9, b - a, 1.0, NICTD.orange) + rect(a, 7.8, b - a, 0.1, NICTD.maroon) + rect(a, 8.9, b - a, 0.1, NICTD.maroon);
+      return s;
+    },
+    cab: (c, { x0 }) => rect(x0, 7.0, 0.42, 0.28, NICTD.orange) + rect(x0, 4.75, 0.42, 0.28, NICTD.orange),
+    extra: (c, g) => {
+      // The trap stairwells under the end doors; equipment boxes; the pantograph.
+      let s = "";
+      for (const x of [1.5, L - 4.2]) s += rect(x + 0.1, 1.5, 2.5, 2.4, "#3a3f45", 0.5) + lines([[x + 0.2, 2.3, x + 2.5, 2.3], [x + 0.2, 3.1, x + 2.5, 3.1]], C.steelDark, 0.6);
+      s += underframe(16.5, 68.5, 3.9, { depth: 1.4, boxes: trailer ? 2 : 4 });
+      if (!trailer) s += pantograph(7.6, 13.75, { up: true, facing: -1 });
+      return s;
+    },
+  });
+}
+export const nsEmu = married((c) => nsCar(c));
+export const nsTrailer = (c) => nsCar(c, { trailer: true });
 
 // --- GE Silverliner IV (SEPTA, 1974-76): 85 ft, trucks 59 ft 6 in apart,
 // fluted stainless above and below the window band, a smooth panel along
@@ -2626,6 +2730,78 @@ export function gp40(c) {
   return s;
 }
 
+// --- MotivePower MP32PH-Q (SunRail 100-110, 2013-17): MARC's GP40WH-2s
+// rebuilt on their GP40 frames. The narrow long hood stays, with walkways
+// and handrails along it, but a full-width MPXpress cab replaces the old
+// one: the same bulbous nose and raked windshield, a two-pane side window,
+// then the cab door, a louvered box low under the window. About 65 ft,
+// 15 ft 6 in over the cab, the hood about 14 ft; trucks 37 ft 6 in apart,
+// 9 ft wheelbase, 40 in wheels. Behind the cab a tall louvered box, then a
+// lower stretch of hood; a dynamic-brake grille, grid radiator intakes high
+// along the rear of the hood, five roof fans.
+// SunRail: white; a big yellow sun rising behind dark green hills and a
+// sky-blue horizon at the rear of the hood, its rays reaching the roof; an
+// orange band and yellow pinstripes sweeping up from the nose along the
+// hood; a black frame and white handrails; the cab roof now dark gray.
+export function mp32(c) {
+  const { L } = c, deck = 4.85, cabRoof = 15.5, hood = 14.0, cabEnd = 18.3, box = 14.35;
+  let s = "";
+  // Pilots, fuel tank, trucks.
+  s += pilot(0.8, 3.65) + pilot(1.2, 3.65, L);
+  s += path(poly([[27.3, 3.5], [39.8, 3.5], [39.8, 2.3], ["q", 39.8, 1.5, 39.0, 1.5], [28.1, 1.5], ["q", 27.3, 1.5, 27.3, 2.3]]), "currentColor", 0, 'opacity="0.82"');
+  for (const k of [-1, 1]) s += truck(L / 2 + k * 18.75, { wb: 9.0, d: 40, kind: "loco", top: 3.7 });
+  const frame = poly([[1.0, 3.7], [L - 1.2, 3.7], [L - 1.2, deck], [1.0, deck]]);
+  // The MPXpress nose and cab, the louvered box behind it, the dip, the hood.
+  const body = poly([[2.0, deck], ["q", 0.6, deck + 0.35, 0.6, 6.7], ["q", 0.7, 8.7, 1.9, 9.4], [3.5, 10.4], [4.7, 12.6], ["q", 5.6, cabRoof, 9.5, cabRoof],
+    [cabEnd - 0.4, cabRoof], ["q", cabEnd, cabRoof, cabEnd, cabRoof - 0.4], [cabEnd, box], [24.6, box], [25.4, 13.4], [28.6, 13.4], [29.4, hood],
+    [L - 3.7, hood], ["q", L - 3.2, hood, L - 3.2, hood - 0.5], [L - 3.2, deck]]);
+  let p = rect(0, 0, L, 17, "#f4f5f2");
+  if (c.agency === "sunrail" || !c.agency) {
+    const sun = [41, 6.0], horizon = [[0, 4.95], [12, 5.5], [27, 6.8], [41, 7.5], [52, 7.2], [61, 6.3], [L, 6.2]], hz = eased(horizon);
+    const orange = [[0, 5.6], [13, 8.0], [27, 9.4], [41, 9.6], [61, 8.0], [L, 7.9]];
+    // Waves of yellow toward the rear, over and under the orange; the sun's
+    // rays, alternately deep and pale, fanned over the horizon in front.
+    p += ribbon([[48, 10.7], [56, 11.0], [L, 10.3]], 1.9, SUNRAIL.gold, 47, L + 1) + ribbon([[46, 7.4], [L, 7.1]], 0.7, SUNRAIL.yellow, 46, L + 1);
+    const P = (a, r) => [sun[0] + r * Math.cos(a), sun[1] + r * Math.sin(a)];
+    for (let k = 0; k < 19; k++) {
+      const a = Math.PI * (0.04 + (0.92 * k) / 18);
+      p += path(poly([P(a - 0.13, 4.5), P(a, k % 2 ? 9.5 : 12.5), P(a + 0.13, 4.5)]), k % 2 ? SUNRAIL.gold : SUNRAIL.yellow);
+    }
+    p += circle(sun[0], sun[1], 5.0, SUNRAIL.yellow);
+    p += ribbon(orange, 1.1, SUNRAIL.orange) + ribbon(orange.map(([x, y]) => [x, y - 0.9]), 0.22, SUNRAIL.yellow, 0, 31);
+    p += ribbon([[1.5, 10.45], [16, 11.2], [27, 11.5], [36, 12.1]], 0.28, SUNRAIL.yellow, 1.5, 36);
+    // Under the horizon: the sun's lower half, and the green hills.
+    p += between(horizon.map(([x, y]) => [x, y - 0.3]), deck, SUNRAIL.yellow, 29, 54) + ribbon(horizon, 0.75, SUNRAIL.sky);
+    for (const [a, m, b] of [[16, 21, 26.5], [24, 29.5, 35], [35.5, 42, 46], [44, 48.5, 52.5], [50, 55, 61.5]]) {
+      p += path(poly([[a, deck], [m, hz(m) - 0.45], [b, deck]]), SUNRAIL.green);
+    }
+    p += rect(0, 14.55, cabEnd + 0.1, 2, "#3b3f45");
+  } else p += rect(0, 0, L, 17, c.color || "#1f5fad");
+  // Windshield and side windows.
+  p += path(poly([[4.05, 10.65], [4.95, 12.45], [6.1, 12.45], [6.1, 10.65]]), C.glass) + path(poly([[6.3, 10.7], [6.3, 12.45], [8.5, 12.45], [8.5, 10.8]]), C.glass);
+  p += pane2(8.9, 10.55, 2.9, 1.8, 0.2) + win(15.3, 10.6, 0.7, 1.7, 0.2);
+  s += path(frame, C.black) + path(body, "#f4f5f2") + clipped(body, p);
+  s += door(12.2, deck + 0.15, 2.1, 12.85 - deck - 0.15, { glassY: 0.62, glassH: 0.22 });
+  // Grilles: under the cab window, the tall box behind the cab, the dynamic
+  // brake, the radiator intakes (a grid of square openings).
+  const grille = (x, y, w, h, gap) => rect(x, y, w, h, "rgba(20,22,25,0.55)", 0.4) + slats(x, y, w, h, gap, "rgba(255,255,255,0.22)");
+  s += grille(8.7, 5.15, 3.2, 1.35, 0.25) + grille(18.9, 10.3, 5.3, 3.65, 0.3) + grille(31.4, 12.6, 6.0, 1.0, 0.35);
+  for (const [x, w] of [[41.6, 5.5], [47.4, 5.7], [55.2, 4.5]]) {
+    s += grille(x, 12.1, w, 1.5, 0.5) + lines([[x, 12.6, x + w, 12.6], [x, 13.1, x + w, 13.1]], "rgba(255,255,255,0.22)", 0.4);
+  }
+  // Hood door seams; roof fans; horn.
+  s += lines([20, 24.5, 29.4, 33.8, 38.2, 42.6, 47.0, 51.4, 55.8, 60.2].map((x) => [x, deck + 0.3, x, hood - 2.3]), "rgba(0,0,0,0.2)", 0.5);
+  for (const x of [34.9, 43.45, 47.75, 51.8, 57.4]) s += rect(x - 1.75, hood - 0.05, 3.5, 0.55, "#2a2d31", 0.4, 'rx="0.15"');
+  s += rect(10.6, cabRoof - 0.05, 1.1, 0.35, "currentColor") + rect(10.7, cabRoof + 0.3, 0.25, 0.35, "currentColor") + rect(11.2, cabRoof + 0.3, 0.25, 0.45, "currentColor");
+  s += outlineOf(body) + outlineOf(frame);
+  // Handrails along the walkway, rising to the cab.
+  const posts = [];
+  for (let x = 19.6; x < L - 1.5; x += 4.2) posts.push([x, deck, x, deck + 3.1]);
+  posts.push([19.6, deck + 3.1, L - 1.6, deck + 3.1], [L - 1.6, deck, L - 1.6, deck + 3.1], [19.6, deck + 3.1, cabEnd + 0.15, deck + 4.3]);
+  s += lines(posts, "#eef0f2", 0.7);
+  return s;
+}
+
 // ===================== Electric locomotives =====================
 
 // --- Bombardier ALP-46/46A (NJ Transit 4600-4664): 64 ft over couplers,
@@ -2816,6 +2992,7 @@ export const MODELS = {
   f59: M(f59, 58.58, true),
   gp40: M(gp40, 64, true),
   gp40h: M(gp40, 64, true),                       // CT Rail's GP40-3Hs, drawn on the GP40MC
+  mp32: M(mp32, 65, true),
   sd70mach: M(sd70mach, 74.25, true),
   amfleet: M(amfleet1, 85.33),
   amfleet2: M(amfleet2, 85.33),
@@ -2830,7 +3007,8 @@ export const MODELS = {
   viewlinerDiner: M(viewlinerDiner, 85.33),
   viewlinerBaggage: M(viewlinerBaggage, 85.33),
   bilevel: M((c) => (c.agency === "mbta" ? mbtaBilevel(c) : c.agency === "marc" ? marcKawasaki(c) : bombardierBilevel(c)), (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85)),
-  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : c.agency === "go" ? goCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c) : bombardierCab(c)),
+  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : c.agency === "go" ? goCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c)
+    : c.agency === "sunrail" ? sunrailCab(c) : bombardierCab(c)),
     (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : ag === "go" ? 85 + GO_CAB : 85), true),
   kawasakiCab: M((c) => (c.agency === "marc" ? marcKawasakiCab(c) : mbtaCab(c)), 85.33, true),
   rotemCab: M(mbtaCab, 85.33, true),
@@ -2859,6 +3037,8 @@ export const MODELS = {
   m9: M(m9, 85),
   m3: M(m3, 85),
   silverliner4: M(silverliner4, 85),
+  nsEmu: M(nsEmu, 85),
+  nsTrailer: M(nsTrailer, 85),
   silverliner5: M(silverliner5, 85.13),
   kiss: M(kiss, 83.7),
   kissCab: M(kissCab, 90.2, true),

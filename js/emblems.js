@@ -22,6 +22,10 @@ const LOGOS = {
   // CT Rail: the mark (its lens stays red on the white version, as painted)
   // and "CT rail".
   ctrail: [4.91, true],
+  // South Shore Line: its maroon sign-shaped emblem lettered in orange.
+  // SunRail: the round emblem, a train under palms and the sun over the
+  // name on a black banner.
+  southshore: [3.651, false], sunrail: [1.155, false],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   // Caltrans' mark and name (Charger and Venture sides); the San Joaquins
@@ -44,6 +48,12 @@ const LETTERING = {
   // letters outlined in dark gray (the flag over the last "a" left out).
   canada: { text: "Canada", aspect: 3.0, color: "#ffffff",
     font: 'font-family="Times New Roman, Times, serif" stroke="#2b3036" stroke-width="0.22" paint-order="stroke"' },
+  // NICTD's squared initials: maroon on the South Shore's bi-levels, orange
+  // in the band along its single-level cars.
+  nictd: { text: "NICTD", aspect: 3.5, color: "#7a1f2b",
+    font: 'font-family="Eurostile, Microgramma, Bank Gothic, Arial Black, Helvetica Neue, sans-serif" font-weight="800" letter-spacing="0.04em"' },
+  "nictd-orange": { text: "NICTD", aspect: 3.5, color: "#e8661f",
+    font: 'font-family="Eurostile, Microgramma, Bank Gothic, Arial Black, Helvetica Neue, sans-serif" font-weight="800" letter-spacing="0.04em"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 
