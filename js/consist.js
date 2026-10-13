@@ -58,6 +58,19 @@ const FLEETS = {
     [1701, 1719, "mafersaCab"], [1730, 1774, "mafersa"],
     [9101, 9580, "m8"],
   ],
+  // South Shore Line (Wikipedia, "South Shore Line"): Nippon Sharyo
+  // single-level cars 1-48 and 101-110, trailers 201-210; Highliner II
+  // bi-levels 301-314 and 1201-1226 (from Metra). The feed names one car.
+  southshore: [
+    [1, 48, "nsEmu"], [101, 110, "nsEmu"], [201, 210, "nsTrailer"],
+    [301, 314, "highliner"], [1201, 1226, "highliner"],
+  ],
+  // SunRail (Wikipedia, "SunRail", and photos of the cars' numbers): MP32PH-Q
+  // 100-110; BiLevel cab cars 2000-2012, coaches 3000-3009. The feed names
+  // the locomotive and the cab car.
+  sunrail: [
+    [100, 110, "mp32"], [2000, 2012, "bilevelCab"], [3000, 3009, "bilevel"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -84,6 +97,7 @@ const TYPES = {
   f40c: { name: "F40PH-3C diesel locomotive", kind: "diesel" },
   gp40: { name: "GP40MC diesel locomotive", kind: "diesel" },
   gp40h: { name: "GP40-3H diesel locomotive", kind: "diesel" },
+  mp32: { name: "MP32PH-Q diesel locomotive", kind: "diesel" },
   hsp46: { name: "HSP46 diesel locomotive", kind: "diesel" },
   bl36: { name: "BL36PH diesel locomotive", kind: "diesel" },
   f125: { name: "F125 diesel locomotive", kind: "diesel" },
@@ -96,6 +110,7 @@ const TYPES = {
   m8: { name: "M8", kind: "emu", pan: true },
   m9: { name: "M9", kind: "emu" },
   m3: { name: "M3", kind: "emu" },
+  nsEmu: { name: "Nippon Sharyo electric car", kind: "emu", pan: true },
   highliner: { name: "Highliner", kind: "bilevel", emu: true, pan: true },
   kiss: { name: "Stadler KISS car", kind: "bilevel", emu: true, pan: true },
   kissCab: { name: "Stadler KISS cab car", kind: "bilevel", emu: true },
@@ -125,6 +140,7 @@ const TYPES = {
   shorelinerCab: { name: "Shoreliner cab car", kind: "coach", cab: true },
   mafersa: { name: "Mafersa coach", kind: "coach" },
   mafersaCab: { name: "Mafersa cab car", kind: "coach", cab: true },
+  nsTrailer: { name: "Nippon Sharyo trailer car", kind: "coach" },
   coach: { name: "Coach", kind: "coach" },
   buddBaggage: { name: "Baggage car", kind: "coach", baggage: true },
   buddCoach: { name: "Stainless coach", kind: "coach" },
@@ -324,6 +340,19 @@ function typicalFor(t, reported) {
       return set(`${gp ? "GP40-3H" : "P40DC"} locomotive with Mafersa coaches and a cab car`,
         [gp ? "gp40h" : "p40", 1], ["mafersa", 3], ["mafersaCab", 1]);
     }
+    // South Shore Line: mostly Nippon Sharyo single-level cars, two to eight;
+    // some Lakeshore Corridor trains are Highliner bi-levels. The Monon
+    // Corridor's Hammond–Dyer shuttles are pairs of single-level cars.
+    case "southshore": {
+      if (reported === "highliner") return set("Highliner II bi-level electric cars, usually 2 to 8", ["highliner", 4]);
+      if (/Monon/i.test(t.route || "")) return set("Nippon Sharyo single-level electric cars, usually 2", ["nsEmu", 2]);
+      return reported === "nsTrailer"
+        ? set("Nippon Sharyo single-level electric cars and a trailer, usually 2 to 8", ["nsEmu", 2], ["nsTrailer", 1], ["nsEmu", 3])
+        : set("Nippon Sharyo single-level electric cars, usually 2 to 8", ["nsEmu", 6]);
+    }
+    // SunRail: an MP32PH-Q with a BiLevel coach and a cab car (the fleet has
+    // ten coaches and thirteen cab cars for its eleven locomotives).
+    case "sunrail": return set("MP32PH-Q locomotive with a BiLevel coach and a cab car (some trains two coaches)", ["mp32", 1], ["bilevel", 1], ["bilevelCab", 1]);
     default: return null;
   }
 }
