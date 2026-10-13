@@ -15,6 +15,7 @@
 //                       protobuf messages read as one feed with every entity.
 
 const CACHE_SECONDS = 15;
+const RELAY_VERSION = "2026-10-13 (FrontRunner via Transitland)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -313,7 +314,10 @@ export default {
 
     if (pathname === "/status") {
       const feeds = Object.fromEntries(Object.entries(FEEDS).map(([id, f]) => [id, Boolean(f(env))]));
-      return Response.json({ feeds }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+      // Which code is deployed, and whether optional keys are visible to it
+      // (true/false only), for checking a deploy.
+      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY) };
+      return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
     }
 
     const board = pathname.match(/^\/njt-board\/([A-Z0-9]{2,3})$/);
