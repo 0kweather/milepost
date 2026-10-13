@@ -1603,6 +1603,54 @@ function orderAlong(items, posOf) {
   return order.map((i) => items[i]);
 }
 
+// A line's stations in the order its trains stop at them: the longest stop
+// list running now, with other trains' stops (a branch, a short turn) fitted
+// in beside their neighbors. A station the timetable also lists on another
+// line counts only if one of this line's trains stops there now (MBTA lists
+// Fairmount stations under the Providence Line for detours); the rest go
+// where they add the least distance. The busiest end comes first. With no
+// train running, by position along the line.
+function orderedLineStations(id, name) {
+  const all = lineStations(id, name), k = lineKey(name);
+  const runs = focusTrains().filter((t) => onLine(t, name))
+    .map((t) => [...new Set((t.stops || []).map((s) => state.stationOfKey?.get(s.key)).filter(Boolean))])
+    .filter((r) => r.length > 1).sort((x, y) => y.length - x.length);
+  const inRuns = new Set(runs.flat());
+  const ownOnly = (st) => !st.members.some((m) => m.agency === id && (m.lines || []).some((l) => !sameLine(lineKey(l), k)));
+  const extra = all.filter((st) => !inRuns.has(st.id) && ownOnly(st));
+  if (!runs.length) return orderAlong(extra.length > 1 ? extra : all, stationPos);
+  const order = [...runs[0]];
+  for (let run of runs.slice(1)) {
+    // Run it the same way as the order so far.
+    const known = run.filter((sid) => order.includes(sid));
+    if (known.length > 1 && order.indexOf(known[0]) > order.indexOf(known[known.length - 1])) run = [...run].reverse();
+    run.forEach((sid, i) => {
+      if (order.includes(sid)) return;
+      const prev = run.slice(0, i).reverse().find((x) => order.includes(x));
+      const next = run.slice(i + 1).find((x) => order.includes(x));
+      if (prev) order.splice(order.indexOf(prev) + 1, 0, sid);
+      else if (next) order.splice(order.indexOf(next), 0, sid);
+      else order.push(sid);
+    });
+  }
+  // Stations no train is stopping at now: wherever they lengthen the line least.
+  const pos = (sid) => stationPos(state.stations.get(sid));
+  const d = (p, q) => Math.hypot((p.lon - q.lon) * Math.cos((p.lat * Math.PI) / 180), p.lat - q.lat);
+  for (const st of extra) {
+    const p = stationPos(st);
+    let best = 0, cost = d(p, pos(order[0]));
+    for (let i = 1; i <= order.length; i++) {
+      const c = i === order.length ? d(pos(order[i - 1]), p)
+        : d(pos(order[i - 1]), p) + d(p, pos(order[i])) - d(pos(order[i - 1]), pos(order[i]));
+      if (c < cost) { cost = c; best = i; }
+    }
+    order.splice(best, 0, st.id);
+  }
+  const daily = (sid) => state.stations.get(sid)?.members.find((m) => m.agency === id)?.daily || 0;
+  if (daily(order[order.length - 1]) > daily(order[0])) order.reverse();
+  return order.map((sid) => state.stations.get(sid)).filter(Boolean);
+}
+
 // The track to light up: the railroad's whole network, or the line's, traced
 // along the rails between the stops its running trains make and between its
 // stations in order.
@@ -1624,7 +1672,7 @@ function lineTrack(id, name) {
   const rail = state.rail;
   if (!rail) return [];
   const seqs = focusTrains().map((t) => (t.stops || []).map((s) => state.stopPos.get(s.key)).filter(Boolean)).filter((s) => s.length > 1);
-  seqs.push(orderAlong(lineStations(id, name), stationPos).map(stationPos)); // stretches no train is on now
+  seqs.push(orderedLineStations(id, name).map(stationPos)); // stretches no train is on now
   const done = new Set(), out = [];
   for (const seq of seqs) {
     for (let i = 1; i < seq.length; i++) {
@@ -1809,7 +1857,7 @@ function renderLine() {
   const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
   if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
   const trains = focusTrains();
-  const stations = orderAlong(lineStations(id, name), stationPos);
+  const stations = orderedLineStations(id, name);
   const fleet = equipmentList(id, [name], trains, false);
   el.innerHTML = `
     <div class="hero">
