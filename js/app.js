@@ -5,6 +5,7 @@ import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds } from "./consist.js?v=dev";
+import { startTour } from "./tour.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -2257,6 +2258,15 @@ applyLabels();
 setChecked("infer-toggle", state.inferDelays);
 setChecked("heading-toggle", state.inferHeading);
 initTimeZones();
+
+// The guided tour (js/tour.js), from Settings or the list's footer.
+function takeTour() {
+  toggleMenu(false);
+  startTour({ state, map, select, selectStation, closeDetail, setSheet, isPhone, targetOf, visible,
+              padding: panelPadding });
+}
+on("tour-btn", "click", takeTour);
+on("tour-menu-btn", "click", takeTour);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {

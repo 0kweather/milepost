@@ -1074,3 +1074,41 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
   body.sheet-expanded .maplibregl-ctrl-bottom-right { bottom: calc(86vh + 4px); }
   .toast { bottom: calc(46vh + 16px); }
 }
+
+/* ---------- Guided tour (js/tour.js) ---------- */
+
+.tour-link { display: block; margin: 0 0 var(--s2); }
+.tour-menu-btn { width: 100%; margin-bottom: var(--s2); }
+
+/* Catches clicks while the tour is open; dims the page when nothing is
+   spotlit (the ring's shadow dims it otherwise). */
+.tour-shade { position: fixed; inset: 0; z-index: 2000; background: transparent; transition: background 0.2s ease; }
+.tour-shade.on { background: rgba(10, 12, 16, 0.5); }
+.tour-ring {
+  position: fixed;
+  z-index: 2001;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 9999px rgba(10, 12, 16, 0.5);
+  pointer-events: none;
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease;
+}
+.tour-ring.round { border-radius: 50%; }
+.tour-ring[hidden] { display: none; }
+.tour-card {
+  position: fixed;
+  z-index: 2002;
+  width: min(320px, calc(100vw - 24px));
+  padding: var(--s4);
+  border-radius: var(--r-lg);
+  background: var(--panel-solid);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+.tour-head { display: flex; justify-content: space-between; align-items: center; }
+.tour-count { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.tour-x { width: 26px; height: 26px; margin: -4px -6px 0 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.tour-x:hover { background: var(--hover); color: var(--text); }
+.tour-card h3 { margin: var(--s1) 0 0; font-size: var(--fs-md); }
+.tour-card p { margin: var(--s1) 0 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); }
+.tour-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s3); }
