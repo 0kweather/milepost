@@ -78,6 +78,8 @@ const state = {
   // Service notices folded down to their heading until opened (remembered
   // across trains).
   noticesCollapsed: store.get("tt-notices-collapsed", true),
+  // Railroad page sections folded to their heading (remembered).
+  rrCollapsed: new Set(store.get("tt-rr-collapsed", [])),
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   est: new Map(),        // train id -> position on the track { lat, lon, bearing }
   rail: null,            // RailIndex (routing and snapping; uses every track)
@@ -1537,6 +1539,19 @@ function frameRailroad(id) {
   map.fitBounds(b, { padding: { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) }, maxZoom: 11, duration: 900 });
 }
 
+// A railroad page section under a heading that folds it away (with its
+// count, so a folded section still says something).
+function rrSection(key, title, count, body) {
+  const open = !state.rrCollapsed.has(key);
+  return `<section class="rr-sec${open ? "" : " collapsed"}">
+    <h3 class="section-title"><button type="button" class="notices-toggle" data-rr-section="${key}" aria-expanded="${open}">
+      ${esc(title)} <span class="rr-count">${count}</span>
+      <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button></h3>
+    ${open ? body : ""}
+  </section>`;
+}
+
 // A stand-in train for a line's typical consist (or, given one car's number,
 // the consist that car runs in), so its cars draw and open model pages like
 // a live train's.
@@ -1641,23 +1656,21 @@ function renderRailroad() {
       ${stat(onTime, "on time", "good")}
       ${stat(late, "over 5 min late", late ? "warn" : "")}
     </div>
-    ${lineList.length > 1 ? `<h3 class="section-title">Lines</h3>
-      <ul class="rr-lines">${lineList.map((l) => `<li><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"}</span></li>`).join("")}</ul>` : ""}
-    <h3 class="section-title">Running now</h3>
-    <div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
+    ${lineList.length > 1 ? rrSection("lines", "Lines", lineList.length,
+      `<ul class="rr-lines">${lineList.map((l) => `<li><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"}</span></li>`).join("")}</ul>`) : ""}
+    ${rrSection("running", "Running now", trains.length, `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
         ${plate(t.number || a.short, a.color, "sm")}
         <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
         ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
       </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
-      : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>
-    ${equipment ? `<h3 class="section-title">Fleet</h3><p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${equipment}</div>` : ""}
-    ${typicalHtml ? `<h3 class="section-title">Typical trains</h3><ul class="rr-typical">${typicalHtml}</ul>` : ""}
-    ${busiest.length ? `<h3 class="section-title">Stations</h3>
-      <p class="rr-hint">${stations.length} station${stations.length === 1 ? "" : "s"}; the busiest:</p>
+      : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>`)}
+    ${equipment ? rrSection("fleet", "Fleet", kinds.size, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${equipment}</div>`) : ""}
+    ${typicalHtml ? rrSection("typical", "Typical trains", fleet.size, `<ul class="rr-typical">${typicalHtml}</ul>`) : ""}
+    ${busiest.length ? rrSection("stations", "Stations", stations.length, `<p class="rr-hint">The busiest:</p>
       <div class="rr-stations">${busiest.map((st) => `<button class="result" data-station="${esc(st.id)}">
         <span class="station-icon" style="--c:${a.color}"></span>
         <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, (() => { const d = st.members.find((m) => m.agency === id)?.daily; return d ? `${d} ${a.short} trains a weekday` : ""; })()].filter(Boolean).join(" · "))}</span></span>
-        <span></span></button>`).join("")}</div>` : ""}
+        <span></span></button>`).join("")}</div>`) : ""}
     ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
 
@@ -2205,6 +2218,13 @@ on("train-detail", "click", (e) => {
   if (e.target.closest("[data-model-back]") && state.car) {
     if (state.car.fleet != null) state.car = null; // back to the railroad page
     else state.car.page = false;
+    return renderDetail();
+  }
+  const section = e.target.closest("[data-rr-section]");
+  if (section) {
+    const key = section.dataset.rrSection;
+    state.rrCollapsed.has(key) ? state.rrCollapsed.delete(key) : state.rrCollapsed.add(key);
+    store.set("tt-rr-collapsed", [...state.rrCollapsed]);
     return renderDetail();
   }
   if (e.target.closest("[data-notices-toggle]")) {
