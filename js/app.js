@@ -1984,6 +1984,24 @@ function openStop(li) {
   state.returnTo = { train: t.id }; // "back" from this station goes to the train
   $("back-btn").lastChild.textContent = ` ${t.number ? `Train ${t.number}` : "Train"}`;
 }
+// Hovering a stop's circle previews the trip to it: the line from the train
+// and the stops on the way, in a lighter shade of the line's color.
+let previewing = null;
+on("train-detail", "mouseover", (e) => {
+  const dot = e.target.closest("button.stop-dot");
+  if (dot === previewing) return;
+  previewing = dot;
+  for (const li of document.querySelectorAll(".stops li.pv-from, .stops li.pv-ride, .stops li.pv-dest")) li.classList.remove("pv-from", "pv-ride", "pv-dest");
+  if (!dot) return;
+  const rows = [...dot.closest(".stops").children];
+  const to = rows.indexOf(dot.closest("li")), ahead = rows.findIndex((li) => !li.classList.contains("past"));
+  if (ahead < 0) return;
+  rows.forEach((li, i) => {
+    if (i === ahead - 1) li.classList.add("pv-from");
+    else if (i >= ahead && i < to) li.classList.add("pv-ride");
+    else if (i === to) li.classList.add("pv-dest");
+  });
+});
 on("train-detail", "click", (e) => {
   const pin = e.target.closest("[data-track-to]");
   if (pin) {

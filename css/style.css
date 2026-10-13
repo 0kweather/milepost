@@ -927,6 +927,31 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .stops li.dest button.stop-dot:hover::before { transform: scale(1.55); }
 .stops li.beyond, .stops li.beyond .time, .stops li.beyond .time .late { color: var(--faint); }
 .stops li.beyond .stop-dot::before { border-color: var(--line); }
+/* The stops on the way are ringed in the line's color too. */
+.stops li.ride:not(.next) .stop-dot::before { border-color: var(--line-color, var(--accent)); }
+
+/* Hovering a later stop's circle previews the trip to it, lighter. */
+.stops { --pv: color-mix(in srgb, var(--line-color, var(--accent)) 38%, var(--panel-solid)); }
+.stops li.pv-ride:not(.ride):not(.dest)::before { left: 4.5px; width: 3px; background: var(--pv); }
+.stops li.pv-from:not(.ride-from)::before {
+  left: 4.5px; width: 3px;
+  background: linear-gradient(var(--line), var(--line)) center top / 2px 50% no-repeat,
+    linear-gradient(var(--pv), var(--pv)) center bottom / 3px 50% no-repeat;
+}
+.stops li.pv-dest:not(.dest):not(.ride)::before {
+  left: 4.5px; width: 3px;
+  background: linear-gradient(var(--pv), var(--pv)) center top / 3px 50% no-repeat,
+    linear-gradient(var(--line), var(--line)) center bottom / 2px 50% no-repeat;
+}
+/* Past the stop it's tracked to: its lower half carries on, lighter. */
+.stops li.dest.pv-ride::before {
+  background: linear-gradient(var(--line-color, var(--accent)), var(--line-color, var(--accent))) center top / 3px 50% no-repeat,
+    linear-gradient(var(--pv), var(--pv)) center bottom / 3px 50% no-repeat;
+}
+.stops li.pv-from:not(.ride-from):first-child::before, .stops li.pv-dest:not(.dest):not(.ride):last-child::before { background: var(--pv); }
+.stops li.pv-ride:not(.ride):not(.dest):not(.next) .stop-dot::before { border-color: var(--pv); }
+.stops li.beyond.pv-ride, .stops li.beyond.pv-dest { color: inherit; }
+.stops li.beyond.pv-ride .time, .stops li.beyond.pv-dest .time { color: var(--muted); }
 
 .section-title {
   flex: none;
