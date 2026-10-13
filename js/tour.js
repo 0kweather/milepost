@@ -38,7 +38,7 @@ export function startTour(app) {
     },
     {
       title: "Railroads",
-      text: "Every railroad on the map, with how many of its trains are running. Tap one to hide or show its trains, or its circled i for its page: what's running, its lines, its fleet and its stations.",
+      text: "Every railroad on the map, with how many of its trains are running. Tap one for its page: what's running, its lines, its fleet and its stations. Its checkbox hides or shows its trains.",
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet("expanded"); },
       target: "#agencies",
     },

@@ -1031,7 +1031,6 @@ setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 // ---------- Rendering: list ----------
 
 const CHECK = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="#fff" d="m9.5 16.2-4.2-4.2-1.4 1.4 5.6 5.6 11-11-1.4-1.4z"/></svg>';
-const INFO = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.25" fill="currentColor"/></svg>';
 
 function agencyCounts() {
   const counts = {};
@@ -1050,24 +1049,23 @@ function renderAgencies() {
       if (!avail.ok) {
         rows.off.push(`
           <div class="agency unavailable" style="--swatch:${a.color}" title="${esc(avail.reason)}">
-            <span class="check"></span>
-            <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)} · ${esc(avail.reason)}</span></span>
-            <span></span>
+            <span class="check-hit"><span class="check"></span></span>
+            <span class="agency-open"><span class="name">${esc(a.name)}<span class="sub">${esc(a.region)} · ${esc(avail.reason)}</span></span></span>
           </div>`);
         continue;
       }
+      // The checkbox shows or hides its trains; the rest of the row opens its page.
       const off = state.hidden.has(id);
-      let count = `<span class="count">${counts[id] || 0}</span>`;
+      let count = `<span class="count">${counts[id] || 0} running ›</span>`;
       if (st?.status === "loading") count = '<span class="count">…</span>';
-      else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline</span>`;
+      else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline ›</span>`;
       rows[a.kind].push(`
-        <div class="agency-row">
-          <button class="agency ${off ? "off" : ""}" data-toggle="${id}" style="--swatch:${a.color}" aria-pressed="${!off}">
-            <span class="check">${CHECK}</span>
+        <div class="agency ${off ? "off" : ""}" style="--swatch:${a.color}">
+          <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${off ? "Show" : "Hide"} ${esc(a.name)} trains" title="${off ? "Show" : "Hide"} its trains"><span class="check">${CHECK}</span></button>
+          <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(a.name)}: what's running, its lines and fleet">
             <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)}</span></span>
             ${count}
           </button>
-          <button class="zoom" data-railroad="${id}" title="About ${esc(a.short)}" aria-label="About ${esc(a.name)}">${INFO}</button>
         </div>`);
     }
   }
