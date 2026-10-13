@@ -1143,15 +1143,34 @@ function renderResults() {
       <span></span>
     </button>`).join("");
   const stationBlock = stationHtml ? `<div class="group-title">Stations</div>${stationHtml}` : "";
-  if (!matches.length && stationBlock) {
-    el.innerHTML = stationBlock;
-    return;
-  }
+
+  // Railroads and lines, opening their pages.
+  const has = (hay) => terms.every((w) => hay.toLowerCase().includes(w));
+  const railroads = Object.entries(AGENCIES).filter(([, a]) => has(`${a.name} ${a.short} ${a.region}`));
+  const railroadBlock = railroads.length ? `<div class="group-title">Railroads</div>` + railroads.slice(0, 4).map(([id, a]) => {
+    const n = [...state.trains.values()].filter((t) => t.agency === id).length;
+    return `<button class="result" data-railroad="${id}">
+      <span class="rr-icon" style="--c:${a.color}"></span>
+      <span><span class="title">${esc(a.name)}</span><br><span class="sub">${esc(a.region)}</span></span>
+      <span class="count">${n} running ›</span>
+    </button>`;
+  }).join("") : "";
+  const lines = allLines().filter((l) => has(`${l.name} ${AGENCIES[l.agency].name} ${AGENCIES[l.agency].short}`))
+    .sort((x, y) => Number(!x.name.toLowerCase().startsWith(q)) - Number(!y.name.toLowerCase().startsWith(q)) || y.running - x.running);
+  const lineBlock = lines.length ? `<div class="group-title">Lines</div>` + lines.slice(0, 6).map((l) => {
+    const a = AGENCIES[l.agency];
+    return `<button class="result" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}">
+      <span class="line-icon" style="--c:${a.color}"></span>
+      <span><span class="title">${esc(l.name)}</span><br><span class="sub">${esc(a.short)}</span></span>
+      <span class="count">${l.running} running ›</span>
+    </button>`;
+  }).join("") : "";
+  const before = railroadBlock + lineBlock + stationBlock;
   if (!matches.length) {
-    el.innerHTML = `<div class="empty">No trains or stations match “${esc(state.query)}”.</div>`;
+    el.innerHTML = before || `<div class="empty">Nothing matches “${esc(state.query)}”.</div>`;
     return;
   }
-  el.innerHTML = stationBlock + (stationBlock ? '<div class="group-title">Trains</div>' : "") + matches.slice(0, 60).map(({ t }) => {
+  el.innerHTML = before + (before ? '<div class="group-title">Trains</div>' : "") + matches.slice(0, 60).map(({ t }) => {
     const a = AGENCIES[t.agency];
     const sub = [t.destination && `to ${t.destination}`, t.nextStop && !t.destination && `next ${t.nextStop}`, t.departedOn && `left ${t.departedOn}`]
       .filter(Boolean).join(" · ") || a.region;
@@ -1565,6 +1584,34 @@ const openLine = (id, name, opts = {}) => openRailroad(id, { ...opts, line: name
 const lineKey = (l) => String(l).toLowerCase().replace(/\bline\b/g, "").replace(/[^a-z0-9]/g, "");
 const sameLine = (x, y) => x === y || (Math.min(x.length, y.length) >= 5 && (x.includes(y) || y.includes(x)));
 const onLine = (t, name) => Boolean(t.route) && lineKey(t.route) === lineKey(name);
+
+// Every railroad's lines, for search: from its stations' timetables and the
+// routes its trains report (a timetable's longer name for a running line
+// folds into it), with how many trains are on each.
+function allLines() {
+  const out = [];
+  for (const id of Object.keys(AGENCIES)) {
+    const lines = new Map(); // key -> { name, running }
+    for (const t of state.trains.values()) {
+      if (t.agency !== id || !t.route) continue;
+      const k = lineKey(t.route);
+      if (!lines.has(k)) lines.set(k, { name: t.route, running: 0 });
+      lines.get(k).running++;
+    }
+    for (const st of state.stations.values()) {
+      for (const m of st.members) {
+        if (m.agency !== id) continue;
+        for (const l of m.lines || []) {
+          const k = lineKey(l);
+          if (!l || l === "City Terminal Zone" || lines.has(k) || [...lines].some(([r, x]) => x.running && sameLine(k, r))) continue;
+          lines.set(k, { name: l, running: 0 });
+        }
+      }
+    }
+    for (const l of lines.values()) out.push({ agency: id, ...l });
+  }
+  return out;
+}
 
 // The open page's trains: the railroad's, or the line's.
 function focusTrains() {
@@ -2495,6 +2542,10 @@ on("search", "keydown", (e) => {
 });
 
 on("results", "click", (e) => {
+  const rr = e.target.closest("[data-railroad]");
+  if (rr) return openRailroad(rr.dataset.railroad);
+  const ln = e.target.closest("[data-open-line]");
+  if (ln) return openLine(ln.dataset.lineRailroad, ln.dataset.openLine);
   const b = e.target.closest("[data-select]");
   const st = e.target.closest("[data-station]");
   if (b) select(b.dataset.select);
