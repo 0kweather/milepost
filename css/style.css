@@ -1183,8 +1183,9 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .sb-toggle > span:nth-child(2) { flex: 1; }
 .sb-toggle .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; align-self: flex-start; margin-top: 5px; }
 .sb-toggle .sub { color: var(--muted); font-size: var(--fs-xs); }
-.sb-toggle .chev { flex: none; color: var(--muted); transition: transform 0.15s; }
-.sb.open .sb-toggle .chev { transform: rotate(180deg); }
+/* Like the section headings': pointing right when folded, down when open. */
+.sb-toggle .chev { flex: none; color: var(--muted); transform: rotate(-90deg); transition: transform 0.15s; }
+.sb.open .sb-toggle .chev { transform: none; }
 .sb-go { flex: none; color: var(--muted); font-size: var(--fs-md); }
 .sb-toggle:hover, .sb-toggle:focus-visible { background: var(--hover); outline: none; }
 .sb-lines { list-style: none; margin: 0 0 var(--s2) 22px; padding: 0; }
