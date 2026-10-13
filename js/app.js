@@ -1706,10 +1706,10 @@ function applySelectionFilter() {
   map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(selected));
   map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
-  for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-station-selected-label", "tt-footprint-selected"]) {
+  for (const l of ["tt-station-ping", "tt-station-shadow", "tt-station-selected", "tt-footprint-selected"]) {
     map.setFilter(l, ["==", ["get", "id"], sid]);
   }
-  map.setFilter("tt-station-labels", ["!=", ["get", "id"], sid]); // the callout replaces its plain label
+  applyStationCallouts();
   ping(Boolean(ids.length || sid));
   // Which trains show can depend on the selection and tracking (visible()).
   redraw();
@@ -1902,6 +1902,22 @@ map.on("mousemove", (e) => {
 
 const STATION_LAYERS = ["tt-stations-major", "tt-stations-minor", "tt-station-labels", "tt-footprint-fill"];
 
+// The station callout (its name in a tag above it) shows on the selected
+// station and on the one under the pointer, so clicking a hovered station
+// doesn't change its label. The callout replaces its plain label.
+let hoverStation = null;
+function applyStationCallouts() {
+  if (!map.getLayer("tt-station-selected-label")) return;
+  const ids = [state.station, hoverStation].filter(Boolean);
+  map.setFilter("tt-station-selected-label", ["in", ["get", "id"], ["literal", ids]]);
+  map.setFilter("tt-station-labels", ["!", ["in", ["get", "id"], ["literal", ids]]]);
+}
+function hoverStationTo(id) {
+  if (id === hoverStation) return;
+  hoverStation = id;
+  applyStationCallouts();
+}
+
 // One click handler so a train sitting on a station wins over the station.
 map.on("click", (e) => {
   const box = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
@@ -1916,17 +1932,11 @@ for (const layer of STATION_LAYERS) {
   map.on("mousemove", layer, (e) => {
     if (map.queryRenderedFeatures(e.point, { layers: ["tt-trains"] }).length) return;
     map.getCanvas().style.cursor = "pointer";
-    if (!canHover) return;
-    const st = state.stations.get(e.features[0].properties.id);
-    if (!st) return;
-    popup
-      .setLngLat([stationPos(st).lon, stationPos(st).lat])
-      .setHTML(`<div class="t">${esc(st.name)}</div><div class="s">${st.agencies.map((a) => esc(AGENCIES[a].short)).join(" · ")}</div>`)
-      .addTo(map);
+    if (canHover) hoverStationTo(e.features[0].properties.id);
   });
   map.on("mouseleave", layer, () => {
     map.getCanvas().style.cursor = "";
-    popup.remove();
+    hoverStationTo(null);
   });
 }
 
