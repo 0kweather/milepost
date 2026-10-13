@@ -391,6 +391,14 @@ function typicalFor(t, reported) {
 }
 
 // { cars: [{ number, type }], complete, typical, summary, note } or null.
+// A number from each of a railroad's fleet ranges, one per car type: for
+// showing every type it runs, not only its lines' typical trains.
+export function fleetSamples(agency) {
+  const out = new Map();
+  for (const [first, , key] of FLEETS[agency] || []) if (!out.has(key)) out.set(key, String(first));
+  return [...out].map(([key, number]) => ({ key, number }));
+}
+
 export function consistOf(t) {
   const reported = (t.cars?.numbers || []).map((number) => ({ number, key: typeOf(t.agency, number) }));
   const known = reported.filter((c) => c.key);

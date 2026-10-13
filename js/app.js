@@ -4,7 +4,7 @@ import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
-import { consistOf, consistHtml, carSvg, modelIds } from "./consist.js?v=dev";
+import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
@@ -1312,7 +1312,7 @@ function models() {
     modelsData = {};
     fetch("data/models.json?v=dev").then((r) => r.json()).then((d) => {
       modelsData = d;
-      if (state.car) renderDetail();
+      if (state.car || state.railroad) renderDetail();
     }).catch((err) => console.warn("models", err));
   }
   return modelsData;
@@ -1368,7 +1368,7 @@ function renderModelPage(t, el) {
     <div class="model-page">
       <div class="model-art">${carSvg(c, i, a.color, width)}</div>
       <h2>${esc(m?.model || car.type?.name || "This car")}</h2>
-      <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number ? ` · No. ${esc(car.number)}` : ""}</p>
+      <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number && !t.fleet ? ` · No. ${esc(car.number)}` : ""}</p>
       ${m ? `<dl class="facts wide">${facts(m, ["built", "fleet", "topSpeedMph", "powerHp", "seats", "lengthFt"])}</dl>` : ""}
       ${m?.about ? `<p class="model-about">${esc(m.about)}</p>` : ""}
       ${source ? `<p class="model-source">Source: <a href="${esc(m.source)}" target="_blank" rel="noopener">${esc(source)}</a></p>` : ""}
@@ -1537,16 +1537,21 @@ function frameRailroad(id) {
   map.fitBounds(b, { padding: { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) }, maxZoom: 11, duration: 900 });
 }
 
-// A stand-in train for a line's typical consist, so its cars draw and open
-// model pages like a live train's.
-const fleetTrain = (id, route) => ({ id: `fleet:${id}:${route || ""}`, agency: id, route: route || null, number: null,
-  fleet: true, backLabel: AGENCIES[id].name, cars: null, stops: null });
+// A stand-in train for a line's typical consist (or, given one car's number,
+// the consist that car runs in), so its cars draw and open model pages like
+// a live train's.
+const fleetTrain = (id, route, number) => ({ id: `fleet:${id}:${route || ""}:${number || ""}`, agency: id, route: route || null,
+  number: null, fleet: true, backLabel: AGENCIES[id].name, cars: number ? { numbers: [number], complete: false } : null, stops: null });
 // "Framingham / Worcester Line" and "Framingham/Worcester Line" are one line.
 const lineKey = (l) => String(l).toLowerCase().replace(/\bline\b/g, "").replace(/[^a-z0-9]/g, "");
 
 function renderRailroad() {
   const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
-  if (state.car?.page && state.car.fleet != null) return renderModelPage(fleetTrain(id, state.car.fleet), el);
+  if (state.car?.page && state.car.fleet != null) {
+    // A car seen on a running train is drawn from that train, while it runs.
+    const live = state.car.train && state.trains.get(state.car.train);
+    return renderModelPage(live ? { ...live, fleet: true, backLabel: a.name } : fleetTrain(id, state.car.fleet, state.car.number), el);
+  }
   const src = SOURCES.find((s) => s.agencies.includes(id));
   const avail = src ? sourceAvailability(src) : { ok: false };
   const status = state.sourceStatus[src?.id];
@@ -1586,6 +1591,32 @@ function renderRailroad() {
     if (l.name) fleet.get(k).names.push(l.name);
   }
 
+  // Equipment: every car type it runs, from its lines' typical trains, the
+  // trains running now (Amtrak's equipment goes by train, not line) and its
+  // fleet roster, each drawn once and opening its model page.
+  const kinds = new Map(); // type key -> { route, number, trainId, i, c }
+  const addKinds = (c, from) => c?.cars.forEach((car, i) => {
+    const k = car.type?.key;
+    if (k && !kinds.has(k)) kinds.set(k, { ...from, i, c });
+  });
+  for (const l of lineList.length ? lineList : [{ name: null }]) addKinds(consistOf(fleetTrain(id, l.name)), { route: l.name });
+  for (const t of trains) addKinds(consistOf(t), { route: t.route, trainId: t.id });
+  for (const { number } of fleetSamples(id)) {
+    const route = lineList[0]?.name ?? null;
+    addKinds(consistOf(fleetTrain(id, route, number)), { route, number });
+  }
+  // Locomotives first, then powered cars, then coaches.
+  const rank = (k) => ({ diesel: 0, electric: 0, emu: 1 })[kinds.get(k).c.cars[kinds.get(k).i].type.kind] ?? 2;
+  const equipment = [...kinds.keys()].sort((x, y) => rank(x) - rank(y)).map((k) => {
+    const { route, number, trainId, i, c } = kinds.get(k);
+    const m = modelOf(c, i), car = c.cars[i];
+    const sub = [m?.type, m?.fleet].filter(Boolean).join(" · ");
+    return `<button class="rr-car" data-fleet-car data-route="${esc(route || "")}" data-number="${esc(number || "")}" data-train="${esc(trainId || "")}" data-i="${i}">
+      ${carSvg(c, i, a.color, 128)}
+      <span><span class="title">${esc(m?.model || car.type?.name || "Car")}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
+    </button>`;
+  }).join("");
+
   const stat = (n, label, cls = "") => `<div class="rr-stat ${cls}"><strong>${n}</strong><span>${label}</span></div>`;
   const source = !avail.ok ? avail.reason || "Not connected"
     : estimated && estimated === trains.length ? "Positions estimated from predicted times"
@@ -1596,12 +1627,8 @@ function renderRailroad() {
   // Busiest: most of its trains on a weekday (else its timetable's stops a week).
   const busy = (st) => { const m = st.members.find((x) => x.agency === id); return [m?.daily || 0, m?.trips || 0]; };
   const busiest = [...stations].sort((x, y) => busy(y)[0] - busy(x)[0] || busy(y)[1] - busy(x)[1]).slice(0, 5);
-  const fleetHtml = [...fleet.values()].map(({ route, names, c }) => `
-    <div class="rr-fleet">
-      ${names.length && lineList.length > 1 ? `<p class="rr-fleet-lines">${esc(names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", "))}</p>` : ""}
-      <div class="consist-strip" data-fleet="${esc(route || "")}">${consistHtml(c, a.color)}</div>
-      ${c.summary ? `<p class="rr-fleet-sum">${esc(c.summary)}</p>` : ""}
-    </div>`).join("");
+  const typicalHtml = [...fleet.values()].filter(({ c }) => c.summary).map(({ names, c }) => `<li>
+      ${names.length && lineList.length > 1 ? `<strong>${esc(names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", "))}</strong><br>` : ""}<span class="sub">${esc(c.summary)}</span></li>`).join("");
 
   el.innerHTML = `
     <div class="hero">
@@ -1623,7 +1650,8 @@ function renderRailroad() {
         ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
       </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
       : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>
-    ${fleetHtml ? `<h3 class="section-title">Fleet</h3><p class="rr-hint">What usually runs on each line. Tap a car to read about it.</p>${fleetHtml}` : ""}
+    ${equipment ? `<h3 class="section-title">Fleet</h3><p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${equipment}</div>` : ""}
+    ${typicalHtml ? `<h3 class="section-title">Typical trains</h3><ul class="rr-typical">${typicalHtml}</ul>` : ""}
     ${busiest.length ? `<h3 class="section-title">Stations</h3>
       <p class="rr-hint">${stations.length} station${stations.length === 1 ? "" : "s"}; the busiest:</p>
       <div class="rr-stations">${busiest.map((st) => `<button class="result" data-station="${esc(st.id)}">
@@ -2114,14 +2142,7 @@ on("tracked", "keydown", (e) => {
 
 function openCar(fig) {
   const i = Number(fig.dataset.car);
-  // A car in a railroad page's fleet: straight to its model page.
-  const fleet = fig.closest("[data-fleet]");
-  if (fleet && state.railroad) {
-    state.car = { id: `fleet:${state.railroad}:${fleet.dataset.fleet}`, i, page: true, fleet: fleet.dataset.fleet };
-    renderDetail();
-    $("train-detail").scrollTop = 0;
-    return;
-  }
+
   state.car = state.car?.id === state.selected && state.car.i === i ? null : { id: state.selected, i, page: false };
   renderDetail();
 }
@@ -2170,6 +2191,15 @@ on("train-detail", "click", (e) => {
   if (view) { state.stationView = view.dataset.stationView; return renderDetail(); }
   const fig = e.target.closest("[data-car]");
   if (fig) return openCar(fig);
+  // A car in a railroad page's fleet: straight to its model page.
+  const kind = e.target.closest("[data-fleet-car]");
+  if (kind && state.railroad) {
+    const { route, number, train, i } = kind.dataset;
+    state.car = { id: `fleet:${state.railroad}`, i: Number(i), page: true, fleet: route, number: number || null, train: train || null };
+    renderDetail();
+    $("train-detail").scrollTop = 0;
+    return;
+  }
   if (e.target.closest("[data-car-close]")) { state.car = null; return renderDetail(); }
   if (e.target.closest("[data-model-more]") && state.car) { state.car.page = true; renderDetail(); $("train-detail").scrollTop = 0; return; }
   if (e.target.closest("[data-model-back]") && state.car) {
