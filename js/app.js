@@ -903,6 +903,8 @@ async function poll(src, attempt = 0) {
       if (!prev?.at || Date.now() - prev.at > 5 * 60 * 1000) state.bySource[src.id] = [];
       attempt++;
       delay = Math.min(300, src.interval * 2 ** attempt);
+      // Rate limited (the MBTA without a key): its window is a minute.
+      if (/HTTP 429/.test(err.message)) delay = Math.max(delay, 60);
     }
     mergeTrains();
   }

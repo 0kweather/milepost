@@ -155,17 +155,17 @@ const MBTA_ROUTES = {
   "CR-Needham": "Needham Line",
 };
 
-// Upcoming stops with predicted and scheduled times for every commuter rail
-// trip, in one request (the vehicles feed names only each train's next stop).
+// Every commuter rail trip's upcoming stops with predicted and scheduled
+// times, and (included) the trains running them with their positions: one
+// request per refresh. Without an API key the MBTA allows 20 requests a
+// minute per connection, shared by every open tab.
 const MBTA_PREDICTIONS = "https://api-v3.mbta.com/predictions?filter%5Broute%5D=" +
   ["Fairmount", "Fitchburg", "Worcester", "Franklin", "Greenbush", "Haverhill", "Kingston", "Lowell", "Middleborough",
     "Needham", "Newburyport", "Providence", "Foxboro", "NewBedford"].map((r) => `CR-${r}`).join(",") +
-  "&include=stop,schedule&fields%5Bprediction%5D=arrival_time,departure_time,stop_sequence,schedule_relationship" +
-  "&fields%5Bstop%5D=name,parent_station&fields%5Bschedule%5D=arrival_time,departure_time";
-async function mbtaTrips() {
-  const res = await fetch(MBTA_PREDICTIONS, { cache: "no-store" });
-  if (!res.ok) throw new Error(`MBTA predictions HTTP ${res.status}`);
-  const json = await res.json();
+  "&include=vehicle,trip,stop,schedule&fields%5Bprediction%5D=arrival_time,departure_time,stop_sequence,schedule_relationship" +
+  "&fields%5Bstop%5D=name,parent_station&fields%5Bschedule%5D=arrival_time,departure_time&fields%5Btrip%5D=name,headsign";
+// Each trip's upcoming stops, from that response.
+function mbtaTrips(json) {
   const inc = new Map((json.included || []).map((x) => [`${x.type}:${x.id}`, x]));
   const trips = new Map();
   for (const p of json.data || []) {
@@ -684,18 +684,16 @@ export const SOURCES = [
     parse: parseAmtraker,
   },
   {
-    id: "mbta", agencies: ["mbta"], format: "json", interval: 20,
-    url: "https://api-v3.mbta.com/vehicles?filter%5Broute_type%5D=2&include=trip,stop",
+    id: "mbta", agencies: ["mbta"], format: "json", interval: 30,
+    url: MBTA_PREDICTIONS,
     credit: { label: "MBTA V3 API", href: "https://www.mbta.com/developers" },
-    // Positions, then every trip's upcoming stops and the timetables of the
-    // stops behind them (if those requests fail, trains still show).
+    // Upcoming stops, with the trains running them included; then the
+    // timetables of the stops behind them (if that fails, trains still show).
     parse: async (json) => {
-      const tripIds = [...new Set(json.data.map((v) => v.relationships.trip?.data?.id).filter(Boolean))];
-      const [trips, timetables] = await Promise.all([
-        mbtaTrips().catch((err) => (console.warn("MBTA predictions", err), new Map())),
-        loadMbtaTimetables(tripIds).catch((err) => (console.warn("MBTA schedules", err), new Map())),
-      ]);
-      return parseMbta(json, trips, timetables);
+      const vehicles = (json.included || []).filter((x) => x.type === "vehicle");
+      const tripIds = [...new Set(vehicles.map((v) => v.relationships?.trip?.data?.id).filter(Boolean))];
+      const timetables = await loadMbtaTimetables(tripIds).catch((err) => (console.warn("MBTA schedules", err), new Map()));
+      return parseMbta({ data: vehicles, included: json.included }, mbtaTrips(json), timetables);
     },
   },
   {
