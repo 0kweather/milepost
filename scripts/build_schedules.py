@@ -13,7 +13,7 @@ scripts/build_stations.py first).
 
     python3 scripts/build_schedules.py [railroad ...]
 """
-import csv, datetime, io, json, pathlib, re, sys, time, urllib.request, zipfile
+import csv, datetime, io, json, pathlib, re, sys, time, unicodedata, urllib.request, zipfile
 from collections import defaultdict
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
@@ -27,7 +27,14 @@ FEEDS = {
     # "102 Express" -> "102"
     "railrunner": ("https://mjcaction.com/MJC_GTFS_Public/nmrailrunner_google_transit.zip", lambda r: r["route_id"] == "rr",
                    lambda r: "Rail Runner", lambda t: t["trip_short_name"].split()[0] if t["trip_short_name"] else None),
+    # exo: platforms fold into stations by name (as in build_stations.py).
+    "exo": ("https://exo.quebec/uploads/ressources-telechargeables/a-propos/donnees-ouvertes/trains/google_transit.zip",
+            lambda r: r["route_type"] == "2", lambda r: re.sub(r"^\d+\s*-\s*", "", r["route_long_name"]).replace("/", "-"),
+            lambda t: t["trip_short_name"] or None, lambda s: re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", s["stop_name"].lower()).encode("ascii", "ignore").decode()).strip("-")),
 }
+# Live feeds that name a train only by its trip id, or stops only by code, get
+# lookups for them: "ids" {trip id: number}, "codes" {stop code: station id}.
+LOOKUPS = {"exo"}
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
@@ -56,7 +63,7 @@ def minutes(hms):
     return h * 60 + m
 
 
-def build(agency, url, keep, line_name, number_of, stations):
+def build(agency, url, keep, line_name, number_of, stations, station_by=None):
     zf = get(url)
     today = datetime.date.today()
     window = [today + datetime.timedelta(d) for d in range(14)]
@@ -70,10 +77,13 @@ def build(agency, url, keep, line_name, number_of, stations):
         d = datetime.datetime.strptime(c["date"], "%Y%m%d").date()
         if d in window:
             (days[c["service_id"]].add if c["exception_type"] == "1" else days[c["service_id"]].discard)(d)
-    lines = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
+    routes = [r for r in rows(zf, "routes.txt") if keep(r)]
+    lines = {r["route_id"]: line_name(r) for r in routes}
+    colors = {line_name(r): f"#{r['route_color']}" for r in routes if r.get("route_color")}
     trips = {t["trip_id"]: t for t in rows(zf, "trips.txt") if t["route_id"] in lines and days.get(t["service_id"])}
     # Each stop as its station (the parent station where there is one).
-    station_of = {s["stop_id"]: s.get("parent_station") or s["stop_id"] for s in rows(zf, "stops.txt")}
+    all_stops = list(rows(zf, "stops.txt"))
+    station_of = {s["stop_id"]: station_by(s) if station_by else s.get("parent_station") or s["stop_id"] for s in all_stops}
     times = defaultdict(list)
     for st in rows(zf, "stop_times.txt"):
         if st["trip_id"] in trips:
@@ -95,17 +105,23 @@ def build(agency, url, keep, line_name, number_of, stations):
         patterns[n][key] = patterns[n].get(key, 0) | mask
     used = {sid for p in patterns.values() for (_, pat) in p for sid, *_ in pat}
     tz = next((s[10] for s in stations.values() if s[10]), None)
-    return {"start": today.isoformat(), "tz": tz,
-            "stops": {sid: stations[sid][1:4] for sid in sorted(used)},
-            "trips": {n: [[mask, line, [list(x) for x in pat]] for (line, pat), mask in p.items()] for n, p in sorted(patterns.items())}}
+    out = {"start": today.isoformat(), "tz": tz,
+           "stops": {sid: stations[sid][1:4] for sid in sorted(used)},
+           "trips": {n: [[mask, line, [list(x) for x in pat]] for (line, pat), mask in p.items()] for n, p in sorted(patterns.items())}}
+    if colors:
+        out["colors"] = colors
+    if agency in LOOKUPS:
+        out["ids"] = {tid: number_of(t) for tid, t in trips.items() if number_of(t)}
+        out["codes"] = {s["stop_code"]: station_of[s["stop_id"]] for s in all_stops if s.get("stop_code") and station_of[s["stop_id"]] in used}
+    return out
 
 
 all_stations = json.loads((DATA / "stations.json").read_text())
 (DATA / "schedules").mkdir(exist_ok=True)
-for agency, (url, keep, line_name, number_of) in FEEDS.items():
+for agency, (url, keep, line_name, number_of, *station_by) in FEEDS.items():
     if sys.argv[1:] and agency not in sys.argv[1:]:
         continue
-    out = build(agency, url, keep, line_name, number_of, {r[0]: r for r in all_stations[agency]})
+    out = build(agency, url, keep, line_name, number_of, {r[0]: r for r in all_stations[agency]}, *station_by)
     path = DATA / "schedules" / f"{agency}.json"
     path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
     print(f"{agency}: {len(out['stops'])} stops, {len(out['trips'])} train numbers ({path.stat().st_size // 1024} KB)")

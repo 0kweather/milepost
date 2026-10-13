@@ -18,7 +18,7 @@ Output: {agency: [[id, name, lat, lon, [lines...], place, code, busy, daily, acc
     python3 scripts/build_stations.py
     python3 scripts/build_stations.py vre sounder   # just these, into the existing file
 """
-import csv, datetime, io, json, pathlib, re, sys, urllib.parse, urllib.request, zipfile
+import csv, datetime, io, json, pathlib, re, sys, unicodedata, urllib.parse, urllib.request, zipfile
 from collections import defaultdict
 
 MDB = "https://files.mobilitydatabase.org/{}/latest.zip"
@@ -26,6 +26,9 @@ MDB = "https://files.mobilitydatabase.org/{}/latest.zip"
 # agency: (GTFS url, route filter(route row) -> bool, line name(route row) -> str)
 rail = lambda r: r.get("route_type") == "2"
 long_name = lambda r: (r.get("route_long_name") or r.get("route_short_name") or "").strip()
+EXO_GTFS = "https://exo.quebec/uploads/ressources-telechargeables/a-propos/donnees-ouvertes/trains/google_transit.zip"
+exo_line = lambda r: re.sub(r"^\d+\s*-\s*", "", long_name(r)).replace("/", "-")
+slug = lambda name: re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", name.lower()).encode("ascii", "ignore").decode()).strip("-")
 GTFS = {
     "lirr": ("https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip", lambda r: True, long_name),
     "mnr": ("https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip", lambda r: True, long_name),
@@ -58,6 +61,9 @@ GTFS = {
                    lambda r: "Rail Runner"),
     # ACE's own copy sits behind a bot check; the Mobility Database keeps 511's.
     "ace": (MDB.format("mdb-2684"), rail, lambda r: "ACE"),
+    # exo lists each platform as its own stop, with no parent station: they
+    # fold into one station per name. "11 - Vaudreuil/Hudson" -> "Vaudreuil-Hudson".
+    "exo": (EXO_GTFS, rail, lambda r: exo_line(r), lambda s: (slug(s), s.strip())),
 }
 
 
@@ -251,7 +257,7 @@ def njt_departurevision():
 
 # Station names that repeat the railroad or the word "Station".
 NAME_SUFFIX = {"railrunner": re.compile(r"\s+Rail Runner Station$"), "sounder": re.compile(r"(\s+Sounder)?(\s+Station)?$"),
-               "ace": re.compile(r"\s+Station$")}
+               "ace": re.compile(r"\s+Station$"), "exo": re.compile(r"^Gare\s+")}
 NAME_FIX = {"L Enfant": "L'Enfant", "San Jose Station Diridon": "San Jose Diridon", "Stockton - Robert J Cabral": "Stockton"}
 
 # Named railroads only: rebuild just those, keeping the rest of the file.

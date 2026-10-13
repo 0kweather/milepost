@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-13 (ACE test)";
+const RELAY_VERSION = "2026-10-13 (exo)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -46,6 +46,8 @@ const FEEDS = {
   njt: () => ({ njtDv: true }),
   // GO Transit: scraped from GO Tracker (below); no key needed.
   go: () => ({ goTracker: true }),
+  // exo (Montréal): read from the live map on exo.quebec (below); no key needed.
+  exo: () => ({ exoHub: true, ttl: 20 }),
 
   // Keyed feeds: set the secrets with `npx wrangler secret put NAME`.
   metra: (env) =>
@@ -240,6 +242,48 @@ const GO_TRACKER = "https://www.gotracker.ca/GoTracker/web/GODataAPIProxy.svc/Tr
 let goMem = null; // { at, json }
 const xmlAttrs = (tag) => Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map(([, k, v]) => [k, v
   .replace(/&#xD;&#xA;/g, " ").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")]));
+// ---------- exo (its live map's SignalR hub) ----------
+// exo.quebec's live map gets its trains over SignalR: after a negotiate call,
+// a WebSocket joins one group per line and direction for vehicle positions
+// and one for trip updates (delays by stop), and each group answers with its
+// current state at once. Each scrape joins them all, keeps what arrives in a
+// few seconds and hangs up: two subrequests.
+// Returns { at, vehicles: [{ TripId, Route, Latitude, Longitude, Timestamp, ... }],
+//           tripUpdates: [{ TripId, StopTimeUpdates: [{ StopSequence, ArrivalDelay, Stop: { Code } }] }] }.
+const EXO_HUB = "https://apim-shared-prod.exo.quebec/tempsreel/routeHub";
+const EXO_ROUTES = [259, 260, 262, 263, 264]; // the hub's ids for lines 11-15
+const SIGNALR_END = "\x1e";
+
+async function fetchExo() {
+  const headers = { Origin: "https://exo.quebec", "User-Agent": "Trainsheet relay (https://trainsheet.com)" };
+  const neg = await (await fetch(`${EXO_HUB}/negotiate?negotiateVersion=1`, { method: "POST", headers })).json();
+  if (!neg.url || !neg.accessToken) throw new Error("exo negotiate failed");
+  const res = await fetch(`${neg.url}&access_token=${encodeURIComponent(neg.accessToken)}`, { headers: { ...headers, Upgrade: "websocket" } });
+  const ws = res.webSocket;
+  if (!ws) throw new Error(`exo hub HTTP ${res.status}`);
+  ws.accept();
+  const groups = EXO_ROUTES.flatMap((r) => [0, 1].flatMap((d) => [`vehicle-routeId-${r}-directionId-${d}`, `tripUpdate-routeId-${r}-directionId-${d}`]));
+  const got = new Map(); // group -> its trains
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, 5000);
+    ws.addEventListener("message", (e) => {
+      for (const frame of String(e.data).split(SIGNALR_END)) {
+        if (!frame) continue;
+        const m = JSON.parse(frame);
+        if (m.type !== 1 || m.target !== "TempsReel") continue;
+        try { got.set(m.arguments[0], JSON.parse(m.arguments[1])); } catch { /* not JSON: skip */ }
+        if (groups.every((g) => got.has(g))) { clearTimeout(timer); resolve(); }
+      }
+    });
+    ws.addEventListener("close", () => { clearTimeout(timer); resolve(); });
+    ws.send(JSON.stringify({ protocol: "json", version: 1 }) + SIGNALR_END);
+    groups.forEach((g, i) => ws.send(JSON.stringify({ type: 1, target: "JoinGroup", arguments: [g], invocationId: String(i) }) + SIGNALR_END));
+  });
+  try { ws.close(); } catch { /* already closed */ }
+  const of = (prefix) => [...got].filter(([g]) => g.startsWith(prefix)).flatMap(([, list]) => (Array.isArray(list) ? list : []));
+  return { at: Date.now(), vehicles: of("vehicle-"), tripUpdates: of("tripUpdate-") };
+}
+
 async function fetchGoTracker() {
   const now = Date.now();
   if (goMem && now - goMem.at < 15 * 1000) return goMem.json;
@@ -372,6 +416,7 @@ export default {
     try {
       upstream = spec.njtDv ? await fetchNjtDv(ctx)
         : spec.goTracker ? Response.json(await fetchGoTracker())
+        : spec.exoHub ? Response.json(await fetchExo())
         : spec.transitland ? await fetchTransitland(spec.transitland, env)
         : await fetch(spec.url, { headers });
     } catch (err) {
