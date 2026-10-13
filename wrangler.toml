@@ -1,0 +1,5 @@
+# The relay (relay/worker.js), for Cloudflare Workers Builds run from the
+# repository's root. relay/wrangler.toml is the same, for builds run there.
+name = "traintracker-relay"
+main = "relay/worker.js"
+compatibility_date = "2025-01-01"
