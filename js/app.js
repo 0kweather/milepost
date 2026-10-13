@@ -1976,20 +1976,27 @@ function renderRailroad() {
 // A line's page: what's running on it, its stations in order and its fleet.
 function renderLine() {
   const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
-  if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
+  // The line's typical train, drawn and tappable like a train page's cars.
+  const typical = fleetTrain(id, name);
+  if (state.car?.page && state.car.id === typical.id) return renderModelPage(typical, el);
   const trains = focusTrains();
   const stations = orderedLineStations(id, name);
-  const fleet = equipmentList(id, [name], trains, false);
+  // Keep the cars strip where it was scrolled across redraws.
+  const strip = el.querySelector(".consist-strip");
+  const keepStrip = el.dataset.line === typical.id ? strip?.scrollLeft || 0 : 0;
+  el.dataset.line = typical.id;
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
       <h2>${esc(name)}</h2>
       ${stations.length ? `<p class="station-facts"><span>${stations.length} stations · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
+      ${consistSection(typical)}
     </div>
     ${trainStats(trains)}
     ${rrSection("running", "Running now", trains.length, runningList(a, trains, false))}
-    ${stations.length ? rrSection("line-stations", "Stations", stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}
-    ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}`;
+    ${stations.length ? rrSection("line-stations", "Stations", stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
+  const shown = el.querySelector(".consist-strip");
+  if (shown) shown.scrollLeft = keepStrip;
 }
 
 // A station's next trains: a folding section whose heading also switches
@@ -2516,7 +2523,9 @@ on("tracked", "keydown", (e) => {
 function openCar(fig) {
   const i = Number(fig.dataset.car);
 
-  state.car = state.car?.id === state.selected && state.car.i === i ? null : { id: state.selected, i, page: false };
+  // On a line's page, the cars are its typical train's.
+  const id = state.selected || (state.line ? fleetTrain(state.railroad, state.line).id : null);
+  state.car = state.car?.id === id && state.car.i === i ? null : { id, i, page: false };
   renderDetail();
 }
 on("train-detail", "keydown", (e) => {
