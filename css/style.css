@@ -1173,3 +1173,19 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .served-name .sub, .rr-line .sub { color: var(--muted); font-size: var(--fs-xs); }
 .line-swatch { flex: none; width: 14px; height: 4px; border-radius: 2px; margin-top: 8px; }
 .rr-line > .sub { align-self: center; white-space: nowrap; font-size: var(--fs-sm); }
+
+/* Station pages: served by each railroad, its lines folded under it. */
+.served-by { list-style: none; margin: var(--s2) 0 0; padding: 0; flex: none; }
+.served-by > li { border-bottom: 1px solid var(--line); }
+.served-by > li:last-child { border-bottom: 0; }
+.sb-row { display: flex; align-items: center; margin: 0 calc(-1 * var(--s2)); }
+.sb-toggle { flex: 1; display: flex; align-items: center; gap: var(--s3); padding: 7px var(--s2); border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer; }
+.sb-toggle > span:nth-child(2) { flex: 1; }
+.sb-toggle .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; align-self: flex-start; margin-top: 5px; }
+.sb-toggle .sub { color: var(--muted); font-size: var(--fs-xs); }
+.sb-toggle .chev { flex: none; color: var(--muted); transition: transform 0.15s; }
+.sb.open .sb-toggle .chev { transform: rotate(180deg); }
+.sb-go { flex: none; color: var(--muted); font-size: var(--fs-md); }
+.sb-toggle:hover, .sb-toggle:focus-visible { background: var(--hover); outline: none; }
+.sb-lines { list-style: none; margin: 0 0 var(--s2) 22px; padding: 0; }
+.sb-lines li + li { border-top: 1px solid var(--line); }
