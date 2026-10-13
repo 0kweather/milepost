@@ -569,13 +569,9 @@ function addLayers() {
     source: "stations",
     filter: stationSel,
     layout: {
-      // Its name, and under it the lines it's on.
-      "text-field": ["case", ["!=", ["get", "lines"], ""],
-        ["format", ["get", "name"], {}, "\n", {}, ["get", "lines"], { "font-scale": 0.8, "text-font": ["literal", ["Noto Sans Regular"]] }],
-        ["get", "name"]],
+      "text-field": ["get", "name"],
       "text-font": ["Noto Sans Bold"],
       "text-size": 13,
-      "text-max-width": 26,
       "text-anchor": "bottom",
       "text-offset": [0, -2.2],
       "icon-image": "tt-tag-station", // fitted around the text, so it moves with it
@@ -688,7 +684,7 @@ const stationPos = (st) => st.draw || st;
 const stationAgencies = (st) => st.agencies.filter((a) => agencyShown(a) && (!state.line || a === state.railroad));
 
 // The lines a station is on ("Kitchener line · Lakeshore West line"), for
-// its callout and search: its railroads' lines, or the railroad's name where
+// search: its railroads' lines, or the railroad's name where
 // its stations don't name lines (Amtrak). Main lines (most stations) first;
 // two, then how many more.
 let lineSizes = null; // "railroad|line" -> stations on it
@@ -723,7 +719,6 @@ function stationCollection() {
       properties: {
         id: st.id,
         name: st.name,
-        lines: stationLinesText(st, shown),
         major: st.major && shown.some((a) => AGENCIES[a].kind === "intercity"),
         color: AGENCIES[shown[0]].color,
         rank: st.rank,
