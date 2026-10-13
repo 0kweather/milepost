@@ -268,58 +268,32 @@ a { color: var(--accent); }
 
 .tc-x:hover { background: var(--hover); color: var(--text); }
 
-/* ---------- Track picker ---------- */
+/* ---------- Tracking ---------- */
 
 .tracking-note { font-size: var(--fs-sm); font-weight: 600; color: var(--good); }
 
-.track-picker {
+/* The pin beside each upcoming stop: track the train until there. */
+.stops .stop-end { display: flex; align-items: center; gap: var(--s1); flex: none; }
+.track-to {
+  --pin-dot: transparent;
   flex: none;
-  margin: var(--s3) 0 0;
-  padding: var(--s3);
-  border-radius: var(--r-md);
-  background: var(--hover);
-  border: 1px solid var(--line);
-}
-
-.track-picker h3 { margin: 0; font-size: var(--fs-md); }
-.track-picker > .sub { margin: 2px 0 var(--s2); font-size: var(--fs-xs); color: var(--muted); }
-
-.tp-search {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  height: 40px;
-  padding: 0 var(--s3);
-  border-radius: var(--r-md);
-  background: var(--panel-solid);
-  border: 1px solid var(--line);
-  color: var(--muted);
-}
-
-.tp-search:focus-within { border-color: var(--accent); }
-.tp-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-md); }
-.tp-results { display: grid; gap: 2px; margin: var(--s2) 0 0; max-height: 240px; overflow-y: auto; }
-
-.tp-match {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--s3);
-  padding: var(--s2) var(--s3); /* text lines up with the search box's */
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -4px -4px -4px 0;
+  padding: 0;
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
-  text-align: left;
-  font-size: var(--fs-base);
+  color: var(--faint);
+  fill: none;
+  cursor: pointer;
 }
-
-.tp-match:hover, .tp-match.active { background: var(--panel-solid); box-shadow: inset 0 0 0 1px var(--line); }
-.tp-match.active { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.tp-name { font-weight: 600; display: flex; align-items: center; gap: var(--s2); }
-.tp-tag { flex: none; white-space: nowrap; line-height: 1.5; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); background: var(--hover); padding: 1px var(--s2); border-radius: var(--r-pill); }
-.tp-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tp-empty { margin: var(--s2) var(--s1) 0; font-size: var(--fs-sm); color: var(--muted); }
-.tp-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s3); }
+.track-to:hover, .track-to:focus-visible { color: var(--text); background: var(--hover); }
+.track-to:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.track-to.on { color: var(--line-color, var(--accent)); fill: currentColor; --pin-dot: var(--panel-solid); }
+span.track-to { cursor: default; }
 
 /* ---------- Service notices ---------- */
 

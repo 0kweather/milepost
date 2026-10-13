@@ -76,10 +76,7 @@ const state = {
   // Service notices folded down to their heading until opened (remembered
   // across trains).
   noticesCollapsed: store.get("tt-notices-collapsed", true),
-  trackPicker: null,     // train id whose "where are you headed?" picker is open
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
-  trackQuery: "",        // what's typed in the picker's station search
-  trackActive: 0,        // highlighted match (arrow keys)
   est: new Map(),        // train id -> position on the track { lat, lon, bearing }
   rail: null,            // RailIndex (routing and snapping; uses every track)
   railGeo: null,         // rail.geojson as loaded; drawn filtered by railCollection()
@@ -1207,8 +1204,6 @@ function noticesBlock(list, route = null, title = "Service notices") {
 const stripScroll = new Map();
 function renderDetail() {
   if (state.station) return renderStation();
-  // Feed updates redraw the panel; don't wipe what the rider is typing.
-  if (state.trackPicker && document.activeElement?.id === "tp-input") return;
   const t = state.trains.get(state.selected);
   const el = $("train-detail");
   if (!t) {
@@ -1239,7 +1234,7 @@ function renderDetail() {
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
-        return `<li class="${s.status}${sid ? " link" : ""}"${link}><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
+        return `<li class="${s.status}${sid ? " link" : ""}"${link}><span>${esc(s.name)}</span><span class="stop-end"><span class="time">${fmtTime(s.time, s.tz)}${late}</span>${trackToButton(t, s)}</span></li>`;
       }).join("")}</ol></div>`
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -1259,7 +1254,6 @@ function renderDetail() {
       </div>
       ${consistSection(t)}
     </div>
-    ${state.trackPicker === t.id ? trackPicker(t) : ""}
     ${noticesHtml(t)}
     ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
@@ -1563,7 +1557,6 @@ function startTracking(t, stopKey) {
     eta: stop ? Date.parse(stop.time) : null, lastSeen: Date.now(),
   });
   saveTracked();
-  state.trackPicker = null;
   checkTracked();
   applySelectionFilter();
   renderAll();
@@ -1577,57 +1570,39 @@ function untrack(id, message) {
   renderAll();
 }
 
+// Under the train's name: where it's being tracked to, and a way to stop.
+// Trains with a stop list are tracked from a stop's pin; the rest (most
+// GPS-only railroads) keep a button that tracks without a destination.
 function trackButton(t) {
   const rec = state.tracked.find((r) => r.id === t.id);
   if (rec) {
     return `<span class="tracking-note">Tracking${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>
       <button class="btn small" data-untrack="${esc(t.id)}">Stop</button>`;
   }
+  if (t.stops?.some((s) => s.status !== "past")) return "";
   return `<button class="btn primary small" data-track="${esc(t.id)}">Track this train</button>`;
 }
 
-// Where the rider is getting off: type a station name, pick a match.
-const normName = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-
-function trackMatches(t) {
-  const ahead = t.stops.filter((s) => s.status !== "past");
-  const q = normName(state.trackQuery);
-  if (!q) return ahead.slice(-1); // nothing typed yet: suggest the final destination
-  const scored = [];
-  for (const s of ahead) {
-    const name = normName(s.name);
-    // Name starts with it, then any word starts with it, then it appears anywhere.
-    const score = name.startsWith(q) ? 0 : name.split(" ").some((w) => w.startsWith(q)) ? 1 : name.includes(q) ? 2 : -1;
-    if (score >= 0) scored.push([score, s]);
-  }
-  return scored.sort((x, y) => x[0] - y[0]).slice(0, 8).map(([, s]) => s);
+// A pin beside each stop still ahead: tracks the train until it gets there
+// (filled on the stop it's tracked to; tapping that one stops tracking).
+const PIN_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 14.6s-4.6-4.3-4.6-7.9a4.6 4.6 0 0 1 9.2 0c0 3.6-4.6 7.9-4.6 7.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="6.7" r="1.7" stroke="currentColor" stroke-width="1.3" style="fill:var(--pin-dot)"/></svg>`;
+function trackToButton(t, s) {
+  if (s.status === "past" || !s.key) return '<span class="track-to" aria-hidden="true"></span>';
+  const on = state.tracked.find((r) => r.id === t.id)?.stopKey === s.key;
+  const label = on ? `Stop tracking to ${s.name}` : `Track until ${s.name}`;
+  return `<button type="button" class="track-to${on ? " on" : ""}" data-track-to="${esc(s.key)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${PIN_ICON}</button>`;
 }
 
-function trackResults(t) {
-  const matches = trackMatches(t);
-  const last = t.stops[t.stops.length - 1];
-  if (!matches.length) return `<p class="tp-empty">No upcoming stop matches “${esc(state.trackQuery)}”.</p>`;
-  state.trackActive = Math.min(state.trackActive, matches.length - 1);
-  return matches.map((s, i) => `<button class="tp-match ${i === state.trackActive ? "active" : ""}" data-tp-stop="${esc(s.key)}" role="option" aria-selected="${i === state.trackActive}">
-      <span class="tp-name">${esc(s.name)}${s === last ? '<span class="tp-tag">Final stop</span>' : ""}</span>
-      <span class="tp-time">${fmtTime(s.time, s.tz)}</span>
-    </button>`).join("");
-}
-
-function trackPicker(t) {
-  return `<div class="track-picker">
-    <h3>Where are you getting off?</h3>
-    <p class="sub">Tracking stops when the train gets there.</p>
-    <div class="tp-search">
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
-      <input id="tp-input" type="search" placeholder="Type a station" autocomplete="off" spellcheck="false"
-        value="${esc(state.trackQuery)}" role="combobox" aria-controls="tp-results" aria-expanded="true">
-    </div>
-    <div class="tp-results" id="tp-results" role="listbox">${trackResults(t)}</div>
-    <div class="tp-actions">
-      <button class="btn small" data-tp-cancel>Cancel</button>
-    </div>
-  </div>`;
+function trackTo(t, key) {
+  const rec = state.tracked.find((r) => r.id === t.id);
+  if (!rec) return startTracking(t, key);
+  if (rec.stopKey === key) return untrack(t.id);
+  // Already tracked: move its destination to this stop.
+  const stop = t.stops.find((x) => x.key === key);
+  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, eta: Date.parse(stop.time) || null });
+  saveTracked();
+  checkTracked();
+  renderAll();
 }
 
 function renderTracked() {
@@ -1984,40 +1959,13 @@ on("tracked", "keydown", (e) => {
   }
 });
 
-on("train-detail", "input", (e) => {
-  if (e.target.id !== "tp-input") return;
-  state.trackQuery = e.target.value;
-  state.trackActive = 0;
-  const t = state.trains.get(state.trackPicker);
-  if (t) $("tp-results").innerHTML = trackResults(t);
-});
-
-on("train-detail", "keydown", (e) => {
-  if (e.target.id !== "tp-input") return;
-  const t = state.trains.get(state.trackPicker);
-  if (!t) return;
-  const matches = trackMatches(t);
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    e.preventDefault();
-    const n = matches.length;
-    if (!n) return;
-    state.trackActive = (state.trackActive + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
-    $("tp-results").innerHTML = trackResults(t);
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    if (matches[state.trackActive]) startTracking(t, matches[state.trackActive].key);
-  } else if (e.key === "Escape") {
-    state.trackPicker = null;
-    renderDetail();
-  }
-});
-
 function openCar(fig) {
   const i = Number(fig.dataset.car);
   state.car = state.car?.id === state.selected && state.car.i === i ? null : { id: state.selected, i, page: false };
   renderDetail();
 }
 on("train-detail", "keydown", (e) => {
+  if (e.target.closest?.("[data-track-to]")) return; // the pin is its own button
   const stopLink = e.target.closest?.("[data-stop-station]");
   if (stopLink && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return openStop(stopLink); }
   const fig = e.target.closest?.("[data-car]");
@@ -2031,6 +1979,12 @@ function openStop(li) {
   $("back-btn").lastChild.textContent = ` ${t.number ? `Train ${t.number}` : "Train"}`;
 }
 on("train-detail", "click", (e) => {
+  const pin = e.target.closest("[data-track-to]");
+  if (pin) {
+    const t = state.trains.get(state.selected);
+    if (t) trackTo(t, pin.dataset.trackTo);
+    return;
+  }
   const stopLink = e.target.closest("[data-stop-station]");
   if (stopLink) return openStop(stopLink);
   const view = e.target.closest("[data-station-view]");
@@ -2048,25 +2002,7 @@ on("train-detail", "click", (e) => {
   const track = e.target.closest("[data-track]");
   if (track) {
     const t = state.trains.get(track.dataset.track);
-    if (!t) return;
-    if (state.tracked.length >= MAX_TRACKED) return toast("You can track up to three trains at once.");
-    // No stop list (most GPS-only railroads): track without a destination.
-    if (!t.stops?.some((s) => s.status !== "past")) return startTracking(t, null);
-    state.trackPicker = t.id;
-    state.trackQuery = "";
-    state.trackActive = 0;
-    renderDetail();
-    $("tp-input")?.focus();
-    return;
-  }
-  if (e.target.closest("[data-tp-cancel]")) {
-    state.trackPicker = null;
-    return renderDetail();
-  }
-  const match = e.target.closest("[data-tp-stop]");
-  if (match) {
-    const t = state.trains.get(state.trackPicker);
-    if (t) startTracking(t, match.dataset.tpStop);
+    if (t) startTracking(t, null);
     return;
   }
   const stop = e.target.closest("[data-untrack]");
