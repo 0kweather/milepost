@@ -769,7 +769,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .loading p { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--muted); }
 .loading-track { position: relative; width: 100%; height: 72px; overflow: hidden; }
 .loading-track::after { content: ""; position: absolute; left: 0; right: 0; bottom: 6px; height: 2px; background: var(--line); }
-.loading-train { position: absolute; left: 0; bottom: 6px; display: flex; align-items: flex-end; animation: loading-pass var(--pass, 8s) linear infinite; }
+.loading-train { position: absolute; left: 0; bottom: 6px; display: flex; align-items: flex-end; animation: loading-pass var(--pass, 8s) linear both; }
 .loading-train .car { margin: 0; flex: none; }
 .loading-train .car svg { display: block; color: var(--car-ink); }
 .loading-train .car image { filter: brightness(var(--car-logo-dim)); }

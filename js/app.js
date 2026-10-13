@@ -2335,8 +2335,9 @@ if (wanted) {
 
 // ---------- Loading screen ----------
 // Until the map, its track and the first round of every railroad's trains
-// are in, a random railroad's typical train rolls by (leading end first, at
-// a steady speed whatever its length). Gives up waiting after 15 seconds.
+// are in, railroads' typical trains roll by one after another, each chosen
+// at random (never the same twice in a row), leading end first at a steady
+// speed whatever its length. Gives up waiting after 15 seconds.
 const LOADING_TRAINS = [
   ["amtrak", "Acela"], ["amtrak", "Northeast Regional"], ["amtrak", "California Zephyr"], ["amtrak", "Pacific Surfliner"],
   ["amtrak", "Amtrak Cascades"], ["amtrak", "Wolverine"], ["amtrak", "Crescent"], ["via", "Corridor"], ["via", "Canadian"],
@@ -2348,11 +2349,24 @@ let mapLoaded = false; // map.loaded() turns false whenever the trains layer upd
 map.once("load", () => (mapLoaded = true));
 {
   const el = $("loading-train");
-  const [agency, route] = LOADING_TRAINS[Math.floor(Math.random() * LOADING_TRAINS.length)];
-  const c = el && consistOf({ id: "loading", agency, route });
-  if (c) {
+  let last = -1;
+  const nextTrain = () => {
+    let i;
+    do i = Math.floor(Math.random() * LOADING_TRAINS.length); while (i === last);
+    last = i;
+    const [agency, route] = LOADING_TRAINS[i];
+    const c = consistOf({ id: "loading", agency, route });
+    if (!c) return;
     el.innerHTML = consistHtml(c, AGENCIES[agency].color);
     el.style.setProperty("--pass", `${((innerWidth + el.scrollWidth) / 260).toFixed(1)}s`);
+    // Run the pass again from the start for this train.
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "";
+  };
+  if (el) {
+    nextTrain();
+    el.addEventListener("animationend", nextTrain);
   }
 }
 const loadingWait = setInterval(() => {
