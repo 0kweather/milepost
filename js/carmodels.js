@@ -3144,6 +3144,216 @@ function lirrDiesel(c, dm) {
 export const de30ac = (c) => lirrDiesel(c, false);
 export const dm30ac = (c) => lirrDiesel(c, true);
 
+// ===================== exo (Montréal) =====================
+// exo's locomotives keep the AMT-era scheme: a bright blue cab over a white
+// band, sky blue under it, a deep blue wave rising along the side toward the
+// rear around a sky-blue ring (AMT's "eye"), silver above. exo's wordmark
+// is on the front only, not the sides.
+const EXO = { blue: "#2f6bd2", sky: "#63a5ec", royal: "#2945ad", white: "#eef1f4", silver: "#b9bec4", black: "#1f2125" };
+// The "exo" wordmark (img/logos/exo.svg, key "exo") at (x, y), h ft tall;
+// lettered in a heavy sans until the logo file is in place (badge() draws
+// nothing for a key LOGOS doesn't know).
+const exoMark = (c, x, y, h, { dark = false, fill = "#1d1f22" } = {}) =>
+  badge(c, x, y, h, { dark, logo: "exo" }) || goLetters(c, x, y - h * 0.3, h * 1.9, "exo", dark ? "#ffffff" : fill, { weight: 700 });
+// The AMT eye on a locomotive side: a sky-blue elliptical ring on the deep
+// blue, centered (x, y), broken where the wave runs out of it (gap: the
+// angle, in degrees from the +x axis, of the break).
+function exoEye(x, y, rx, ry, gap) {
+  const t = rx * 0.27;
+  const a0 = ((gap - 26) * Math.PI) / 180, a1 = ((gap + 26) * Math.PI) / 180;
+  const P = (a, k) => `${(x + Math.cos(a) * (rx + k)).toFixed(2)} ${(y + Math.sin(a) * (ry + k * (ry / rx))).toFixed(2)}`;
+  return `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${EXO.sky}"/>` +
+    `<ellipse cx="${x}" cy="${y}" rx="${(rx - t).toFixed(2)}" ry="${(ry - t * (ry / rx)).toFixed(2)}" fill="${EXO.royal}"/>` +
+    path(`M${x} ${y}L${P(a0, 1)}L${P(a1, 1)}Z`, EXO.royal);
+}
+
+// --- Bombardier ALP-45DP (exo 1350-1369; NJ Transit 4500-4534 and the
+// ALP-45As 4535-4559): a single-cab dual-mode locomotive, 21.8 m (71 ft 6 in)
+// over couplers and 4.4 m (14 ft 5 in) tall, two Caterpillar 3512C engines
+// either side of the transformer; FLEXX Power trucks 13.25 m apart, 2.8 m
+// wheelbase, 44 in wheels. Longer than the ALP-46 and differently nosed: an
+// upright lower face with the headlights, then a long raked windshield
+// rounding over into the roof. Behind the cab side window the crew door;
+// two small louvered windows toward the rear. The upper sides slope in
+// above about 11 ft, a row of panels carrying the cooling grilles; the roof
+// steps down over the rear 15 ft, where the one pantograph sits. A flat rear
+// end with a door.
+// exo: the blue cab, its back edge curving up from the white band behind the
+// crew door to the roof over the second grille; the white band runs back,
+// rising and thinning to arc over the eye near the rear; the deep blue climbs
+// from the sill to meet it. exo runs them on diesel only (its electrified
+// tunnel closed in 2020), the pantograph folded.
+// NJ Transit: gray, the sloping upper sides and the cab black (the black
+// coming down round the nose); the blue-magenta-orange band between white
+// lines along the bottom of the side, fading out at each end; an orange sill
+// line; "NJ TRANSIT" under the cab window.
+export function alp45(c) {
+  const { L } = c, sill = 3.9, roof = 14.42, cove = 10.9, low = 13.3, end = L - 1.0;
+  const njt = c.agency === "njt";
+  const d = poly([[1.9, sill], [end, sill], [end, low - 0.4], ["q", end, low, end - 0.4, low], [56.9, low], [56.3, roof], [6.6, roof], ["q", 5.0, roof, 4.4, 13.2],
+    [2.15, 9.85], [1.45, 8.5], [1.05, 6.3], [1.05, 4.6]]);
+  let s = "";
+  // Plow, rear coupler, a deep black frame along the bottom, fuel tanks
+  // either side of the middle, trucks.
+  s += pilot(1.05, sill);
+  s += rect(L - 2.0, 2.0, 1.0, sill - 2.0, "currentColor", 0, 'opacity="0.85"');
+  s += rect(1.6, 3.15, end - 1.6, sill - 3.15, EXO.black);
+  for (const [a, b] of [[20.5, 34.5], [37.0, 51.0]]) {
+    s += path(poly([[a, 3.2], [b, 3.2], [b, 2.2], ["q", b, 1.5, b - 0.7, 1.5], [a + 0.7, 1.5], ["q", a, 1.5, a, 2.2]]), "currentColor", 0, 'opacity="0.82"');
+  }
+  for (const k of [-1, 1]) s += truck(L / 2 + k * 21.74, { wb: 9.19, d: 44, kind: "loco", top: 3.15 });
+  let liv = rect(0, 0, L, roof + 1, njt ? "#a7acb3" : EXO.silver);
+  if (njt) {
+    const grad = `ts-disco-${++clipSeq}`;
+    liv += `<defs><linearGradient id="${grad}" gradientUnits="userSpaceOnUse" x1="14" x2="59" y1="0" y2="0"><stop offset="0" stop-color="#f26b21" stop-opacity="0"/>` +
+      '<stop offset="0.12" stop-color="#f26b21"/><stop offset="0.36" stop-color="#f2622a"/><stop offset="0.42" stop-color="#d42a84"/><stop offset="0.62" stop-color="#c22c9a"/>' +
+      '<stop offset="0.7" stop-color="#4b2fa6"/><stop offset="0.76" stop-color="#22389a"/><stop offset="0.92" stop-color="#1b3f94"/><stop offset="1" stop-color="#1b3f94" stop-opacity="0"/></linearGradient></defs>';
+    liv += rect(0, cove, L, 5, C.black);
+    liv += path(`M0 0L0 ${roof + 1}L10.5 ${roof + 1}L10.5 7.55L4.9 7.55Q4.2 6.4 3.4 0Z`, C.black);
+    liv += rect(14, 5.55, 45, 1.9, `url(#${grad})`);
+    liv += rect(4.6, 7.45, L, 0.13, "#f4f5f6") + rect(4.6, 5.42, L, 0.13, "#f4f5f6") + rect(0, sill, L, 0.2, "#f26b21");
+  } else {
+    // The white band (top and bottom edges), the deep blue's top edge.
+    const wTop = [[0, 7.35], [14, 7.35], [30, 8.0], [44, 9.45], [52, 10.45], [60, 10.75], [L, 10.25]];
+    const wBot = [[0, 6.45], [14, 6.5], [30, 7.45], [44, 9.05], [52, 10.1], [60, 10.45], [L, 9.95]];
+    liv += between(wBot, 0, EXO.sky);
+    liv += between([[12, 3.4], [22, 4.4], [32, 5.9], [42, 7.5], [50, 8.9], [56, 9.85], [62, 10.2], [L, 9.7]], 0, EXO.royal, 12, L + 1);
+    // A thin sky-blue swoosh rising through the blue toward the eye.
+    liv += ribbon([[36, 6.2], [42, 7.2], [47, 8.4], [51, 9.5]], 0.32, EXO.sky, 36, 51);
+    liv += exoEye(56.0, 7.0, 4.4, 3.1, 30);
+    liv += between(wTop, wBot, EXO.white);
+    // The blue cab, its back edge curving from the band up to the roof.
+    liv += path(`M-1 7.35L13.4 7.35C14.6 11.0 19.0 13.6 24.2 ${roof}L24.2 ${roof + 1}L-1 ${roof + 1}Z`, EXO.blue);
+    liv += rect(0, 0, L, sill + 0.3, EXO.black);
+  }
+  // Cab glass: the windshield seen edge-on, the tall side window (exo: a
+  // white mirror housing ahead of it).
+  liv += path(poly([[2.3, 10.0], [4.2, 12.85], [4.95, 12.85], [4.95, 10.0]]), C.glass);
+  liv += win(7.3, 8.1, 2.3, 2.3, 0.25);
+  s += path(d, njt ? "#a7acb3" : EXO.silver) + clipped(d, liv);
+  if (!njt) s += rect(6.55, 8.6, 0.5, 1.9, "#eceef0", 0.4, 'rx="0.12"');
+  s += door(10.3, sill + 0.35, 2.4, 6.2, { glassY: 0.68, glassH: 0.22 });
+  // Handrails beside the crew door (orange on NJ Transit's).
+  s += lines([[10.05, 4.7, 10.05, 9.6], [12.95, 4.7, 12.95, 9.6]], njt ? "#f26b21" : "#d7dade", 0.9);
+  // Engine-room access panel; the two small louvered windows; a panel near the rear.
+  s += rect(27.2, sill + 0.5, 2.2, 6.0, "none", 0.45, 'rx="0.2"') + rect(59.0, sill + 0.5, 1.6, 6.0, "none", 0.45, 'rx="0.2"');
+  for (const x of [36.1, 38.9]) s += rect(x, 7.9, 1.9, 2.3, "rgba(20,22,25,0.45)", 0.4, 'rx="0.12"') + slats(x + 0.2, 8.1, 1.5, 1.9, 0.28, "rgba(255,255,255,0.3)");
+  // The sloping upper sides: grille panels (mesh) from the cab back, lower
+  // ones at the rear by the pantograph, the rear block.
+  for (const [x, w] of [[14.4, 3.6], [18.6, 4.7], [24.2, 7.8], [35.8, 4.8], [41.6, 8.2], [50.4, 5.4]]) {
+    s += rect(x, cove + 0.35, w, roof - cove - 0.75, "rgba(20,22,25,0.5)", 0.4, 'rx="0.1"') + slats(x, cove + 0.35, w, roof - cove - 0.75, 0.18, "rgba(255,255,255,0.12)");
+  }
+  for (const [x, w] of [[57.3, 3.8], [61.4, 3.6], [66.0, 3.3]]) s += rect(x, cove + 0.3, w, low - cove - 0.65, "rgba(20,22,25,0.45)", 0.4, 'rx="0.1"') + slats(x, cove + 0.3, w, low - cove - 0.65, 0.2, "rgba(255,255,255,0.12)");
+  s += lines([[14.1, cove, 14.1, roof], [32.4, cove, 32.4, roof], [56.6, cove, 56.6, low]], "rgba(0,0,0,0.25)", 0.5) + line(4.9, cove, end, cove, "rgba(0,0,0,0.25)", 0.6);
+  // Horns on the cab roof; the pantograph over the rear (exo's folded).
+  for (const x of [5.6, 6.5, 7.4]) s += rect(x, roof - 0.05, 0.6, 0.45, "currentColor", 0, 'rx="0.15"');
+  s += pantograph(61.5, low, { up: njt, facing: 1 });
+  // NJ Transit's name under the cab window. exo's wordmark is on the nose
+  // front only (not seen side-on).
+  if (njt) s += badge(c, 7.4, 6.45, 0.8, { logo: "njt-word" });
+  s += outlineOf(d);
+  return s;
+}
+
+// --- EMD F59PH (exo 1341-1345, built for GO Transit in 1988-90): the cowl
+// unit, not the round-nosed F59PHI. 58 ft 2 in over couplers, Blomberg trucks
+// on 40 in wheels. A tall, flat-fronted short nose up to the windshield sill,
+// then the cab, its roof standing a foot above the body: a raked windshield,
+// two side windows, and behind the cab a row of small windows. Along the
+// upper side, dark inertial-filter intakes and two louvered radiator
+// grilles at the rear; on the roof a box behind the cab, the dynamic brake
+// hatch and three fans.
+// exo: silver above, sky blue below; a white line from the nose sweeps up
+// over the AMT eye mid-side and back down toward the rear, with deep blue
+// under it; a black frame. exo's wordmark is on a black plate on the front.
+export const f59ph = (c) => cabUnit(c, {
+  roof: 14.6, sill: 4.6, rearR: 0.9,
+  nose: [[1.7, 4.6], [1.35, 5.0], [1.35, 11.9], [1.9, 12.45], [5.6, 12.45], [6.3, 15.0], ["q", 6.45, 15.55, 7.1, 15.55], [12.9, 15.55], ["q", 13.35, 15.55, 13.4, 15.1]],
+  top: [[13.45, 14.6]],
+  glass: [[[5.8, 12.6], [6.3, 14.75], [6.75, 14.75], [6.75, 12.6]]],
+  sideWin: [[7.0, 12.55, 1.6, 1.8], [9.1, 12.55, 3.4, 1.8], [13.9, 12.0, 1.4, 1.85], [15.7, 12.0, 2.9, 1.85], [18.9, 12.0, 0.8, 1.85]],
+  panels: [[21.0, 5.1, 3.0, 5.9], [36.4, 5.1, 2.8, 5.9], [49.6, 5.1, 2.8, 5.6]],
+  grilles: [[23.6, 11.6, 3.8, 1.9, 0.5], [33.8, 11.6, 6.1, 1.9, 0.5], [41.4, 10.8, 8.9, 2.9, 0.32], [51.6, 10.8, 3.3, 2.9, 0.32]],
+  tank: [17.5, c.L - 17, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
+  trucks: { centers: 35.58, wb: 9.0, d: 40 },
+  roofItems: [[13.6, 3.4, 1.0], [30.5, 4.9, 0.45]], fans: [40.5, 44.4, 50.7],
+  extra: () => line(17.15, 12.05, 17.15, 13.8, C.gasket, 0.8) +
+    [7.9, 8.8, 10.0, 10.9].map((x) => rect(x, 15.5, 0.6, 0.5, "currentColor", 0, 'rx="0.2"')).join(""),  // horns on the cab roof
+  paint: (c, sp) => {
+    const L = sp.L;
+    if (c.agency !== "exo") return genericPaint(c, sp);
+    const wTop = [[0, 7.85], [17.5, 8.0], [26, 9.95], [35.4, 11.3], [44, 10.15], [52, 7.55], [L, 6.0]];
+    const wBot = [[0, 7.05], [17.5, 7.25], [26, 9.35], [35.4, 10.95], [44, 9.8], [52, 7.25], [L, 5.75]];
+    let p = rect(0, 0, L, 17, EXO.silver);
+    p += between([[0, 12.45], [13.4, 12.2], [20, 11.9], [40, 11.3], [L, 10.4]], 0, EXO.sky);
+    p += between(wBot, 0, EXO.royal);
+    p += exoEye(38.8, 7.2, 4.6, 2.9, 160);
+    p += between(wTop, wBot, EXO.white);
+    return p + rect(0, 0, L, sp.sill + 0.4, EXO.black);
+  },
+});
+
+// --- CRRC Tangshan bi-levels (exo, 2024-25: cab cars 2050-2057, coaches
+// 2100-2135), built to the plan of the Bombardier BiLevels they run with:
+// 85 ft, a low floor between the trucks, bi-parting doors on the lower level
+// inboard of each truck (one set nearer the middle), the end sections over
+// the trucks at mid level; but a flat roof the full length, about 15 ft
+// 11 in, with rounded shoulders. Upstairs a small window at the A end, six
+// on a 5 ft pitch, and two bigger ones over the B-end door; downstairs five
+// between the doors; two windows in the A-end section, a wide and a narrow
+// one in the B end's, with a grille high up. Unpainted stainless with a
+// crease above and below the end windows. Each coach carries a big color
+// block mid-car with a stainless circle cut from it, an "O" (blue, mint or
+// salmon; the accessible cars 2126-2135 salmon), and "allo exo" stacked
+// big in the B-end section, "allo" in the block's color, the "exo"
+// wordmark black. The cab cars: a squared-off cab with one big windshield
+// rounding into the roof, the front corners black, horns on the roof; no
+// block, "allo exo" in black behind the cab, a dark slant over the B end.
+const CRRC = {
+  roof: 15.9, sill: 3.7, cornerR: 1.2,
+  drop: { a: 15.8, b: 63.6, y: 1.3 }, trucks: { centers: 64, wb: 8.5, d: 33 },
+  rows: [{ xs: [14.4], y: 11.55, w: 1.4, h: 2.45, r: 0.4 }, { xs: [17.6, ...seq(23.6, 5.0, 5)], y: 11.55, w: 3.9, h: 2.45, r: 0.45 },
+    { xs: [50.0, 56.2], y: 11.45, w: 4.6, h: 2.55, r: 0.45 }, { xs: seq(23.6, 5.0, 5), y: 4.05, w: 3.9, h: 2.45, r: 0.45 },
+    { xs: [2.4, 7.4], y: 7.1, w: 3.4, h: 2.4, r: 0.45 }, { xs: [68.2], y: 7.05, w: 5.0, h: 2.5, r: 0.45 }, { xs: [74.6], y: 7.05, w: 2.4, h: 2.5, r: 0.45 }],
+  doors: [{ x: 17.7, w: 4.2, y0: 1.55, y1: 8.3, leaves: 2, glassY: 0.45, glassH: 0.38 }, { x: 50.2, w: 4.2, y0: 1.55, y1: 8.3, leaves: 2, glassY: 0.45, glassH: 0.38 }],
+  roofItems: [[3.0, 11.0, 0.25], [70.0, 12.0, 0.25]], diaphragm: [4.25, 13.6], badge: false,
+};
+// The coaches' blocks, by place in the train (the feed doesn't say which
+// car is which): [block, "allo"].
+const CRRC_COLORS = [["#3d82ef", "#3d82ef"], ["#8fe3d2", "#4fbfae"], ["#f4aa98", "#d8344f"]];
+const crrcColor = (c) => CRRC_COLORS[(c.index ?? 0) % CRRC_COLORS.length];
+// Creases above and below the end windows, the roof shoulder.
+const crrcLines = (L) => lines([[0, 11.25, L, 11.25], [0, 6.75, L, 6.75]], "rgba(0,0,0,0.13)", 0.6) + rect(0, 15.0, L, 2, C.steelShade);
+// "allo" over the "exo" wordmark, centered at x.
+const crrcName = (c, x, allo) => goLetters(c, x, 10.0, 3.4, "allo", allo, { weight: 700 }) + exoMark(c, x, 7.75, 1.8);
+const crrcGrille = (x) => rect(x, 12.5, 2.0, 0.9, "rgba(20,22,25,0.35)", 0.4) + slats(x, 12.5, 2.0, 0.9, 0.15, "rgba(255,255,255,0.3)");
+export const crrcBilevel = (c) => bilevel(c, { ...CRRC,
+  paint: (c, g) => {
+    const [block] = crrcColor(c), id = `ts-clip-${++clipSeq}`;
+    // The block, the stainless circle cut out of it (the mask in color
+    // names, which the dark-mode dimming leaves alone).
+    return rect(0, 0, g.L, 17, C.steel) + crrcLines(g.L) +
+      `<mask id="${id}"><rect x="29.5" y="0" width="16.6" height="17" fill="white"/><circle cx="37.6" cy="6.5" r="4.6" fill="black"/></mask>` +
+      `<rect x="29.5" y="0" width="16.6" height="17" fill="${block}" mask="url(#${id})"/>`;
+  },
+  extra: (c, g) => crrcGrille(g.L - 15.2) + crrcName(c, 64.2, crrcColor(c)[1]) });
+export const crrcBilevelCab = (c) => bilevel(c, { ...CRRC,
+  // No windows in the cab's end section; at the B end a wide and a narrow
+  // one close to the end, as in a coach's A end.
+  rows: [...CRRC.rows.filter((r) => r.y !== 7.1 && r.y !== 7.05), { xs: [76.4], y: 7.1, w: 3.2, h: 2.4, r: 0.45 }, { xs: [80.1], y: 7.1, w: 1.5, h: 2.4, r: 0.45 }],
+  nose: [[1.6, 3.7], [0.85, 4.1], [0.75, 11.4], [1.0, 14.2], ["q", 1.3, 15.9, 3.0, 15.9]],
+  paint: (c, g) => rect(0, 0, g.L, 17, C.steel) + crrcLines(g.L) + path(poly([[g.L - 6.3, 0], [g.L - 2.6, 17], [g.L + 1, 17], [g.L + 1, 0]]), "#45484e") +
+    (c.cabL ? path("M-1 0L-1 17L2.5 17Q2.9 9 2.6 0Z", "#1d1f22") : ""),
+  extra: (c, g) => crrcGrille(g.L - 15.2) + (c.cabL ? crrcGrille(5.6) + crrcName(c, 9.6, "#2a2d33") : ""),
+  cab: () => {
+    // The windshield seen edge-on round the front; the cab side window in
+    // its black frame; the horns; the anticlimber and plow.
+    let s = path(poly([[0.78, 10.2], [0.98, 14.0], [1.55, 14.0], [1.35, 10.2]]), C.glass);
+    s += rect(3.0, 10.9, 1.7, 2.7, "#1d1f22", 0, 'rx="0.2"') + win(3.2, 11.1, 1.3, 2.3, 0.2);
+    for (const x of [1.6, 2.4, 3.2, 4.4, 5.2]) s += rect(x, 15.85, 0.7, 0.55, C.steelDark, 0.4, 'rx="0.25"');
+    return s + pilot(0.85, 3.7);
+  } });
+
 
 // ===================== Registry =====================
 // Type key -> { draw, len (ft over couplers, or a function of the railroad),
@@ -3153,6 +3363,7 @@ const M = (draw, len, oneEnd = false, variant = null) => ({ draw, len, oneEnd, v
 export const MODELS = {
   acs64: M(acs64, 66.67),
   alp46: M(alp46, 64),
+  alp45: M(alp45, 71.5, true),                    // exo; NJ Transit's too
   genesis: M(genesis, 69, true),
   p40: M(genesis, 69, true),                      // CT Rail's P40DCs: the same body
   p32: M(p32, 69, true),
@@ -3172,6 +3383,7 @@ export const MODELS = {
   gp40: M(gp40, 64, true),
   gp40h: M(gp40, 64, true),                       // CT Rail's GP40-3Hs, drawn on the GP40MC
   mp32: M(mp32, 65, true),
+  f59ph: M(f59ph, 58.17, true),
   sd70mach: M(sd70mach, 74.25, true),
   amfleet: M(amfleet1, 85.33),
   amfleet2: M(amfleet2, 85.33),
@@ -3193,6 +3405,8 @@ export const MODELS = {
   rotemCab: M(mbtaCab, 85.33, true),
   multilevel: M(multilevel, 85),
   multilevelCab: M(multilevelCab, 85, true),
+  crrcBilevel: M(crrcBilevel, 85, false, (c) => String((c.index ?? 0) % CRRC_COLORS.length)),
+  crrcBilevelCab: M(crrcBilevelCab, 85, true),
   gallery: M(gallery, 85),
   galleryCab: M(galleryCabCar, 85, true),
   highliner: M(highliner, 85),
