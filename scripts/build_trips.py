@@ -31,6 +31,7 @@ FEEDS = {
     "frontrunner": (MDB.format("mdb-170"), {"41065"}),  # UTA's feed also covers TRAX and buses
     "vre": ("https://gtfs.vre.org/containercdngtfsupload/google_transit.zip", None),
     "sounder": ("https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", {"SNDR_EV", "SNDR_TL"}),  # not Link
+    "ace": (MDB.format("mdb-2684"), None),  # 511's copy of ACE's timetable
 }
 
 
@@ -102,6 +103,8 @@ def build(agency, url, routes):
             station, name = marc_station(name)
         if agency == "sounder":  # "Kent Sounder Station" -> "Kent"
             name = re.sub(r"(\s+Sounder)?(\s+Station)?$", "", name)
+        if agency == "ace":  # "Tracy Station" -> "Tracy", as in data/stations.json
+            name = {"San Jose Station Diridon": "San Jose Diridon", "Stockton - Robert J Cabral Station": "Stockton"}.get(name, re.sub(r"\s+Station$", "", name))
         stops[sid] = [name, round(float(p["stop_lat"]), 5), round(float(p["stop_lon"]), 5), station]
         # Some realtime feeds use stop codes instead of IDs.
         if r.get("stop_code") and r["stop_code"] not in stops:

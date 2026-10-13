@@ -4,7 +4,6 @@
 import { AGENCIES } from "./sources.js?v=dev";
 
 const UNTRACKED = {
-  ace:        { name: "Altamont Corridor Express", color: "#7b3f98" },
   coaster:    { name: "Coaster",              color: "#6f3c96" },
   tre:        { name: "Trinity Railway Express", color: "#2a9d8f" },
   wes:        { name: "WES Commuter Rail",    color: "#5b8c2a" },

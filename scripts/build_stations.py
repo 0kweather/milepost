@@ -56,6 +56,8 @@ GTFS = {
     "sunrail": ("https://corporate.sunrail.com/gtfs/google_transit.zip", rail, lambda r: "SunRail"),
     "railrunner": ("https://mjcaction.com/MJC_GTFS_Public/nmrailrunner_google_transit.zip", lambda r: r["route_id"] == "rr",
                    lambda r: "Rail Runner"),
+    # ACE's own copy sits behind a bot check; the Mobility Database keeps 511's.
+    "ace": (MDB.format("mdb-2684"), rail, lambda r: "ACE"),
 }
 
 
@@ -248,8 +250,9 @@ def njt_departurevision():
 
 
 # Station names that repeat the railroad or the word "Station".
-NAME_SUFFIX = {"railrunner": re.compile(r"\s+Rail Runner Station$"), "sounder": re.compile(r"(\s+Sounder)?(\s+Station)?$")}
-NAME_FIX = {"L Enfant": "L'Enfant"}
+NAME_SUFFIX = {"railrunner": re.compile(r"\s+Rail Runner Station$"), "sounder": re.compile(r"(\s+Sounder)?(\s+Station)?$"),
+               "ace": re.compile(r"\s+Station$")}
+NAME_FIX = {"L Enfant": "L'Enfant", "San Jose Station Diridon": "San Jose Diridon", "Stockton - Robert J Cabral": "Stockton"}
 
 # Named railroads only: rebuild just those, keeping the rest of the file.
 only = sys.argv[1:]

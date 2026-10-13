@@ -33,6 +33,7 @@ export const AGENCIES = {
   trirail:    { name: "Tri-Rail",            short: "Tri-Rail", region: "South Florida",       color: "#2ba84a", kind: "commuter" },
   sunrail:    { name: "SunRail",             short: "SunRail",  region: "Orlando",             color: "#e6731c", kind: "commuter" },
   caltrain:   { name: "Caltrain",            short: "Caltrain", region: "San Francisco",       color: "#e31837", kind: "commuter" },
+  ace:        { name: "Altamont Corridor Express", short: "ACE", region: "Stockton–San Jose",   color: "#7b3f98", kind: "commuter" },
   smart:      { name: "SMART",               short: "SMART",    region: "Sonoma–Marin",        color: "#3f9b3f", kind: "commuter" },
   metrolink:  { name: "Metrolink",           short: "Metrolink", region: "Los Angeles",        color: "#00a3ad", kind: "commuter" },
   sounder:    { name: "Sounder",             short: "Sounder",  region: "Seattle",             color: "#2a7f9e", kind: "commuter" },
@@ -1114,6 +1115,17 @@ export const SOURCES = [
     id: "caltrain", agencies: ["caltrain"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
     credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
     parse: async (buf) => gtfsVehicles("caltrain", buf, { route: (v) => v.trip?.routeId || "Caltrain", west: (await loadTrips()).caltrain }),
+  },
+  {
+    // ACE, through 511 (the relay fetches it once a minute).
+    id: "ace", agencies: ["ace"], format: "pb", interval: 60, relay: true, needsKey: "API_511_KEY",
+    credit: { label: "511 SF Bay", href: "https://511.org/open-data" },
+    parse: async (buf) => gtfsVehicles("ace", buf, {
+      route: () => "ACE",
+      // Trip "ACE06" is train 6 ("ACE03H" its holiday run).
+      number: (v) => (/^ACE0*(\d+)/.exec(v.trip?.tripId || "") || [])[1] || null,
+      west: (await loadTrips()).ace,
+    }),
   },
   {
     id: "smart", agencies: ["smart"], format: "pb", interval: 30, relay: true, needsKey: "API_511_KEY",
