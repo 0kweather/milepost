@@ -102,6 +102,14 @@ const AMTRAK = {
 const MBTA = { purple: "#80276c", yellow: "#f2c230", silver: "#c8ccd1", roof: "#4f545a", black: "#1d1f22" };
 const LIRR = { blue: "#1c3f94", yellow: "#f5c400" };
 const MNR_BLUE = "#2352b0";
+// GO Transit: the upper-level and hood green, the lime band, the dark gray
+// skirt; the older locomotive scheme's green and cream.
+const GO = { green: "#56963a", lime: "#8cc63f", skirt: "#383c42", teal: "#1f9a70", cream: "#f1eedc" };
+// Lettering on a GO car side, h ft tall, reading left to right even on a
+// mirrored car.
+const goLetters = (c, x, y, h, text, fill, { weight = 600, spacing = 0 } = {}) =>
+  `<text transform="translate(${x} ${y}) scale(${c.mirrored ? -1 : 1} -1)" y="${(h * 0.36).toFixed(2)}" font-size="${h}" text-anchor="middle" font-weight="${weight}" ` +
+  `letter-spacing="${spacing}" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="${fill}">${text}</text>`;
 // MARC: a blue band over an orange stripe on silver or stainless; the
 // Chargers' blue is a deeper indigo.
 const MARC = { blue: "#2b4fae", indigo: "#363c8e", orange: "#f26f21", silver: "#c4c8cd" };
@@ -798,8 +806,10 @@ const BOMB = {
   drop: { a: 16.6, b: 68.4, y: 1.25 }, trucks: { centers: 64, wb: 8.5, d: 33 }, chamfer: [2.4, 14.15],
   // Metrolink: the name in teal above the end windows at one end.
   // FrontRunner: the name between the decks mid-car. Tri-Rail: its logo high
-  // near one end.
-  badge: (c) => ({ metrolink: { x: 7.4, y: 11.1, h: 0.95, logo: "metrolink-teal" }, frontrunner: { x: 42.5, y: 9.8, h: 0.95 }, trirail: { x: 44, y: 9.2, h: 1.7, logo: "trirail-onnavy" } })[c.agency],
+  // near one end. GO: the logo big on the white band, over the third lower
+  // window.
+  badge: (c) => ({ metrolink: { x: 7.4, y: 11.1, h: 0.95, logo: "metrolink-teal" }, frontrunner: { x: 42.5, y: 9.8, h: 0.95 }, trirail: { x: 44, y: 9.2, h: 1.7, logo: "trirail-onnavy" },
+    go: { x: 41.8, y: 8.45, h: 2.3 } })[c.agency],
   rows: [{ xs: seq(16.9, 5.55, 9), y: 11.6, w: 4.3, h: 2.3, r: 0.35 }, { xs: seq(27.6, 5.55, 4), y: 4.5, w: 4.3, h: 2.5, r: 0.35 },
     { xs: [1.4], y: 6.9, w: 3.9, h: 2.3, r: 0.3 }, { xs: [6.5], y: 6.9, w: 4.3, h: 2.3, r: 0.3 }, { xs: [11.7], y: 6.9, w: 2.9, h: 2.3, r: 0.3 },
     { xs: [68.6], y: 6.9, w: 3.1, h: 2.3, r: 0.3 }, { xs: [73.0], y: 6.9, w: 4.6, h: 2.3, r: 0.3 }, { xs: [79.0], y: 6.9, w: 3.4, h: 2.3, r: 0.3 }],
@@ -855,11 +865,13 @@ function bombPaint(c, g) {
     }
     case "metrolink":
       return rect(0, 0, L, 17, "#cdd2d7") + metrolinkBand(L);
+    case "go":
+      return goBilevelPaint(c, g);
     default:
       return s + rect(0, 9.4, L, 1.1, c.color || "#1f5fad");
   }
 }
-export const bombardierBilevel = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint });
+export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint }));
 // Cab car: the mid-1990s full-width cab in the end section, a flat end with
 // two windows, the engineer's side window behind the corner in place of the
 // first end window.
@@ -868,6 +880,58 @@ export const bombardierCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint
     let s = rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
     return s;
   } });
+
+// --- GO Transit's BiLevels (GO 2000-2857, and Series IX 4000-4225 and
+// 4500-4533 from 2015, built to the same plan). Current scheme: the upper
+// level green up to the white roof, a white band between the levels with
+// the logo big over the middle, lime through the lower windows, a dark gray
+// skirt, METROLINX small in white at the B end. The newer cars have two
+// windows in each end section, leaving out the one nearest the coupler.
+const GO_BL_ROWS = BOMB.rows.filter((r) => r.xs[0] !== 1.4 && r.xs[0] !== 79.0);
+// left: the roofline from the left end to the full-height roof, as path
+// data; upper and lower: the green and the lime and skirt.
+function goBilevelPaint(c, g, { left = "M-1 14.1L10.2 14.1Q13.45 14.1 13.45 15.01Q13.45 15.92 16.7 15.92", upper = null, lower = null } = {}) {
+  const L = g.L;
+  let s = rect(0, 0, L, 17, "#eef0f2") + (upper ?? rect(0, 9.9, L, 8, GO.green));
+  // The white roof just showing over the green.
+  s += path(`${left}L${L - 16.7} 15.92Q${L - 13.45} 15.92 ${L - 13.45} 15.01Q${L - 13.45} 14.1 ${L - 10.2} 14.1L${L + 1} 14.1`, "none", 0, 'stroke="#eef0f2" stroke-width="0.55"');
+  return s + (lower ?? rect(0, 4.0, L, 3.0, GO.lime) + rect(0, 0, L, 4.0, GO.skirt));
+}
+const goMetrolinx = (c) => goLetters(c, c.L - 9.2, 5.6, 0.42, "METROLINX", "#ffffff", { spacing: 0.05 });
+const goBilevel = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", rows: GO_BL_ROWS, paint: bombPaint, extra: goMetrolinx });
+// GO's crash-energy-management cab cars (300-380, 2015 on): a coach's body
+// with the cab built on ahead of the end section, about 4 ft 4 in longer. The
+// cab is a white fiberglass shell about 14 ft 7 in tall, its front almost
+// upright and rounded over into the cab roof, one big windshield across it;
+// behind it the roof rises gently to full height over the end section. The
+// green comes down off the roof behind the cab and sweeps back along the
+// side; the lime rises from under the cab to the lower windows.
+const GO_CAB = 4.3;                                                  // the cab's added length
+const goShift = (x) => x + GO_CAB;
+const GO_CAB_NOSE = [[1.2, 3.7], [0.85, 4.4], [0.75, 9.2], ["q", 0.8, 12.9, 1.6, 14.0], ["q", 2.1, 14.6, 3.3, 14.6], [5.4, 14.6],
+  ["q", 9.5, 14.6, 12.0, 15.25], ["q", 14.0, 15.92, 17.5, 15.92]];
+export const goCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", cabLen: 5, nose: GO_CAB_NOSE, noTrucks: true,
+  rows: GO_BL_ROWS.map((r) => ({ ...r, xs: r.xs.map(goShift) })), doors: BOMB.doors.map((d) => ({ ...d, x: goShift(d.x) })),
+  drop: { ...BOMB.drop, a: goShift(BOMB.drop.a), b: goShift(BOMB.drop.b) }, roofItems: [[goShift(76.5), 5.5, 0.35, 14.1]],
+  badge: { x: goShift(41.8), y: 8.45, h: 2.3 },
+  paint: (c, g) => {
+    const L = g.L;
+    if (!c.cabL) return goBilevelPaint(c, g);
+    return goBilevelPaint(c, g, { left: "M-1 14.6L5.4 14.6Q9.5 14.6 12.0 15.25Q14.0 15.92 17.5 15.92",
+      upper: path(`M${L + 1} 9.9L44 9.9C32 9.9 24 10.4 19 11.6C13.5 13.0 8.5 13.6 5.4 17L${L + 1} 17Z`, GO.green),
+      lower: path(`M${L + 1} 7.0L24 7.0C16 7.0 10.5 5.4 6.2 4.0L${L + 1} 4.0Z`, GO.lime) +
+        path(`M${L + 1} 4.0L6.2 4.0C5.5 3.5 5.1 2.5 4.8 0L${L + 1} 0Z`, GO.skirt) });
+  },
+  cab: () => {
+    // Windshield seen edge-on round the front, the trapezoid cab side
+    // window and its mirror; the horns on the cab roof; the plow.
+    let s = path(poly([[0.8, 9.6], ["q", 0.84, 12.6, 1.5, 13.7], [2.05, 13.7], ["q", 1.45, 12.3, 1.45, 9.6]]), C.glass);
+    s += path(poly([[2.1, 10.2], [2.6, 13.1], [4.4, 13.1], [4.4, 10.2]]), C.glass, 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"`);
+    s += rect(5.0, 10.7, 0.32, 1.7, C.steelDark, 0.4);
+    s += rect(2.6, 14.55, 2.2, 0.3, C.steelDark, 0.4) + [2.8, 3.5, 4.2].map((x) => path(`M${x} 14.85L${x + 0.55} 14.85L${x + 0.45} 15.4L${x + 0.1} 15.4Z`, "#cfc6b0", 0.4)).join("");
+    return s + pilot(1.0, 3.7);
+  },
+  extra: (c) => [10.5, 74.5].map((x) => truck(goShift(x), { wb: BOMB.trucks.wb, d: BOMB.trucks.d, top: BOMB.sill })).join("") + goMetrolinx(c) });
 
 // --- Hyundai Rotem "Guardian" cab car (Metrolink 638-695, Tri-Rail 512-521):
 // same 85 ft and 64 ft truck centers, but flat-topped at 15 ft 10 in with
@@ -2189,10 +2253,6 @@ export const mp36 = (c) => cabUnit(c, {
 // band low along the side tapering away to the sill behind the cab door; a
 // white line at the sill; the logo big behind the cab and METROLINX small
 // toward the rear.
-const GO = { green: "#4f8c32", lime: "#8cc63f", skirt: "#383c42", teal: "#1f9a70", cream: "#f1eedc" };
-const goLetters = (c, x, y, h, text, fill, extra = "") =>
-  `<text transform="translate(${x} ${y}) scale(${c.mirrored ? -1 : 1} -1)" y="${(h * 0.36).toFixed(2)}" font-size="${h}" text-anchor="middle" font-weight="600" ` +
-  `font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="${fill}"${extra}>${text}</text>`;
 function goLocoPaint(c, sp) {
   const L = sp.L;
   let s = rect(0, 0, L, sp.roof + 1, "#eef0f2");
@@ -2221,7 +2281,7 @@ export const mp54ac = (c) => cabUnit(c, {
   paint: goLocoPaint,
   // Module outlines along the top of the hood.
   extra: (c, sp) => lines([[MP54_MODS[0], 12.25, MP54_MODS.at(-1), 12.25], ...MP54_MODS.slice(0, -1).map((x) => [x, 12.25, x, sp.roof])], "rgba(0,0,0,0.3)", 0.5) +
-    goLetters(c, 58.4, 7.65, 0.5, "METROLINX", "#3d4247", ' letter-spacing="0.06"'),
+    goLetters(c, 58.4, 7.65, 0.5, "METROLINX", "#3d4247", { spacing: 0.06 }),
 });
 
 // --- MotivePower MP40PH-3C (GO 600-666 except 647, 2007-2014): one EMD
@@ -2245,7 +2305,7 @@ export const mp40ph = (c) => cabUnit(c, {
     s += path("M-1 6.6L0.9 7.3L14.6 16.6L-1 16.6Z", GO.cream) + rect(0, 4.55, L, 0.3, GO.cream);
     return s;
   },
-  extra: (c) => goLetters(c, 9.6, 8.6, 0.85, "Ontario", "#ffffff", ' font-weight="500"'),
+  extra: (c) => goLetters(c, 9.6, 8.6, 0.85, "Ontario", "#ffffff", { weight: 500 }),
 });
 
 // --- EMD F125 "Spirit" (Metrolink 903-942): 69 ft, 14 ft 6.5 in, trucks
@@ -2638,6 +2698,8 @@ export const MODELS = {
   dm30ac: M(dm30ac, 75, true),
   hsp46: M(hsp46, 71, true),
   mp36: M(mp36, 68, true),
+  mp54ac: M(mp54ac, 68, true),
+  mp40: M(mp40ph, 68, true),
   f125: M(f125, 69, true),
   bl36: M(bl36, 67.3, true),
   f40: M(f40ph, 56.17, true),
@@ -2658,8 +2720,8 @@ export const MODELS = {
   viewlinerDiner: M(viewlinerDiner, 85.33),
   viewlinerBaggage: M(viewlinerBaggage, 85.33),
   bilevel: M((c) => (c.agency === "mbta" ? mbtaBilevel(c) : c.agency === "marc" ? marcKawasaki(c) : bombardierBilevel(c)), (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85)),
-  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c) : bombardierCab(c)),
-    (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85), true),
+  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : c.agency === "go" ? goCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c) : bombardierCab(c)),
+    (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : ag === "go" ? 85 + GO_CAB : 85), true),
   kawasakiCab: M((c) => (c.agency === "marc" ? marcKawasakiCab(c) : mbtaCab(c)), 85.33, true),
   rotemCab: M(mbtaCab, 85.33, true),
   multilevel: M(multilevel, 85),

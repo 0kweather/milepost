@@ -40,6 +40,15 @@ const FLEETS = {
     [7800, 7834, "bilevel"], [7845, 7858, "bilevelCab"], [7870, 7876, "bilevel"], [7890, 7896, "bilevel"],
     [8000, 8034, "multilevel"], [8045, 8059, "multilevelCab"], [8090, 8094, "multilevel"],
   ],
+  // GO Transit (Wikipedia, "GO Transit rolling stock"): MP40PH-3C 600-666
+  // except 647, rebuilt as the prototype MP54AC; new MP54ACs 667-682.
+  // BiLevel coaches 2000-2857 and 4000-4225, 4500-4533 (Series IX); the new
+  // CEM cab cars 300-380. The older cab cars (200-214, 242-257) have no
+  // drawing yet.
+  go: [
+    [600, 646, "mp40"], [647, 647, "mp54ac"], [648, 666, "mp40"], [667, 682, "mp54ac"],
+    [300, 380, "bilevelCab"], [2000, 2857, "bilevel"], [4000, 4225, "bilevel"], [4500, 4533, "bilevel"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -59,6 +68,8 @@ const TYPES = {
   de30ac: { name: "DE30AC diesel locomotive", kind: "diesel" },
   dm30ac: { name: "DM30AC dual-mode locomotive", kind: "diesel" },
   mp36: { name: "MP36PH diesel locomotive", kind: "diesel" },
+  mp40: { name: "MP40PH-3C diesel locomotive", kind: "diesel" },
+  mp54ac: { name: "MP54AC diesel locomotive", kind: "diesel" },
   f40: { name: "F40PH diesel locomotive", kind: "diesel" },
   f40c: { name: "F40PH-3C diesel locomotive", kind: "diesel" },
   gp40: { name: "GP40MC diesel locomotive", kind: "diesel" },
@@ -287,6 +298,10 @@ function typicalFor(t, reported) {
     case "metrolink": return /^38\d\d$/.test(t.number || "") || /Redlands/.test(dest)
       ? set("Stadler FLIRT railcar", ["flirtCar", 1], ["flirtPower", 1], ["flirtCar", 1])
       : set("F125 locomotive with bi-level coaches", ["f125", 1], ["bilevel", 4], ["bilevelCab", 1]);
+    // Most GO trains run 12 cars (11 coaches and a cab car) behind an
+    // MP40PH-3C or MP54AC; the reported locomotive picks which.
+    case "go": return set("MP54AC or MP40PH-3C locomotive with BiLevel coaches and a cab car, usually 12 cars",
+      [reported === "mp40" ? "mp40" : "mp54ac", 1], ["bilevel", 11], ["bilevelCab", 1]);
     default: return null;
   }
 }
