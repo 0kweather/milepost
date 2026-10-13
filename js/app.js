@@ -569,9 +569,13 @@ function addLayers() {
     source: "stations",
     filter: stationSel,
     layout: {
-      "text-field": ["get", "name"],
+      // Its name, and under it the lines it's on.
+      "text-field": ["case", ["!=", ["get", "lines"], ""],
+        ["format", ["get", "name"], {}, "\n", {}, ["get", "lines"], { "font-scale": 0.8, "text-font": ["literal", ["Noto Sans Regular"]] }],
+        ["get", "name"]],
       "text-font": ["Noto Sans Bold"],
       "text-size": 13,
+      "text-max-width": 26,
       "text-anchor": "bottom",
       "text-offset": [0, -2.2],
       "icon-image": "tt-tag-station", // fitted around the text, so it moves with it
@@ -683,6 +687,30 @@ const stationPos = (st) => st.draw || st;
 // only the line's railroad.
 const stationAgencies = (st) => st.agencies.filter((a) => agencyShown(a) && (!state.line || a === state.railroad));
 
+// The lines a station is on ("Kitchener line · Lakeshore West line"), for
+// its callout and search: its railroads' lines, or the railroad's name where
+// its stations don't name lines (Amtrak). Main lines (most stations) first;
+// two, then how many more.
+let lineSizes = null; // "railroad|line" -> stations on it
+function lineSize(agency, line) {
+  if (!lineSizes) {
+    lineSizes = new Map();
+    for (const s of state.stations.values()) {
+      for (const m of s.members) for (const l of m.lines || []) lineSizes.set(`${m.agency}|${l}`, (lineSizes.get(`${m.agency}|${l}`) || 0) + 1);
+    }
+  }
+  return lineSizes.get(`${agency}|${line}`) || 0;
+}
+function stationLinesText(st, agencies = st.agencies) {
+  const out = [];
+  for (const m of st.members) {
+    if (!agencies.includes(m.agency)) continue;
+    const named = (m.lines || []).filter((l) => l && l !== "City Terminal Zone").sort((x, y) => lineSize(m.agency, y) - lineSize(m.agency, x));
+    for (const l of named.length ? named : [AGENCIES[m.agency].short]) if (!out.includes(l)) out.push(l);
+  }
+  return out.length > 2 ? `${out.slice(0, 2).join(" · ")} +${out.length - 2} more` : out.join(" · ");
+}
+
 function stationCollection() {
   const features = [];
   for (const st of state.stations.values()) {
@@ -695,6 +723,7 @@ function stationCollection() {
       properties: {
         id: st.id,
         name: st.name,
+        lines: stationLinesText(st, shown),
         major: st.major && shown.some((a) => AGENCIES[a].kind === "intercity"),
         color: AGENCIES[shown[0]].color,
         rank: st.rank,
@@ -1139,7 +1168,7 @@ function renderResults() {
   stationHits.sort((a, b) => (b.major - a.major) || (b.members.length - a.members.length) || a.name.localeCompare(b.name));
   const stationHtml = stationHits.slice(0, 6).map((st) => `<button class="result" data-station="${esc(st.id)}">
       <span class="station-icon" style="--c:${AGENCIES[st.agencies[0]].color}"></span>
-      <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, st.agencies.map((a) => AGENCIES[a].short).join(", ")].filter(Boolean).join(" · "))}</span></span>
+      <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, stationLinesText(st)].filter(Boolean).join(" · "))}</span></span>
       <span></span>
     </button>`).join("");
   const stationBlock = stationHtml ? `<div class="group-title">Stations</div>${stationHtml}` : "";
