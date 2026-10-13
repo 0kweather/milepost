@@ -15,8 +15,9 @@
 //                       protobuf messages read as one feed with every entity.
 
 const CACHE_SECONDS = 15;
-const feedMem = new Map(); // feed -> { at, bytes, type }, for feeds with a ttl
-const RELAY_VERSION = "2026-10-13 (VRE, Sounder)";
+const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
+const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
+const RELAY_VERSION = "2026-10-13 (shared copies, stale on refusal)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -52,6 +53,7 @@ const FEEDS = {
       url: `https://gtfspublic.metrarr.com/gtfs/public/positions?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`,
       // Predicted stop times, for each train's upcoming stops.
       also: [`https://gtfspublic.metrarr.com/gtfs/public/tripupdates?api_token=${encodeURIComponent(env.METRA_API_TOKEN)}`],
+      ttl: 30, // Metra refuses requests that come too often
     },
   // Sound Transit (OneBusAway): the whole agency's feeds, cut to Sounder's
   // routes. Its key comes free by email (oba_api_key@soundtransit.org).
@@ -352,12 +354,14 @@ export default {
     const cacheKey = new Request(new URL(`/feed/${match[1]}`, request.url).toString());
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
-    // Feeds that ask to be fetched at most every `ttl` seconds are kept in
-    // memory (the edge cache does nothing on workers.dev).
-    const kept = spec.ttl && feedMem.get(match[1]);
-    if (kept && Date.now() - kept.at < spec.ttl * 1000) {
-      return new Response(kept.bytes, { headers: { ...CORS, "Content-Type": kept.type, "Cache-Control": `public, max-age=${CACHE_SECONDS}` } });
-    }
+    // Each feed is fetched from its railroad at most every `ttl` seconds (15
+    // unless it asks for longer), and every visitor shares that copy: the
+    // edge cache does nothing on workers.dev, and railroads refuse requests
+    // that come too often. The scraped feeds keep their own.
+    const ttl = spec.ttl ?? CACHE_SECONDS;
+    const kept = feedMem.get(match[1]);
+    const keptResponse = () => new Response(kept.bytes, { headers: { ...CORS, "Content-Type": kept.type, "Cache-Control": `public, max-age=${CACHE_SECONDS}` } });
+    if (kept && Date.now() - kept.at < ttl * 1000) return keptResponse();
 
     const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
@@ -367,8 +371,11 @@ export default {
         : spec.transitland ? await fetchTransitland(spec.transitland, env)
         : await fetch(spec.url, { headers });
     } catch (err) {
+      if (kept && Date.now() - kept.at < STALE_MS) return keptResponse();
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
     }
+    // Refused or failing: the last good copy, if it's recent, rather than an error.
+    if (!upstream.ok && kept && Date.now() - kept.at < STALE_MS) return keptResponse();
     if (!upstream.ok) return new Response(`Upstream HTTP ${upstream.status}`, { status: 502, headers: CORS });
 
     // Positions, then the predicted stop times if they're available.
@@ -381,10 +388,8 @@ export default {
     }
 
     const type = upstream.headers.get("Content-Type") || "application/octet-stream";
-    if (spec.ttl) {
-      body = new Uint8Array(await new Response(body).arrayBuffer());
-      feedMem.set(match[1], { at: Date.now(), bytes: body, type });
-    }
+    body = new Uint8Array(await new Response(body).arrayBuffer());
+    feedMem.set(match[1], { at: Date.now(), bytes: body, type });
     const response = new Response(body, {
       headers: {
         ...CORS,
