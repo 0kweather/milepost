@@ -1,3 +1,5 @@
 name = "traintracker-relay"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+# Keep variables set in the Cloudflare dashboard (API keys) across deploys.
+keep_vars = true
