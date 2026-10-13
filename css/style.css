@@ -752,6 +752,32 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .model-note { padding: var(--s3); border-radius: var(--r-md); background: var(--hover); font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
 .model-note strong { color: var(--text); font-weight: 600; }
 
+/* Loading screen: a train rolls by until the map, track and first trains are in. */
+.loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+  background: var(--bg);
+  transition: opacity 0.45s ease;
+}
+.loading.done { opacity: 0; pointer-events: none; }
+.loading p { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--muted); }
+.loading-track { position: relative; width: 100%; height: 72px; overflow: hidden; }
+.loading-track::after { content: ""; position: absolute; left: 0; right: 0; bottom: 6px; height: 2px; background: var(--line); }
+.loading-train { position: absolute; left: 0; bottom: 6px; display: flex; align-items: flex-end; animation: loading-pass var(--pass, 8s) linear infinite; }
+.loading-train .car { margin: 0; flex: none; }
+.loading-train .car svg { display: block; color: var(--car-ink); }
+.loading-train .car image { filter: brightness(var(--car-logo-dim)); }
+@keyframes loading-pass { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .loading-train { animation: none; left: 50%; transform: translateX(-50%); }
+}
+
 .hero, .meta, .estimate-note, .consist { flex: none; }
 .hero { padding: 6px 0 var(--s4); border-bottom: 1px solid var(--line); }
 .hero .agency-name { font-size: var(--fs-xs); font-weight: 600; display: flex; align-items: center; gap: 6px; }

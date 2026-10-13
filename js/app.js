@@ -2333,6 +2333,38 @@ if (wanted) {
   setTimeout(() => clearInterval(wait), 30000);
 }
 
+// ---------- Loading screen ----------
+// Until the map, its track and the first round of every railroad's trains
+// are in, a random railroad's typical train rolls by (leading end first, at
+// a steady speed whatever its length). Gives up waiting after 15 seconds.
+const LOADING_TRAINS = [
+  ["amtrak", "Acela"], ["amtrak", "Northeast Regional"], ["amtrak", "California Zephyr"], ["amtrak", "Pacific Surfliner"],
+  ["amtrak", "Amtrak Cascades"], ["amtrak", "Wolverine"], ["amtrak", "Crescent"], ["via", "Corridor"], ["via", "Canadian"],
+  ["brightline"], ["lirr", "Babylon"], ["mnr", "New Haven"], ["mbta"], ["njt"], ["septa"], ["metra", "BNSF"], ["metra", "ME"],
+  ["caltrain"], ["metrolink"], ["go"], ["marc", "Penn Line"], ["trirail"], ["frontrunner"], ["smart"], ["capmetro"], ["rtd"],
+];
+const loadingStart = Date.now();
+let mapLoaded = false; // map.loaded() turns false whenever the trains layer updates
+map.once("load", () => (mapLoaded = true));
+{
+  const el = $("loading-train");
+  const [agency, route] = LOADING_TRAINS[Math.floor(Math.random() * LOADING_TRAINS.length)];
+  const c = el && consistOf({ id: "loading", agency, route });
+  if (c) {
+    el.innerHTML = consistHtml(c, AGENCIES[agency].color);
+    el.style.setProperty("--pass", `${((innerWidth + el.scrollWidth) / 260).toFixed(1)}s`);
+  }
+}
+const loadingWait = setInterval(() => {
+  const sources = Object.values(state.sourceStatus);
+  const ready = mapLoaded && state.railGeo && sources.length && sources.every((x) => x.status !== "loading");
+  const waited = Date.now() - loadingStart;
+  if ((!ready && waited < 15000) || waited < 1200) return; // shown long enough to see the train
+  clearInterval(loadingWait);
+  $("loading").classList.add("done");
+  setTimeout(() => $("loading").remove(), 500);
+}, 200);
+
 // Handy for poking at the live state from the browser console.
 window.trainsheet = { state, map, checkTracked };
 
