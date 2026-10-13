@@ -58,6 +58,22 @@ const FLEETS = {
     [1701, 1719, "mafersaCab"], [1730, 1774, "mafersa"],
     [9101, 9580, "m8"],
   ],
+  // VRE (Wikipedia, "Virginia Railway Express"): MP36PH-3C V50-V69; Gallery
+  // IV cab cars 710-730 and coaches 800-879 (the cars carry a "V" before the
+  // number).
+  vre: [
+    [50, 69, "mp36"], [710, 730, "galleryCab"], [800, 879, "gallery"],
+  ],
+  // Sounder: F59PHI 901-911, MP40PH-3C 921-923. Its BiLevel coaches and cab
+  // cars are numbered in several series that aren't matched here.
+  sounder: [
+    [901, 911, "f59"], [921, 923, "mp40"],
+  ],
+  // New Mexico Rail Runner Express: MP36PH-3C 101-109; BiLevel coaches
+  // 1001-1013 and cab cars 1101-1109.
+  railrunner: [
+    [101, 109, "mp36"], [1001, 1013, "bilevel"], [1101, 1109, "bilevelCab"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -324,6 +340,23 @@ function typicalFor(t, reported) {
       return set(`${gp ? "GP40-3H" : "P40DC"} locomotive with Mafersa coaches and a cab car`,
         [gp ? "gp40h" : "p40", 1], ["mafersa", 3], ["mafersaCab", 1]);
     }
+    // VRE: an MP36PH-3C with Gallery IV coaches and a cab car at the
+    // Washington end, usually 6 to 8 cars on both lines.
+    case "vre": return set("MP36PH-3C locomotive with gallery bi-levels and a cab car, usually 6 to 8 cars",
+      ["mp36", 1], ["gallery", 6], ["galleryCab", 1]);
+    // Sounder: an F59PHI or MP40PH-3C (the reported locomotive picks which)
+    // with BiLevel coaches and a cab car: usually 7 cars on the S Line, 2 or
+    // 3 on the N Line.
+    case "sounder": {
+      const loco = reported === "mp40" ? "mp40" : "f59", name = loco === "mp40" ? "MP40PH-3C" : "F59PHI";
+      return /^N/.test(t.route || "")
+        ? set(`${name} locomotive with BiLevel coaches and a cab car, usually 2 or 3 cars`, [loco, 1], ["bilevel", 1], ["bilevelCab", 1])
+        : set(`${name} locomotive with BiLevel coaches and a cab car, usually 7 cars`, [loco, 1], ["bilevel", 6], ["bilevelCab", 1]);
+    }
+    // Rail Runner: an MP36PH-3C with BiLevel coaches and a cab car, usually
+    // 4 cars.
+    case "railrunner": return set("MP36PH-3C locomotive with BiLevel coaches and a cab car, usually 4 cars",
+      ["mp36", 1], ["bilevel", 3], ["bilevelCab", 1]);
     default: return null;
   }
 }
