@@ -97,6 +97,7 @@ const TYPES = {
   // Locomotives
   acs64: { name: "ACS-64 electric locomotive", kind: "electric", pan: true },
   alp46: { name: "ALP-46 electric locomotive", kind: "electric", pan: true },
+  alp45: { name: "ALP-45DP dual-mode locomotive", kind: "diesel", pan: true },
   acelaPower: { name: "Avelia Liberty power car", kind: "electric", pan: true, paint: "#e6eaee" },
   genesis: { name: "P42 Genesis locomotive", kind: "diesel" },
   p40: { name: "P40DC Genesis locomotive", kind: "diesel" },
@@ -104,6 +105,7 @@ const TYPES = {
   charger: { name: "Siemens Charger locomotive", kind: "diesel" },
   p32: { name: "P32AC-DM dual-mode locomotive", kind: "diesel" },
   f59: { name: "F59PHI locomotive", kind: "diesel" },
+  f59ph: { name: "F59PH diesel locomotive", kind: "diesel" },
   de30ac: { name: "DE30AC diesel locomotive", kind: "diesel" },
   dm30ac: { name: "DM30AC dual-mode locomotive", kind: "diesel" },
   mp36: { name: "MP36PH diesel locomotive", kind: "diesel" },
@@ -187,6 +189,8 @@ const TYPES = {
   galleryCab: { name: "Gallery cab car", kind: "bilevel", cab: true },
   multilevel: { name: "MultiLevel coach", kind: "bilevel" },
   multilevelCab: { name: "MultiLevel cab car", kind: "bilevel", cab: true },
+  crrcBilevel: { name: "CRRC bi-level coach", kind: "bilevel" },
+  crrcBilevelCab: { name: "CRRC bi-level cab car", kind: "bilevel", cab: true },
   // Other
   autorack: { name: "Auto carrier", kind: "autorack" },
 };
