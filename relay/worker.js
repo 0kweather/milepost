@@ -31,8 +31,14 @@ const FEEDS = {
     routes: ["550"],
   }),
   trirail: () => ({ url: "https://gtfsr.tri-rail.com/download.aspx?file=position_updates.pb" }),
+  marc: () => ({
+    url: "https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc-vp.pb",
+    also: ["https://mdotmta-gtfs-rt.s3.amazonaws.com/MARC+RT/marc-tu.pb"],
+  }),
   // NJ Transit: scraped from DepartureVision (below); no key needed.
   njt: () => ({ njtDv: true }),
+  // GO Transit: scraped from GO Tracker (below); no key needed.
+  go: () => ({ goTracker: true }),
 
   // Keyed feeds: set the secrets with `npx wrangler secret put NAME`.
   metra: (env) =>
@@ -160,6 +166,43 @@ function minutesUntil(text, now) {
 
 let njtMem = null; // { st, at, json }
 
+// ---------- GO Transit (GO Tracker) ----------
+// GO Tracker (gotracker.ca), GO's public live map, reads each line's trains
+// from a small web service as XML: GPS position, train number, line, delay,
+// first and last stations, equipment number. It answers only requests that
+// come from its map page, so the relay sends that page as the referrer.
+// One request per line, kept 15 seconds.
+const GO_LINES = ["01", "09", "21", "31", "61", "65", "71"]; // LW, LE, Milton, Kitchener, Richmond Hill, Barrie, Stouffville
+const GO_TRACKER = "https://www.gotracker.ca/GoTracker/web/GODataAPIProxy.svc/TripLocation/Service/Lang";
+let goMem = null; // { at, json }
+const xmlAttrs = (tag) => Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map(([, k, v]) => [k, v
+  .replace(/&#xD;&#xA;/g, " ").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")]));
+async function fetchGoTracker() {
+  const now = Date.now();
+  if (goMem && now - goMem.at < 15 * 1000) return goMem.json;
+  const pages = await Promise.allSettled(GO_LINES.map((line) => fetch(`${GO_TRACKER}/${line}/en`, {
+    headers: { "User-Agent": "Trainsheet relay (https://trainsheet.com)", Referer: "https://www.gotracker.ca/gotracker/web/GoMap.aspx" },
+  }).then((r) => (r.ok ? r.text() : Promise.reject(new Error(`GO Tracker HTTP ${r.status}`))))));
+  if (pages.every((p) => p.status === "rejected")) throw pages[0].reason;
+  const trains = [];
+  for (const p of pages) {
+    for (const [tag] of (p.value || "").matchAll(/<InServiceTripPublic\b[^>]*\/?>/g)) {
+      const a = xmlAttrs(tag);
+      if (a.IsEquipmentMove === "true" || !a.Latitude) continue;
+      trains.push({
+        trip: a.TripNumber, line: a.Corridor, lineCode: a.CorridorCode, lat: +a.Latitude, lon: +a.Longitude,
+        delaySec: +a.DelaySeconds || 0, from: a.StartStation, to: a.EndStation || a.Destination,
+        start: a.StartTime, end: a.EndTime, equipment: a.EquipmentCode || null,
+        atStation: (a.InStation || "").trim() || null, atStationId: a.InStationId || null,
+        moving: a.IsMoving === "true", express: a.Express === "true",
+        updated: a.ModifiedDate || null,
+      });
+    }
+  }
+  goMem = { at: now, json: { at: now, trains } };
+  return goMem.json;
+}
+
 // One station's departure board, for its tracks: a station's page asks for
 // it. Kept 30 seconds per station.
 const boardMem = new Map(); // code -> { at, json }
@@ -253,7 +296,9 @@ export default {
     const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
     try {
-      upstream = spec.njtDv ? await fetchNjtDv(ctx) : await fetch(spec.url, { headers });
+      upstream = spec.njtDv ? await fetchNjtDv(ctx)
+        : spec.goTracker ? Response.json(await fetchGoTracker())
+        : await fetch(spec.url, { headers });
     } catch (err) {
       return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
     }

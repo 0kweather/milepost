@@ -639,6 +639,12 @@ a { color: var(--accent); }
 }
 
 button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: none; }
+/* Links in lists (a station's trains, a train's stops) underline softly on hover. */
+button.dep:hover .what .title, button.dep:focus-visible .what .title {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
 .dep .when { display: flex; flex-direction: column; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .dep .when strong { font-size: var(--fs-md); font-weight: 700; }
 .dep .when span { font-size: var(--fs-xs); color: var(--muted); }
@@ -711,6 +717,10 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
 .consist .car:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .consist-strip.has-open .car:not([aria-pressed="true"]) { opacity: 0.4; }
 .consist-strip.has-open .car:not([aria-pressed="true"]):hover { opacity: 0.75; }
+/* Hovering a car previews the bar, fainter; the tapped car's is solid. */
+@media (hover: hover) {
+  .consist .car:hover::after { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+}
 .consist .car[aria-pressed="true"]::after { background: var(--accent); }
 .model-card {
   margin-top: var(--s2);
@@ -874,6 +884,14 @@ button.dep:hover, button.dep:focus-visible { background: var(--hover); outline: 
   border: 2px solid var(--faint);
 }
 
+/* Each stop opens its station. */
+.stops li.link { cursor: pointer; border-radius: var(--r-sm); }
+.stops li.link:hover > span:first-child, .stops li.link:focus-visible > span:first-child {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+.stops li.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .stops li.past { color: var(--faint); }
 .stops li.past::after { background: var(--faint); border-color: var(--faint); }
 .stops li.next { font-weight: 650; }

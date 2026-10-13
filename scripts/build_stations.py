@@ -42,6 +42,11 @@ GTFS = {
     "caltrain": ("https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip", rail, lambda r: "Caltrain"),
     "smart": ("https://data.trilliumtransit.com/gtfs/smart-ca-us/smart-ca-us.zip", rail, lambda r: "SMART"),
     "metrolink": (MDB.format("mdb-96"), lambda r: True, long_name),
+    "go": ("https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/GO-GTFS.zip", rail,
+           lambda r: long_name(r) + " line"),
+    # "PENN - WASHINGTON" -> "Penn Line"
+    "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", rail,
+             lambda r: long_name(r).split(" - ")[0].title() + " Line", lambda s: marc_station(s)),
 }
 
 
@@ -63,6 +68,22 @@ def official_code(stop):
         if value and re.fullmatch(r"[A-Za-z]{2,4}", value):
             return value.upper()
     return ""
+
+
+# MARC lists each station once per direction ("NEW CARROLLTON MARC nb" and
+# "... sb"), with no parent station. Both fold into one station, named in
+# plain words, whose id is that name as a slug ("new-carrollton").
+MARC_NAMES = {"Penn Station": "Baltimore Penn Station", "Union Station": "Washington Union Station",
+              "Camden Station": "Baltimore Camden Station", "Bwi Rail Station": "BWI Airport", "St Denis": "St. Denis",
+              "Brunswick Md": "Brunswick", "Harpers Ferry W Va": "Harpers Ferry", "Duffields W Va": "Duffields",
+              "Martinsburg W Va": "Martinsburg", "Point Of Rocks": "Point of Rocks"}
+
+
+def marc_station(name):
+    """(station id, name) for one of MARC's per-direction stops."""
+    base = re.sub(r"\s+MARC(\s+(nb|sb|eb|wb|Washington))?$", "", name.strip(), flags=re.I).title()
+    base = MARC_NAMES.get(base, base)
+    return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
 
 
 def weekday_trips(zf, trip_ids):
@@ -97,7 +118,9 @@ def access_of(stop, children):
     return None if not flags else 1 if "1" in flags else 0
 
 
-def gtfs_stations(url, keep, line_name):
+def gtfs_stations(url, keep, line_name, group=None):
+    """group(stop) -> (station id, name): folds stops into stations where a
+    feed has no parent stations (MARC)."""
     zf = zipfile.ZipFile(io.BytesIO(get(url)))
     agency_tz = next((a.get("agency_timezone") for a in rows(zf, "agency.txt")), None) or None
     routes = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
@@ -114,11 +137,17 @@ def gtfs_stations(url, keep, line_name):
         if line:
             s = stops.get(st["stop_id"])
             if s:
-                key = s.get("parent_station") or s["stop_id"]
+                key = group(s["stop_name"])[0] if group else s.get("parent_station") or s["stop_id"]
                 lines[key].add(line)
                 visits[key] += 1
                 if st["trip_id"] in today:
                     daily[key].add(st["trip_id"])
+    if group:  # each folded station takes its first stop's position and flags
+        for st in list(stops.values()):
+            key, name = group(st["stop_name"])
+            if key not in stops:
+                stops[key] = {**st, "stop_id": key, "stop_name": name}
+            children[key].append(st)
     out = []
     for sid, ls in lines.items():
         s = stops.get(sid)
@@ -207,9 +236,9 @@ def njt_departurevision():
 
 
 result = dict(intercity_stations())
-for agency, (url, keep, line_name) in GTFS.items():
+for agency, (url, keep, line_name, *group) in GTFS.items():
     try:
-        result[agency] = gtfs_stations(url, keep, line_name)
+        result[agency] = gtfs_stations(url, keep, line_name, *group)
         print(f"{agency}: {len(result[agency])} stations")
     except Exception as err:  # keep going; one broken feed shouldn't block the rest
         print(f"{agency}: FAILED {err}")

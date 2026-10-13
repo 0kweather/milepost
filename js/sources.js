@@ -19,6 +19,8 @@ export const AGENCIES = {
   lirr:       { name: "Long Island Rail Road", short: "LIRR",   region: "New York",            color: "#0b8a7e", kind: "commuter" },
   mnr:        { name: "Metro-North",         short: "Metro-North", region: "New York",         color: "#d7263d", kind: "commuter" },
   njt:        { name: "NJ Transit Rail",     short: "NJT",      region: "New Jersey",          color: "#f47b20", kind: "commuter" },
+  go:         { name: "GO Transit",          short: "GO",       region: "Toronto",             color: "#3f9c35", kind: "commuter" },
+  marc:       { name: "MARC Train",          short: "MARC",     region: "Maryland",            color: "#f58025", kind: "commuter" },
   septa:      { name: "SEPTA Regional Rail", short: "SEPTA",    region: "Philadelphia",        color: "#5b6e7f", kind: "commuter" },
   metra:      { name: "Metra",               short: "Metra",    region: "Chicago",             color: "#0096d6", kind: "commuter" },
   rtd:        { name: "RTD Commuter Rail",   short: "RTD",      region: "Denver",              color: "#2e9bd6", kind: "commuter" },
@@ -493,11 +495,93 @@ async function parseNjt(json) {
   return out;
 }
 
+// ---------- GO Transit (GO Tracker, through the relay) ----------
+
+// The relay scrapes GO Tracker: each train's GPS position, number, line,
+// delay, first and last stations and times, the station it's stopped at, and
+// an equipment number ({ at, trains: [{ trip, line, lineCode, lat, lon,
+// delaySec, from, to, start, end, equipment, atStation, atStationId, moving,
+// updated }] }). Its stops and their times come from GO's timetable
+// (data/go.json, scripts/build_go.py), shifted by the live delay.
+const GO_LINES = {
+  LW: ["Lakeshore West line", "#98002e"], LE: ["Lakeshore East line", "#ee3124"], MI: ["Milton line", "#f58220"],
+  KI: ["Kitchener line", "#00853f"], GT: ["Kitchener line", "#00853f"], BR: ["Barrie line", "#003767"],
+  RH: ["Richmond Hill line", "#0099c7"], ST: ["Stouffville line", "#794500"],
+};
+let goTimetable = null;
+const loadGo = () => (goTimetable ??= fetch("data/go.json?v=dev").then((r) => r.json()));
+const goSeen = new Map(); // train id -> [lat, lon, bearing], for its heading between refreshes
+const hhmm = (s) => (/^(\d{1,2}):(\d{2})$/.test(s || "") ? +s.slice(0, -3) * 60 + +s.slice(-2) : null);
+// The day `sec` falls on in Toronto (same clock as New York), as days since 1970.
+const torontoDay = (sec) => Math.floor((sec - nyMinutes(sec) * 60 + 43200) / 86400);
+
+async function parseGo(json) {
+  const tt = await loadGo();
+  const now = nowSec(), at = (json.at || Date.now()) / 1000;
+  const nowMin = nyMinutes(at);
+  const midnight = Math.round(at - nowMin * 60); // Toronto midnight today
+  const ttStart = Math.floor(Date.parse(`${tt.start}T12:00:00Z`) / 86400000);
+  // Eastern time's offset from UTC now, in minutes (-240 or -300).
+  const offset = Math.round(((nowMin - ((at / 60) % 1440)) + 2160) % 1440 - 720);
+  const out = [];
+  for (const g of json.trains || []) {
+    if (!valid(g.lat, g.lon)) continue;
+    const [route, routeColor] = GO_LINES[g.lineCode] || [g.line ? `${g.line} line` : null, null];
+    // A trip that starts hours "later" than now began yesterday, before midnight.
+    const start = hhmm(g.start), end = hhmm(g.end);
+    const day = start != null && start - nowMin > 360 ? midnight - 86400 : midnight;
+    const idx = torontoDay(day + 43200) - ttStart;
+    const runs = (mask) => idx >= 0 && idx < 14 ? (mask >> idx) & 1 : (mask >> (7 + (((idx - 7) % 7) + 7) % 7)) & 1;
+    const pats = tt.trips[g.trip] || [];
+    const ends = ([, s]) => s[0][1] % 1440 === start && s[s.length - 1][1] % 1440 === end;
+    const pat = (pats.find((p) => ends(p) && runs(p[0])) || pats.find(ends) || pats.find((p) => runs(p[0])) || [])[1] || [];
+    const delay = g.delaySec || 0;
+    // Its stops, with times shifted by the delay; the one it's at (or next
+    // reaches) is "next".
+    let next = g.atStationId ? pat.findIndex(([sid]) => sid === g.atStationId) : -1;
+    if (next < 0) next = pat.findIndex(([, m]) => day + m * 60 + delay > now - 30);
+    const stops = pat.filter(([sid]) => tt.stops[sid]).map(([sid, m], i) => ({
+      key: `go:${sid}`, name: tt.stops[sid][0], tz: "America/Toronto",
+      time: new Date((day + m * 60 + delay) * 1000).toISOString(),
+      scheduled: new Date((day + m * 60) * 1000).toISOString(),
+      status: next < 0 || i < next ? "past" : i === next ? "next" : "future",
+      here: i === next && Boolean(g.atStationId),
+    }));
+    const nextStop = next >= 0 ? stops[next] : null;
+    // Heading: from where it was at the last refresh; else toward its next
+    // stop, or (at or right by it) from that stop toward the one after.
+    const id = `go:${g.trip}`, prev = goSeen.get(id);
+    const km = (a, b) => Math.hypot((b[0] - a[0]) * 111, (b[1] - a[1]) * 111 * Math.cos((a[0] * Math.PI) / 180));
+    let bearing = prev?.[2] ?? null;
+    if (prev && km(prev, [g.lat, g.lon]) > 0.04) bearing = bearingBetween([prev[0], prev[1]], [g.lat, g.lon]);
+    else if (bearing == null && next >= 0) {
+      const here = [g.lat, g.lon], at = tt.stops[pat[next][0]].slice(1), after = pat[next + 1] && tt.stops[pat[next + 1][0]]?.slice(1);
+      bearing = km(here, at) < 0.5 && after ? bearingBetween(at, after) : bearingBetween(here, at);
+    }
+    goSeen.set(id, [g.lat, g.lon, bearing]);
+    const delayMin = delay / 60;
+    const updated = g.updated ? Date.parse(`${g.updated}Z`) - offset * 60000 : at * 1000;
+    out.push(train({
+      id, agency: "go", number: g.trip, route, routeColor,
+      lat: g.lat, lon: g.lon, bearing,
+      origin: stops[0]?.name || g.from || null,
+      destination: stops[stops.length - 1]?.name || g.to || null,
+      nextStop: nextStop?.name || null,
+      delayMin,
+      statusText: g.atStation ? `At ${g.atStation}` : delayText(delayMin),
+      updated: Math.min(updated || at * 1000, Date.now()),
+      cars: g.equipment ? { numbers: [g.equipment], complete: false } : null,
+      stops: stops.length ? stops : null,
+    }));
+  }
+  return out;
+}
+
 // ---------- Generic GTFS-realtime vehicle feeds ----------
 
 // Stop and trip lookups from the timetables of railroads whose realtime feeds
 // carry only IDs (scripts/build_trips.py).
-const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago" };
+const TIME_ZONES = { rtd: "America/Denver", capmetro: "America/Chicago", metra: "America/Chicago", marc: "America/New_York" };
 let tripsStatic = null;
 const loadTrips = () => (tripsStatic ??= fetch("data/trips.json?v=dev").then((r) => r.json()));
 
@@ -685,6 +769,23 @@ export const SOURCES = [
       // the relay appends.
       west: (await loadTrips()).metra,
     }),
+  },
+  {
+    // MDOT MTA's GTFS-realtime feeds: positions, plus predicted stop times
+    // the relay appends. Trip ids carry the train number ("Train454").
+    id: "marc", agencies: ["marc"], format: "pb", interval: 30, relay: true,
+    credit: { label: "MDOT MTA", href: "https://www.mta.maryland.gov/developer-resources" },
+    parse: async (buf) => gtfsVehicles("marc", buf, {
+      route: (v) => ({ 11704: "Brunswick Line", 11705: "Penn Line", 11706: "Camden Line" })[v.trip?.routeId] || "MARC",
+      number: (v) => (v.trip?.tripId || "").replace(/^Train\s*/i, "") || null,
+      west: (await loadTrips()).marc,
+    }),
+  },
+  {
+    // Scraped from GO Tracker by the relay; no key needed.
+    id: "go", agencies: ["go"], format: "json", interval: 20, relay: true,
+    credit: { label: "GO Tracker", href: "https://www.gotracker.ca/gotracker/web/" },
+    parse: parseGo,
   },
   {
     // Scraped from DepartureVision by the relay; no key needed.

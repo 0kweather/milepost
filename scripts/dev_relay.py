@@ -4,7 +4,7 @@
 
 then set window.TRAINSHEET_RELAY = "http://127.0.0.1:8787" in config.js.
 Keyed feeds read the same environment variables as the Worker's secrets
-(METRA_API_TOKEN, API_511_KEY, METROLINK_API_KEY). NJ Transit (scraped from DepartureVision) is Worker-only.
+(METRA_API_TOKEN, API_511_KEY, METROLINK_API_KEY). NJ Transit and GO Transit (scraped from their websites) are Worker-only.
 """
 import json, os, time, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

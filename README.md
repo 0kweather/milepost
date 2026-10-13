@@ -19,6 +19,7 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | Tri-Rail | South Florida | Tri-Rail GTFS-realtime | relay |
 | Metra | Chicago | Metra GTFS-realtime | relay + free key |
 | NJ Transit Rail | New Jersey | NJ Transit DepartureVision (scraped; positions estimated from predicted times) | relay |
+| GO Transit | Toronto | GO Tracker (scraped) plus GO's timetable (`scripts/build_go.py`) | relay |
 | Caltrain, SMART | Bay Area | 511 SF Bay | relay + free key |
 | Metrolink | Los Angeles | Metrolink GTFS-realtime | relay + free key |
 

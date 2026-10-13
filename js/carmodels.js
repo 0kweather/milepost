@@ -2088,6 +2088,17 @@ export const hsp46 = (c) => cabUnit(c, {
 // Plain agency paint for a diesel without a researched livery.
 const genericPaint = (c, sp) => rect(0, 0, sp.L, sp.sill + 1.0, "#2a2d31") + rect(0, sp.sill + 1.0, sp.L, 0.45, c.color || "#1f5fad");
 
+// The MPXpress carbody shared by the MP36PH-3C, MP40PH-3C and MP54AC.
+const MPX = {
+  roof: 15.5, sill: 4.55, rearR: 1.1,
+  nose: [[2.0, 4.55], ["q", 0.6, 4.9, 0.6, 6.4], ["q", 0.7, 8.4, 1.9, 9.1], [3.5, 10.1], [4.7, 12.6], ["q", 5.6, 15.5, 9.5, 15.5]],
+  glass: [[[4.0, 10.4], [4.95, 12.45], [6.1, 12.45], [6.1, 10.4]], [[6.3, 10.45], [6.3, 12.45], [8.5, 12.45], [8.5, 10.6]]],
+  sideWin: [[9.8, 10.2, 2.8, 1.7]],
+  doors: [[13.3, 1.9, 5.0, 12.9]],
+  tank: [33.1, 48.2, 1.5], reservoir: [21.9, 32.6],
+  trucks: { centers: 42.83, wb: 9.33, d: 40 }, horn: 10.6,
+};
+
 // --- MotivePower MP36PH-3C (Metra 401-427, Caltrain 923-928, UTA FrontRunner
 // 1-21, MBTA 010-011, MARC 10-35): 68 ft, 15 ft 6 in, Blomberg trucks 42 ft 10 in apart,
 // 9 ft 4 in wheelbase, 40 in wheels. A long, bulbous nose ahead of a raked
@@ -2102,16 +2113,10 @@ export const mp36 = (c) => cabUnit(c, {
   // breaking the band.
   badge: (c) => ({ metra: [{ x: 43.8, y: 7.0, h: 3.7, dark: true }, { x: 10.7, y: 7.5, h: 0.95 }], frontrunner: { x: 47, y: 9.3, h: 0.75 },
     marc: { x: 42.4, y: 7.8, h: 4.0 } })[c.agency],
-  roof: 15.5, sill: 4.55, rearR: 1.1,
-  nose: [[2.0, 4.55], ["q", 0.6, 4.9, 0.6, 6.4], ["q", 0.7, 8.4, 1.9, 9.1], [3.5, 10.1], [4.7, 12.6], ["q", 5.6, 15.5, 9.5, 15.5]],
-  glass: [[[4.0, 10.4], [4.95, 12.45], [6.1, 12.45], [6.1, 10.4]], [[6.3, 10.45], [6.3, 12.45], [8.5, 12.45], [8.5, 10.6]]],
-  sideWin: [[9.8, 10.2, 2.8, 1.7]],
-  doors: [[13.3, 1.9, 5.0, 12.9]],
+  ...MPX,
   grilles: [[9.0, 5.1, 3.2, 1.3, 0.25], [27.5, 12.4, 9.8, 1.6, 0.36], [37.8, 11.9, 8.4, 2.6, 0.38], [46.6, 11.9, 7.9, 2.6, 0.38], [54.7, 11.9, 11.5, 2.6, 0.38]],
   panels: [[8.6, 4.75, 4.0, 2.0], [29.3, 5.0, 5.9, 3.8], [53.5, 5.0, 6.6, 3.8]],
-  tank: [33.1, 48.2, 1.5], reservoir: [21.9, 32.6],
-  trucks: { centers: 42.83, wb: 9.33, d: 40 },
-  roofItems: [[33, 1.6, 0.6]], fans: [46.7, 51.1, 55.5, 59.9, 64.1], horn: 10.6,
+  roofItems: [[33, 1.6, 0.6]], fans: [46.7, 51.1, 55.5, 59.9, 64.1],
   paint: (c, sp) => {
     const L = sp.L;
     switch (c.agency) {
@@ -2176,6 +2181,71 @@ export const mp36 = (c) => cabUnit(c, {
       default: return genericPaint(c, sp);
     }
   },
+});
+
+// --- GO Transit (Metrolinx) MPXpress units, on the same carbody. GO's
+// current scheme (MP54ACs): white, the hood green from the roof down to
+// about 10 ft, its lower edge sweeping up over the back of the cab; a lime
+// band low along the side tapering away to the sill behind the cab door; a
+// white line at the sill; the logo big behind the cab and METROLINX small
+// toward the rear.
+const GO = { green: "#4f8c32", lime: "#8cc63f", skirt: "#383c42", teal: "#1f9a70", cream: "#f1eedc" };
+const goLetters = (c, x, y, h, text, fill, extra = "") =>
+  `<text transform="translate(${x} ${y}) scale(${c.mirrored ? -1 : 1} -1)" y="${(h * 0.36).toFixed(2)}" font-size="${h}" text-anchor="middle" font-weight="600" ` +
+  `font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="${fill}"${extra}>${text}</text>`;
+function goLocoPaint(c, sp) {
+  const L = sp.L;
+  let s = rect(0, 0, L, sp.roof + 1, "#eef0f2");
+  s += path(`M${L + 1} 10.1L40 10.1C30 10.1 23 10.5 19 11.8C16.6 12.6 15.2 13.8 14.4 16.6L${L + 1} 16.6Z`, GO.green);
+  s += path(`M${L + 1} 4.9L15.8 4.9C20.5 4.95 24 6.9 32 6.9L${L + 1} 6.9Z`, GO.lime);
+  return s;
+}
+
+// --- MotivePower MP54AC (GO 647, rebuilt from an MP40PH-3C, and 667-682,
+// 2017-2018): twin Cummins gensets in place of the EMD engine, cooled through
+// a row of raised hood modules behind the cab, each with a big mesh grille on
+// its sloped top edge over a louvered strip; radiator fans on the roof.
+const MP54_MODS = [17.0, 23.6, 30.2, 36.8, 43.0, 49.3, 55.4, 63.4, 67.0];
+export const mp54ac = (c) => cabUnit(c, {
+  ...MPX,
+  badge: { x: 20.0, y: 7.9, h: 2.45 },
+  grilles: [[9.0, 5.1, 3.2, 1.3, 0.25],
+    ...MP54_MODS.slice(0, -1).flatMap((a, i) => {
+      const b = MP54_MODS[i + 1], w = b - a - 0.8;
+      // The seventh module carries two grilles side by side.
+      const top = i === 6 ? [[a + 0.4, 13.65, w / 2 - 0.1, 1.45, 0.22], [a + 0.5 + w / 2, 13.65, w / 2 - 0.1, 1.45, 0.22]] : [[a + 0.4, 13.65, w, 1.45, 0.22]];
+      return [...top, [a + 0.5, 12.55, w - 0.2, 0.6, 0.28]];
+    })],
+  panels: [[8.6, 4.75, 4.0, 2.0], [27.0, 5.3, 3.6, 6.5], [45.9, 5.3, 3.3, 6.5], [54.4, 5.2, 6.4, 6.6]],
+  roofItems: [[19.5, 2.2, 0.35], [44.5, 1.8, 0.5]], fans: [26.9, 33.5, 39.9, 52.4, 59.4],
+  paint: goLocoPaint,
+  // Module outlines along the top of the hood.
+  extra: (c, sp) => lines([[MP54_MODS[0], 12.25, MP54_MODS.at(-1), 12.25], ...MP54_MODS.slice(0, -1).map((x) => [x, 12.25, x, sp.roof])], "rgba(0,0,0,0.3)", 0.5) +
+    goLetters(c, 58.4, 7.65, 0.5, "METROLINX", "#3d4247", ' letter-spacing="0.06"'),
+});
+
+// --- MotivePower MP40PH-3C (GO 600-666 except 647, 2007-2014): one EMD
+// 16-710 engine, so the MP36's hood: a dynamic-brake louver behind the cab,
+// a slatted intake panel, then three big radiator grilles on the sloped top
+// at the rear. Still in GO's previous scheme: green with a cream band along
+// the hood that sweeps down the cab side to the nose, the cab top and the
+// front of the nose cream (the white "V" seen from the front), the logo in
+// green on the band toward the rear and "Ontario" under the cab window.
+export const mp40ph = (c) => cabUnit(c, {
+  ...MPX,
+  badge: { x: 56.0, y: 8.45, h: 2.5, logo: "go-teal" },
+  grilles: [[9.0, 5.1, 3.2, 1.3, 0.25], [17.8, 13.5, 7.8, 0.9, 0.3], [17.8, 12.35, 7.8, 0.6, 0.3], [29.6, 11.9, 8.0, 2.6, 0.36],
+    [40.4, 13.4, 8.1, 1.8, 0.38], [48.9, 13.4, 8.1, 1.8, 0.38], [57.4, 13.4, 8.1, 1.8, 0.38], [40.4, 12.35, 25.1, 0.6, 0.3]],
+  panels: [[8.6, 4.75, 4.0, 2.0], [29.3, 5.0, 5.9, 3.8], [53.5, 5.0, 6.6, 3.8]],
+  roofItems: [[33, 1.6, 0.6]], fans: [46.7, 51.1, 55.5, 59.9, 64.1],
+  paint: (c, sp) => {
+    const L = sp.L;
+    let s = rect(0, 0, L, sp.roof + 1, GO.teal);
+    s += path(`M${L + 1} 10.0L21 10.0C16 10.0 8 7.2 4.4 4.55L9.2 4.55C12 6.0 16 6.9 21 6.9L${L + 1} 6.9Z`, GO.cream);
+    s += path("M-1 6.6L0.9 7.3L14.6 16.6L-1 16.6Z", GO.cream) + rect(0, 4.55, L, 0.3, GO.cream);
+    return s;
+  },
+  extra: (c) => goLetters(c, 9.6, 8.6, 0.85, "Ontario", "#ffffff", ' font-weight="500"'),
 });
 
 // --- EMD F125 "Spirit" (Metrolink 903-942): 69 ft, 14 ft 6.5 in, trucks

@@ -25,6 +25,7 @@ FEEDS = {
     "rtd": (MDB.format("mdb-178"), {"A", "113B", "113G", "117N"}),
     "capmetro": (MDB.format("mdb-150"), {"550"}),
     "metra": ("https://schedules.metrarail.com/gtfs/schedule.zip", None),
+    "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", None),
 }
 
 
@@ -35,6 +36,22 @@ def rows(zf, name):
             yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
 
 
+# MARC lists each station once per direction ("NEW CARROLLTON MARC nb" and
+# "... sb"), with no parent station. Both fold into one station, named in
+# plain words, whose id is that name as a slug ("new-carrollton").
+MARC_NAMES = {"Penn Station": "Baltimore Penn Station", "Union Station": "Washington Union Station",
+              "Camden Station": "Baltimore Camden Station", "Bwi Rail Station": "BWI Airport", "St Denis": "St. Denis",
+              "Brunswick Md": "Brunswick", "Harpers Ferry W Va": "Harpers Ferry", "Duffields W Va": "Duffields",
+              "Martinsburg W Va": "Martinsburg", "Point Of Rocks": "Point of Rocks"}
+
+
+def marc_station(name):
+    """(station id, name) for one of MARC's per-direction stops."""
+    base = re.sub(r"\s+MARC(\s+(nb|sb|eb|wb|Washington))?$", "", name.strip(), flags=re.I).title()
+    base = MARC_NAMES.get(base, base)
+    return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
+
+
 def headsign(h):
     # "550 Downtown Station SB" -> "Downtown Station"
     return re.sub(r"\s+(NB|SB|EB|WB)$", "", re.sub(r"^\d+\s+", "", h.strip()))
@@ -43,7 +60,9 @@ def headsign(h):
 def build(agency, url, routes):
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=120).read()))
-    trips = {r["trip_id"]: [r.get("trip_short_name") or "", headsign(r.get("trip_headsign") or "")]
+    # MARC's headsigns are bare city names in capitals ("BALTIMORE"); its
+    # trains' last stops name their destinations better.
+    trips = {r["trip_id"]: [r.get("trip_short_name") or "", "" if agency == "marc" else headsign(r.get("trip_headsign") or "")]
              for r in rows(zf, "trips.txt") if routes is None or r["route_id"] in routes}
     # Only the stops those trips use (a whole bus network's stops would be huge).
     used = None
@@ -60,7 +79,10 @@ def build(agency, url, routes):
         known = STATIONS.get(agency, set())
         station = parent if parent in known or sid not in known else sid
         p = raw.get(parent, r)
-        stops[sid] = [p["stop_name"].strip(), round(float(p["stop_lat"]), 5), round(float(p["stop_lon"]), 5), station]
+        name = p["stop_name"].strip()
+        if agency == "marc":  # per-direction stops fold into one station
+            station, name = marc_station(name)
+        stops[sid] = [name, round(float(p["stop_lat"]), 5), round(float(p["stop_lon"]), 5), station]
         # Some realtime feeds use stop codes instead of IDs.
         if r.get("stop_code") and r["stop_code"] not in stops:
             stops[r["stop_code"]] = stops[sid]

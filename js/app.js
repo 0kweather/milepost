@@ -53,7 +53,7 @@ const state = {
   // Leave out trains placed from timetables rather than GPS.
   hideEstimated: store.get("tt-hide-estimated", false),
   // While tracking a train, show only the tracked ones (and the selected one).
-  onlyTracked: store.get("tt-only-tracked", false),
+  onlyTracked: store.get("tt-only-tracked", true),
   // The car tapped in the selected train's drawing: { id (train), i (car),
   // page (its full model page instead of the train) }, or null.
   car: null,
@@ -914,6 +914,8 @@ async function start() {
   loadStations()
     .then((stations) => {
       state.stations = stations;
+      // Each stop key (as trains list them) to its station on the map.
+      state.stationOfKey = new Map([...stations.values()].flatMap((st) => [...st.keys].map((k) => [k, st.id])));
       // Optional: outlines for major terminals (scripts/build_footprints.py).
       fetch("data/footprints.json?v=dev")
         .then((r) => (r.ok ? r.json() : {}))
@@ -1231,7 +1233,10 @@ function renderDetail() {
         const late = lateMin > 1
           ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
           : "";
-        return `<li class="${s.status}"><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
+        // Each stop opens its station's page ("back" returns to this train).
+        const sid = s.key && state.stationOfKey?.get(s.key);
+        const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
+        return `<li class="${s.status}${sid ? " link" : ""}"${link}><span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -1846,10 +1851,15 @@ function selectStation(id, { fly = true } = {}) {
 
 function closeDetail() {
   clearInterval(predictionTimer);
-  const back = state.selected && state.returnTo;
+  const back = state.returnTo;
   state.returnTo = null;
   $("back-btn").lastChild.textContent = " All trains";
-  if (back && state.stations.has(back)) return selectStation(back, { fly: false });
+  // Back to the station a train was opened from, or the train a station was.
+  if (state.selected && typeof back === "string" && state.stations.has(back)) return selectStation(back, { fly: false });
+  if (state.station && back?.train && state.trains.has(back.train)) {
+    state.station = null;
+    return select(back.train, { fly: false });
+  }
   state.station = null;
   select(null);
 }
@@ -1987,10 +1997,21 @@ function openCar(fig) {
   renderDetail();
 }
 on("train-detail", "keydown", (e) => {
+  const stopLink = e.target.closest?.("[data-stop-station]");
+  if (stopLink && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return openStop(stopLink); }
   const fig = e.target.closest?.("[data-car]");
   if (fig && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openCar(fig); }
 });
+function openStop(li) {
+  const t = state.trains.get(state.selected);
+  selectStation(li.dataset.stopStation);
+  if (!t) return;
+  state.returnTo = { train: t.id }; // "back" from this station goes to the train
+  $("back-btn").lastChild.textContent = ` ${t.number ? `Train ${t.number}` : "Train"}`;
+}
 on("train-detail", "click", (e) => {
+  const stopLink = e.target.closest("[data-stop-station]");
+  if (stopLink) return openStop(stopLink);
   const view = e.target.closest("[data-station-view]");
   if (view) { state.stationView = view.dataset.stationView; return renderDetail(); }
   const fig = e.target.closest("[data-car]");
