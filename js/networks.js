@@ -10,7 +10,6 @@ const UNTRACKED = {
   texrail:    { name: "TEXRail",              color: "#7d2248" },
   alaska:     { name: "Alaska Railroad",      color: "#1b4f9c" },
   go:         { name: "GO Transit",           color: "#3d8b37" },
-  exo:        { name: "exo",                  color: "#0098a6" },
   wce:        { name: "West Coast Express",   color: "#7a1f5c" },
   commuter:   { name: "Commuter rail",        color: "#8d95a3" },
 };

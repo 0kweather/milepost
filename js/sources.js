@@ -19,6 +19,7 @@ export const AGENCIES = {
   lirr:       { name: "Long Island Rail Road", short: "LIRR",   region: "New York",            color: "#0b8a7e", kind: "commuter" },
   mnr:        { name: "Metro-North",         short: "Metro-North", region: "New York",         color: "#d7263d", kind: "commuter" },
   njt:        { name: "NJ Transit Rail",     short: "NJT",      region: "New Jersey",          color: "#f47b20", kind: "commuter" },
+  exo:        { name: "exo",                 short: "exo",      region: "Montréal",            color: "#0098a6", kind: "commuter" },
   go:         { name: "GO Transit",          short: "GO",       region: "Toronto",             color: "#3f9c35", kind: "commuter" },
   ctrail:     { name: "CT Rail",             short: "CT Rail",  region: "Connecticut",         color: "#9e1b32", kind: "commuter" },
   marc:       { name: "MARC Train",          short: "MARC",     region: "Maryland",            color: "#f58025", kind: "commuter" },
@@ -790,6 +791,35 @@ async function parseSouthShore(json) {
   });
 }
 
+// ---------- exo (its live map, through the relay) ----------
+
+// The relay reads exo.quebec's live map: each train's position and trip, and
+// its delay at the stops ahead ({ at, vehicles, tripUpdates }). Train
+// numbers, stops and times come from exo's timetable (data/schedules/exo.json).
+async function parseExo(json) {
+  const tt = await loadSchedule("exo");
+  const now = nowSec();
+  const updates = new Map((json.tripUpdates || []).map((u) => [u.TripId, u]));
+  const out = [];
+  for (const v of json.vehicles || []) {
+    const number = tt.ids?.[v.TripId];
+    if (!number || !valid(v.Latitude, v.Longitude)) continue;
+    const run = runNow(tt, number, now, 3 * 3600);
+    // The stops ahead and the delay at the next of them.
+    const ahead = (updates.get(v.TripId)?.StopTimeUpdates || []).slice().sort((a, b) => a.StopSequence - b.StopSequence);
+    const next = ahead[0];
+    const delay = Math.max(0, next?.ArrivalDelay ?? next?.DepartureDelay ?? 0);
+    // Arrived (nothing ahead, its last stop five minutes past): done.
+    if (!next && run && now > run.day + run.pat[run.pat.length - 1][1] * 60 + delay + 300) continue;
+    out.push(gpsRunTrain("exo", tt, number, run, {
+      lat: v.Latitude, lon: v.Longitude,
+      routeColor: tt.colors?.[run?.line] || null,
+      updated: Math.min((v.Timestamp || now) * 1000, Date.now()),
+    }, { delay, nextId: next ? tt.codes?.[next.Stop?.Code] : null, now }));
+  }
+  return out;
+}
+
 // ---------- SunRail (its website's train status) ----------
 
 // sunrail.com's train status: each train's position, number, speed, next
@@ -1085,6 +1115,12 @@ export const SOURCES = [
     id: "southshore", agencies: ["southshore"], format: "json", interval: 30, url: SOUTH_SHORE,
     credit: { label: "South Shore Line", href: "https://www.mysouthshoreline.com/" },
     parse: parseSouthShore,
+  },
+  {
+    // Read from exo.quebec's live map by the relay; no key needed.
+    id: "exo", agencies: ["exo"], format: "json", interval: 30, relay: true,
+    credit: { label: "exo", href: "https://exo.quebec/" },
+    parse: parseExo,
   },
   {
     // sunrail.com's train status, read directly.

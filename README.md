@@ -30,10 +30,11 @@ A live map of passenger trains across the United States: Amtrak and Brightline p
 | SunRail | Orlando | sunrail.com's train status, plus its timetable | direct |
 | Rail Runner Express | New Mexico | Timetable only (no live data published); positions estimated | direct |
 | ACE (Altamont Corridor Express) | Stockton–San Jose | 511 SF Bay GTFS-realtime | relay + free key |
+| exo | Montréal | exo.quebec's live map (scraped by the relay), plus exo's timetable | relay |
 
 "Relay" feeds don't send the CORS headers a browser needs, and keyed feeds can't put their key in a public web page, so both go through a tiny Cloudflare Worker (below). Without it, the site still shows everything in the first four rows.
 
-Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't shown. Not yet covered: exo, UP Express and West Coast Express (they need keys), Coaster and the A-train (a Swiftly key), Trinity Railway Express, TEXRail and DART's Silver Line (no public live data), WeGo Star and WES. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Amtrak's own Hartford Line and Valley Flyer trips) do show up.
+Northstar (Minneapolis) ended rail service; its route is now a bus, so it isn't shown. Not yet covered: UP Express and West Coast Express (they need keys), Coaster and the A-train (a Swiftly key), Trinity Railway Express, TEXRail and DART's Silver Line (no public live data), WeGo Star and WES. Their trains that Amtrak runs or that share Amtrak's feed (e.g., Amtrak's own Hartford Line and Valley Flyer trips) do show up.
 
 ## Using it
 
