@@ -163,6 +163,40 @@ function mdFlag(x, y, w) {
   return s;
 }
 
+// A smooth curve through points (Catmull-Rom, as cubic Béziers), as path
+// data starting with its first point.
+function smoothPath(pts) {
+  const f = (v) => Math.round(v * 100) / 100;
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += `C${f(p1[0] + (p2[0] - p0[0]) / 6)} ${f(p1[1] + (p2[1] - p0[1]) / 6)} ${f(p2[0] - (p3[0] - p1[0]) / 6)} ${f(p2[1] - (p3[1] - p1[1]) / 6)} ${f(p2[0])} ${f(p2[1])}`;
+  }
+  return d;
+}
+// A shape between two smooth edges, each given left to right: top, then
+// bottom (they may share their end points, for a tapering swoosh).
+const smoothBlob = (top, bottom, fill) => path(`${smoothPath(top)}L${smoothPath([...bottom].reverse()).slice(1)}Z`, fill);
+
+// VRE (Virginia Railway Express). VRE's developer terms forbid using its
+// logo without written permission, so none is drawn: no red diamond, and no
+// "VRE" or "VIRGINIA RAILWAY EXPRESS" lettering; only the paint and stripes.
+const VRE = { blue: "#2c4688", navy: "#202c5e", red: "#d3313d", silver: "#cdd0d5", orange: "#f26a21" };
+// Sounder (Sound Transit): white over a wave of aqua and sea green breaking
+// along the side, Sound Transit blue below.
+const SOUNDER = { white: "#eeede8", aqua: "#4cbfcf", teal: "#3d9597", blue: "#25509b" };
+// The wave: [x, top of the aqua, of the green, of the blue], left to right
+// past both ends; the blue runs down to the bottom.
+function sounderWave(L, pts) {
+  let s = rect(0, 0, L, 18, SOUNDER.white);
+  [SOUNDER.aqua, SOUNDER.teal, SOUNDER.blue].forEach((col, k) => {
+    s += path(`${smoothPath(pts.map((p) => [p[0], p[k + 1]]))}L${L + 2} -1L-2 -1Z`, col);
+  });
+  return s;
+}
+// New Mexico Rail Runner Express: light gray, red and yellow.
+const RR = { body: "#e1e4e8", red: "#c9202f", yellow: "#f5a81c" };
+
 // --- Siemens ACS-64: 66 ft 8 in over couplers, 12 ft 6 in to the roof,
 // trucks 9.9 m apart on 44 in wheels. A raked cab at each end; gray body,
 // blue roof sweeping down over the cab, red sill stripe.
@@ -849,9 +883,13 @@ const BOMB = {
   // FrontRunner: the name between the decks mid-car. Tri-Rail: its logo high
   // near one end. GO: the logo big on the white band, over the third lower
   // window. SunRail: its round emblem on the lower level between the B-end
-  // door and end windows.
+  // door and end windows. Sounder: the Sound Transit mark in white low in
+  // each end section, SOUNDER big under the lower windows. Rail Runner: its
+  // name over the A-end windows (the cab car's at the far end).
   badge: (c) => ({ metrolink: { x: 7.4, y: 11.1, h: 0.95, logo: "metrolink-teal" }, frontrunner: { x: 42.5, y: 9.8, h: 0.95 }, trirail: { x: 44, y: 9.2, h: 1.7, logo: "trirail-onnavy" },
-    go: { x: 41.8, y: 8.45, h: 2.3 }, sunrail: { x: 64.3, y: 6.0, h: 2.8 } })[c.agency],
+    go: { x: 41.8, y: 8.45, h: 2.3 }, sunrail: { x: 64.3, y: 6.0, h: 2.8 },
+    sounder: [{ x: 13.5, y: 5.9, h: 0.9, dark: true }, { x: 67, y: 5.9, h: 0.9, dark: true }, { x: 38.4, y: 3.2, h: 3.5, logo: "sounder-word" }],
+    railrunner: rrCarName(c.rrCab ? c.L - 12.1 : 12.1) })[c.agency],
   rows: [{ xs: seq(16.9, 5.55, 9), y: 11.6, w: 4.3, h: 2.3, r: 0.35 }, { xs: seq(27.6, 5.55, 4), y: 4.5, w: 4.3, h: 2.5, r: 0.35 },
     { xs: [1.4], y: 6.9, w: 3.9, h: 2.3, r: 0.3 }, { xs: [6.5], y: 6.9, w: 4.3, h: 2.3, r: 0.3 }, { xs: [11.7], y: 6.9, w: 2.9, h: 2.3, r: 0.3 },
     { xs: [68.6], y: 6.9, w: 3.1, h: 2.3, r: 0.3 }, { xs: [73.0], y: 6.9, w: 4.6, h: 2.3, r: 0.3 }, { xs: [79.0], y: 6.9, w: 3.4, h: 2.3, r: 0.3 }],
@@ -890,8 +928,50 @@ function metrolinkBand(L) {
   s += path(wave(8.3, 3.2, 0), "none", 0, 'stroke="#4fb3e2" stroke-width="0.45"') + path(wave(8.1, -2.6, 3), "none", 0, 'stroke="#9bd9e4" stroke-width="0.35"');
   return s;
 }
+// Sounder's BiLevels: the wave breaks twice in each end section and three
+// times along the middle, troughs between the doors and the end windows.
+const SOUNDER_BL_WAVE = [[-1, 9.6, 9.0, 7.5], [1.5, 10.9, 9.6, 7.9], [5, 11.7, 10.3, 8.9], [8, 10.9, 9.7, 8.6], [11, 9.6, 8.6, 7.8],
+  [14, 9.2, 7.8, 7.2], [17, 10.0, 8.8, 8.2], [20, 10.9, 10.0, 9.2], [23, 11.4, 10.6, 10.2], [26, 11.3, 10.3, 9.7], [29, 9.9, 9.1, 7.9],
+  [32.5, 9.4, 8.55, 7.7], [36.5, 10.0, 8.9, 8.4], [40, 10.85, 9.4, 8.9], [42.5, 11.0, 9.2, 7.6], [45.5, 9.5, 8.0, 7.0], [47.8, 8.5, 7.7, 7.0],
+  [50, 9.1, 8.3, 7.0], [53, 10.2, 9.6, 8.5], [56, 11.25, 10.3, 9.3], [58.5, 11.1, 10.2, 9.4], [60.5, 10.7, 9.7, 9.1], [63.5, 8.2, 7.4, 6.8],
+  [65.5, 8.2, 7.3, 6.8], [68, 9.0, 8.0, 7.2], [71, 10.3, 9.4, 8.8], [74, 11.1, 9.8, 9.0], [76.5, 10.6, 9.4, 8.4], [80, 8.9, 7.8, 7.1],
+  [83, 9.4, 8.2, 7.5], [87, 9.6, 8.4, 7.6]];
+// Rail Runner's BiLevels (coaches 1001-1013, cab cars 1101-1109): light
+// gray with red and yellow swooshes rising toward the B end like the
+// roadrunner's head and tail feathers. From the A end: a red band, lined in
+// yellow, climbs from the bottom over the lower windows and hooks back down
+// to a point by the B-end door; a thin red flame shoots up from it ahead of
+// the A-end door; a second red band over yellow rises from it along the
+// upper windows to a point over the B-end windows, under a red crest arcing
+// over the last upper windows; a red swoosh along the bottom at each end.
+// The cab cars carry it the other way round, the crest at the cab.
+function railRunnerPaint(c, g) {
+  let s = rect(0, 0, g.L, 18, RR.body);
+  // The bottom swooshes: a thin tail from the A end, a broad one at the B end.
+  s += smoothBlob([[9, 3.9], [14, 3.6], [18, 2.9], [23, 2.2], [30, 1.6]], [[9, 3.9], [14, 3.3], [18, 2.5], [23, 1.9], [30, 1.6]], RR.red);
+  s += path(`${smoothPath([[54, 1.2], [59, 2.0], [64, 3.4], [70, 4.6], [75, 5.1], [80, 5.0], [86, 4.5]])}L86 -1L54 -1Z`, RR.red);
+  // The lower band and its yellow lining, from the A end.
+  const lowRed = [[-1, 3.0], [4, 3.3], [8, 3.9], [12, 4.4], [16, 4.9], [20, 5.4], [24, 5.9], [30, 6.8], [36, 7.3], [44, 7.6], [50, 7.6], [54, 7.2], [58, 6.0], [62, 4.6]];
+  s += smoothBlob(lowRed, [[-1, 2.6], [4, 2.9], [8, 3.5], [12, 4.0], [16, 4.5], [20, 5.0], [24, 5.4], [30, 6.4], [36, 7.0], [44, 7.2],
+    [49, 6.7], [53, 5.9], [57, 5.0], [62, 4.6]], RR.yellow);
+  s += smoothBlob([[-1, 5.0], [4, 4.9], [8, 5.0], [12, 5.3], [16, 6.1], [20, 6.9], [24, 7.6], [30, 8.4], [38, 8.8], [46, 8.9], [52, 8.6], [56, 7.8], [59, 6.4], [62, 4.6]], lowRed, RR.red);
+  // The flame ahead of the A-end door.
+  s += smoothBlob([[4, 5.0], [9, 5.8], [13, 6.6], [17, 7.7], [21, 9.0], [24.5, 10.6]], [[4, 4.8], [9, 5.2], [13, 5.9], [17, 7.0], [21, 8.4], [24.5, 10.6]], RR.red);
+  // The upper band over its yellow, to a point over the B-end windows.
+  const upLow = [[18, 6.6], [24, 7.1], [30, 8.2], [36, 9.2], [40, 9.7], [48, 10.3], [56, 10.7], [62, 10.65], [68, 10.2], [72, 9.8], [76, 9.3], [80.5, 9.0]];
+  s += smoothBlob(upLow, [[18, 6.6], [24, 6.9], [30, 7.75], [36, 8.6], [40, 9.2], [48, 9.8], [56, 9.7], [62, 9.4], [66, 8.9], [70, 8.3], [74, 7.6], [78, 7.0], [80.5, 9.0]], RR.yellow);
+  s += smoothBlob([[18, 6.6], [24, 7.9], [30, 9.3], [36, 10.8], [40, 11.4], [50, 11.5], [60, 11.7], [68, 11.5], [72, 11.0], [76, 10.1], [80.5, 9.0]], upLow, RR.red);
+  // The crest arcing over the last upper windows.
+  s += smoothBlob([[44, 12.0], [50, 13.7], [55, 14.8], [60, 15.4], [65, 15.5], [69, 15.0], [72, 14.3], [74.5, 13.2], [76.5, 12.0]],
+    [[44, 12.0], [50, 12.9], [55, 13.8], [60, 14.2], [64, 14.2], [67, 13.6], [70, 12.8], [73, 12.3], [76.5, 12.0]], RR.red);
+  return c.rrCab ? `<g transform="matrix(-1 0 0 1 ${g.L} 0)">${s}</g>` : s;
+}
+// Rail Runner's name on its BiLevels, toward the A end over the end windows.
+const rrCarName = (x) => [{ x, y: 10.0, h: 0.6, logo: "rail-runner" }, { x: x - 3.6, y: 10.8, h: 0.28, logo: "new-mexico" }];
 function bombPaint(c, g) {
   if (c.agency === "trirail") return triRailPaint(c, g);
+  if (c.agency === "railrunner") return railRunnerPaint(c, g);
+  if (c.agency === "sounder") return sounderWave(g.L, SOUNDER_BL_WAVE);
   const L = g.L;
   let s = rect(0, 0, L, 17, "#eef0f2");
   switch (c.agency) {
@@ -918,9 +998,15 @@ export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : c.ag
 // Cab car: the mid-1990s full-width cab in the end section, a flat end with
 // two windows, the engineer's side window behind the corner in place of the
 // first end window.
-export const bombardierCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint, cabLen: 5,
+// Sounder's cab end: white stripes slanting across the blue below the
+// windows; Rail Runner's red and yellow; both seen edge-on as a ladder.
+const BOMB_CAB_STRIPES = { sounder: [SOUNDER.blue, "#f4f4f2"], railrunner: [RR.red, RR.yellow] };
+export const bombardierCab = (c) => bilevel(c.agency === "railrunner" ? { ...c, rrCab: true } : c, { ...BOMB, base: "#eef0f2", paint: bombPaint, cabLen: 5,
   cab: (c, { x0 }) => {
-    let s = rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
+    let s = "";
+    const st = BOMB_CAB_STRIPES[c.agency];
+    if (st) for (let k = 0; k < 5; k++) s += rect(x0, 4.3 + k * 0.5, 0.45, 0.5, st[k % 2]);
+    s += rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
     return s;
   } });
 
@@ -1225,8 +1311,33 @@ const galleryCab = (c, { x0 }) => {
   return s;
 };
 const galCabRows = [{ xs: GAL_L.slice(1).concat(GAL_R), y: 11.2, w: 4.4, h: 2.3, r: 0.45 }, GALLERY.rows[1]];
-export const gallery = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint });
-export const galleryCabCar = (c) => bilevel(c, { ...GALLERY, paint: galleryPaint, cab: galleryCab, rows: c.cabL ? galCabRows : GALLERY.rows });
+// VRE's Gallery IVs (Sumitomo/Nippon Sharyo; coaches 800-879, cab cars
+// 710-730): Metra's body, its windows column for column, but a wider pair of
+// doors (about 5 ft 7 in), a little left of the middle. Stainless; a dark
+// blue band between the decks from the door's left to well past it (VRE
+// letters its name on it, left off here: see VRE above), and at each end the
+// flag stripes, blue, white, blue, white and red, cut on a slant: inboard of
+// the end at the A end, out to the corner at the B end. No logo is drawn.
+const VRE_GAL = { ...GALLERY, badge: false, doors: [{ x: 39.6, w: 5.6, y0: 1.5, y1: 9.3, leaves: 2, glassY: 0.5, glassH: 0.35 }] };
+function vreFlag(a, b, slantRight) {
+  const top = 10.35, cut = 1.3 / 1.65;
+  let s = "";
+  for (const [y, h, col] of [[10.0, 0.35, VRE.navy], [9.7, 0.3, "#f4f5f7"], [9.3, 0.4, VRE.navy], [9.0, 0.3, "#f4f5f7"], [8.7, 0.3, VRE.red]]) {
+    const at = (yy) => (top - yy) * cut;
+    s += path(poly(slantRight ? [[a, y], [b - at(y), y], [b - at(y + h), y + h], [a, y + h]] : [[a + at(y), y], [b, y], [b, y + h], [a + at(y + h), y + h]]), col);
+  }
+  return s;
+}
+const vrePaint = (c, g) => galleryPaint(c, g) + rect(23.5, 9.55, 36.0, 1.1, VRE.navy) + vreFlag(2.0, 7.6, true) + vreFlag(78.4, g.L, false);
+// The cab end: orange and black stripes slanting across it, edge-on.
+const vreGalleryCab = (c, { x0 }) => {
+  let s = "";
+  for (let k = 0; k < 13; k++) s += rect(x0, 3.9 + k * 0.8, 0.42, 0.8, k % 2 ? "#1d1f22" : VRE.orange);
+  return s + win(x0 + 1.2, 11.9, 1.45, 1.8, 0.25) + win(x0 + 2.75, 11.9, 1.45, 1.8, 0.25);
+};
+export const gallery = (c) => bilevel(c, c.agency === "vre" ? { ...VRE_GAL, paint: vrePaint } : { ...GALLERY, paint: galleryPaint });
+export const galleryCabCar = (c) => bilevel(c, { ...(c.agency === "vre" ? { ...VRE_GAL, paint: vrePaint, cab: vreGalleryCab } : { ...GALLERY, paint: galleryPaint, cab: galleryCab }),
+  rows: c.cabL ? galCabRows : GALLERY.rows });
 // Highliner II (Metra Electric, Nippon Sharyo 2012-16): the gallery body
 // with motors, in married pairs. From the cab: the engineer's window and
 // three balcony windows over four lower ones, the blue panel between the
@@ -2381,7 +2492,10 @@ export const mp36 = (c) => cabUnit(c, {
   // units carry the T disc in their paint. MARC: the logo big on the hood,
   // breaking the band.
   badge: (c) => ({ metra: [{ x: 43.8, y: 7.0, h: 3.7, dark: true }, { x: 10.7, y: 7.5, h: 0.95 }], frontrunner: { x: 47, y: 9.3, h: 0.75 },
-    marc: { x: 42.4, y: 7.8, h: 4.0 } })[c.agency],
+    marc: { x: 42.4, y: 7.8, h: 4.0 },
+    // Rail Runner: its name spaced out along the hood behind the roadrunner,
+    // NEW MEXICO small over RAIL and EXPRESS under RUNNER. VRE: none (see VRE).
+    railrunner: [{ x: 47.5, y: 9.5, h: 1.2, logo: "rail-runner" }, { x: 40.4, y: 10.9, h: 0.42, logo: "new-mexico" }, { x: 52.7, y: 8.2, h: 0.4, logo: "rr-express" }] })[c.agency],
   ...MPX,
   grilles: [[9.0, 5.1, 3.2, 1.3, 0.25], [27.5, 12.4, 9.8, 1.6, 0.36], [37.8, 11.9, 8.4, 2.6, 0.38], [46.6, 11.9, 7.9, 2.6, 0.38], [54.7, 11.9, 11.5, 2.6, 0.38]],
   panels: [[8.6, 4.75, 4.0, 2.0], [29.3, 5.0, 5.9, 3.8], [53.5, 5.0, 6.6, 3.8]],
@@ -2447,10 +2561,49 @@ export const mp36 = (c) => cabUnit(c, {
         s += path("M10.5 9.0Q3.5 9.0 0.4 6.2L0.4 5.0Q3.5 7.5 10.5 7.5Z", MARC.blue) + path("M10.5 7.5Q3.5 7.5 0.4 5.0L0.4 4.4Q3.5 6.95 10.5 6.95Z", MARC.orange);
         return s + mdFlag(64.5, 10.9, 1.4);
       }
+      case "vre": {
+        // VRE (V50-V69): blue from the roof down to five stripes along the
+        // side, white, blue, white, blue and white over red, silver below;
+        // behind the cab the stripes step down about a foot, each slanting
+        // down a little ahead of the one above, and run on lower to the nose.
+        const jog = (y) => 44.2 + 2.0 * (10.5 - y);
+        const above = (y, col) => path(`M-1 17L${L + 1} 17L${L + 1} ${y}L${jog(y)} ${y}L${jog(y) - 1.6} ${y - 1.2}L-1 ${y - 1.2}Z`, col);
+        let s = rect(0, 0, L, sp.roof + 1, VRE.silver);
+        for (const [y, col] of [[8.33, VRE.red], [8.74, "#f4f5f7"], [9.0, VRE.blue], [9.48, "#f4f5f7"], [9.75, VRE.blue], [10.23, "#f4f5f7"], [10.5, VRE.blue]]) s += above(y, col);
+        return s + rect(0, 0, L, 4.85, "#26292d") + rect(0, 4.85, L, 0.14, "#eef0f2");
+      }
+      case "railrunner": return railRunnerLoco(c, sp);
       default: return genericPaint(c, sp);
     }
   },
+  extra: (c) => (c.agency === "railrunner" ? goLetters(c, 11.1, 8.0, 1.1, "NMRX", "#1d1f22", { weight: 500 }) : ""),
 });
+
+// --- Rail Runner's MP36PH-3Cs (101-109): light gray, black below the
+// sill. On the nose a red wing of feathers, two lined in yellow, sweeping
+// back from the headlights to points under the windshield. Along the hood
+// the roadrunner's head: a long yellow beak edged in red pointing ahead,
+// the eye, a crest of feathers spiking back toward the radiators, and the
+// neck sweeping down to the sill in red with two yellow stripes.
+function railRunnerLoco(c, sp) {
+  const L = sp.L;
+  let s = rect(0, 0, L, sp.roof + 1, RR.body);
+  // The nose wing.
+  s += path("M0.6 4.8Q2.4 8.6 7.4 10.15Q5.6 8.6 5.9 8.2Q6.3 7.6 7.1 7.4Q6.0 6.6 6.2 5.9Q6.4 5.2 6.9 4.8Z", RR.red);
+  s += path("M1.7 4.8Q3.6 7.6 7.0 8.25Q5.4 7.3 4.6 4.8Z", RR.yellow) + path("M3.4 4.8Q5.0 6.9 7.1 7.4Q5.8 6.3 5.6 4.8Z", RR.red);
+  s += path("M4.6 4.8Q5.7 5.6 6.9 4.8Z", RR.yellow);
+  // The neck, from the back of the head down to the sill, and its stripes.
+  s += path(`${smoothPath([[29.5, 4.8], [27.1, 6.2], [24.8, 7.6], [22.8, 8.9], [21.0, 10.6], [22.4, 12.7], [25.0, 14.3]])}` +
+    "L28.8 14.6L27.0 13.4L31.3 13.9L28.9 12.85L32.1 12.6L29.8 12.0L31.4 11.3" +
+    `L${smoothPath([[31.4, 11.3], [33.4, 10.5], [37.6, 8.4], [43.5, 6.3], [53, 4.8]]).slice(1)}Z`, RR.red);
+  s += smoothBlob([[24.4, 9.4], [27.5, 9.0], [33, 7.7], [38.5, 6.2], [44.2, 4.8]], [[24.4, 9.4], [26, 8.9], [30, 7.4], [35, 6.0], [39.6, 4.8]], RR.yellow);
+  s += smoothBlob([[25.3, 8.3], [27.5, 7.6], [31, 6.4], [36.6, 4.8]], [[25.3, 8.3], [26.8, 7.4], [30, 6.0], [33.6, 4.8]], RR.yellow);
+  // The beak: yellow, edged in red above and below.
+  s += path("M15.4 7.15Q18.6 9.3 21.6 10.9L23.1 8.85Q19.0 7.6 15.4 7.15Z", RR.red) + path("M16.0 7.35Q18.8 8.95 21.7 10.25L22.6 9.1Q19.0 8.0 16.0 7.35Z", RR.yellow);
+  // The eye.
+  s += path("M22.2 10.75Q24.2 12.15 26.4 11.3Q24.3 10.0 22.2 10.75Z", "#ffffff") + circle(24.2, 11.0, 0.55, "#1d1f22") + circle(24.25, 11.05, 0.17, "#4f7fb5");
+  return s + rect(0, 0, L, 4.85, "#1d1f22");
+}
 
 // --- GO Transit (Metrolinx) MPXpress units, on the same carbody. GO's
 // current scheme (MP54ACs): white, the hood green from the roof down to
@@ -2496,21 +2649,31 @@ export const mp54ac = (c) => cabUnit(c, {
 // the hood that sweeps down the cab side to the nose, the cab top and the
 // front of the nose cream (the white "V" seen from the front), the logo in
 // green on the band toward the rear and "Ontario" under the cab window.
+// Sounder's MP40PH-3Cs (921-923, 2013): white over Sound Transit blue, a
+// thin band of aqua over green around the nose under the windshield and
+// along the cab side, rising behind the cab into the wave breaking along the
+// hood; SOUNDER big on the blue mid-hood, the Sound Transit mark small under
+// the cab window.
+const SOUNDER_MP40_WAVE = [[-1, 10.15, 9.8, 9.45], [11.5, 10.15, 9.8, 9.45], [12.9, 10.7, 10.25, 9.8], [14.6, 12.2, 11.5, 10.6], [18, 8.6, 7.7, 6.8],
+  [22.5, 12.0, 11.0, 9.8], [27.5, 8.6, 7.6, 6.6], [32.5, 12.0, 11.0, 9.9], [38, 8.7, 7.7, 6.7], [43.5, 12.0, 11.0, 9.9], [49, 8.7, 7.7, 6.7],
+  [54.5, 11.8, 10.9, 9.8], [60, 8.8, 7.8, 6.8], [65, 11.4, 10.5, 9.4], [70, 10.0, 9.0, 8.0]];
 export const mp40ph = (c) => cabUnit(c, {
   ...MPX,
-  badge: { x: 56.0, y: 8.45, h: 2.5, logo: "go-teal" },
+  badge: (c) => (c.agency === "sounder" ? [{ x: 30.0, y: 6.5, h: 2.6, logo: "sounder-word" }, { x: 11.2, y: 8.4, h: 0.55, dark: true }]
+    : { x: 56.0, y: 8.45, h: 2.5, logo: "go-teal" }),
   grilles: [[9.0, 5.1, 3.2, 1.3, 0.25], [17.8, 13.5, 7.8, 0.9, 0.3], [17.8, 12.35, 7.8, 0.6, 0.3], [29.6, 11.9, 8.0, 2.6, 0.36],
     [40.4, 13.4, 8.1, 1.8, 0.38], [48.9, 13.4, 8.1, 1.8, 0.38], [57.4, 13.4, 8.1, 1.8, 0.38], [40.4, 12.35, 25.1, 0.6, 0.3]],
   panels: [[8.6, 4.75, 4.0, 2.0], [29.3, 5.0, 5.9, 3.8], [53.5, 5.0, 6.6, 3.8]],
   roofItems: [[33, 1.6, 0.6]], fans: [46.7, 51.1, 55.5, 59.9, 64.1],
   paint: (c, sp) => {
     const L = sp.L;
+    if (c.agency === "sounder") return sounderWave(L, SOUNDER_MP40_WAVE) + rect(0, 0, L, 4.85, "#1d1f22");
     let s = rect(0, 0, L, sp.roof + 1, GO.teal);
     s += path(`M${L + 1} 10.0L21 10.0C16 10.0 8 7.2 4.4 4.55L9.2 4.55C12 6.0 16 6.9 21 6.9L${L + 1} 6.9Z`, GO.cream);
     s += path("M-1 6.6L0.9 7.3L14.6 16.6L-1 16.6Z", GO.cream) + rect(0, 4.55, L, 0.3, GO.cream);
     return s;
   },
-  extra: (c) => goLetters(c, 9.6, 8.6, 0.85, "Ontario", "#ffffff", { weight: 500 }),
+  extra: (c) => (c.agency === "sounder" ? "" : goLetters(c, 9.6, 8.6, 0.85, "Ontario", "#ffffff", { weight: 500 })),
 });
 
 // --- EMD F125 "Spirit" (Metrolink 903-942): 69 ft, 14 ft 6.5 in, trucks
@@ -2640,9 +2803,19 @@ export const f40c = (c) => f40(c, { mbta: true });
 // trucks 35 ft 7 in apart on 40 in wheels. A rounded fiberglass cab: the nose
 // curves up into a steeply raked two-pane windshield, and the cab roof stands
 // a little above the body behind it.
+// Sounder's F59PHIs (901-911): white over Sound Transit blue, a thin band
+// of aqua over green from the nose along the cab, then the wave breaking
+// four times along the body; SOUNDER big on the blue mid-side, the Sound
+// Transit mark in white toward the rear; the fuel tank blue too.
+const SOUNDER_F59_WAVE = [[-1, 8.45, 8.15, 7.7], [11.5, 8.45, 8.15, 7.7], [14.4, 9.25, 8.8, 8.3], [17.0, 10.05, 9.6, 8.4], [19.5, 9.3, 8.8, 7.2],
+  [22.6, 7.7, 7.1, 5.9], [25.9, 10.3, 8.7, 6.8], [28.8, 9.7, 8.7, 8.0], [32.4, 8.65, 7.9, 7.0], [35.3, 9.7, 8.6, 7.6], [38.6, 10.65, 9.75, 8.9],
+  [41.7, 9.8, 8.7, 7.8], [45.3, 8.8, 7.65, 6.6], [48.9, 10.35, 9.4, 7.7], [51.8, 11.2, 9.9, 8.85], [54.7, 10.0, 8.6, 7.2], [57.4, 8.7, 7.6, 6.7],
+  [60, 8.7, 7.6, 6.7]];
 export const f59 = (c) => cabUnit(c, {
   // Piedmont's carry "North Carolina" in a big upright serif mid-side.
-  badge: (c) => (c.route === "Piedmont" ? { x: 37.0, y: 8.7, h: 1.6, logo: "north-carolina" } : { x: 38.5, y: 9.6, h: 1.3 }),
+  badge: (c) => (c.route === "Piedmont" ? { x: 37.0, y: 8.7, h: 1.6, logo: "north-carolina" }
+    : c.agency === "sounder" ? [{ x: 38.4, y: 6.7, h: 2.6, logo: "sounder-word" }, { x: 51.5, y: 6.7, h: 0.95, dark: true }]
+    : { x: 38.5, y: 9.6, h: 1.3 }),
   roof: 15.0, sill: 4.6, rearR: 0.9,
   nose: [[2.4, 4.6], ["q", 1.5, 4.9, 1.45, 6.4], ["q", 1.5, 8.6, 2.6, 10.0], [5.2, 14.4], ["q", 5.8, 15.55, 7.4, 15.55], [12.4, 15.55], ["q", 13.2, 15.55, 13.4, 15.0]],
   glass: [[[2.95, 10.45], [5.05, 14.0], [5.8, 14.0], [5.8, 10.45]]],
@@ -2653,8 +2826,14 @@ export const f59 = (c) => cabUnit(c, {
   tank: [17.5, c.L - 17, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
   trucks: { centers: 35.58, wb: 9.0, d: 40 },
   fans: [c.L - 12.8, c.L - 7.8, c.L - 3.4], horn: 9.0,
+  extra: (c, sp) => {
+    if (c.agency !== "sounder") return "";
+    const [t0, t1, tb] = sp.tank;
+    return path(poly([[t0, sp.sill], [t1, sp.sill], [t1, tb + 0.9], ["q", t1, tb, t1 - 0.9, tb], [t0 + 0.9, tb], ["q", t0, tb, t0, tb + 0.9]]), SOUNDER.blue);
+  },
   paint: (c, sp) => {
     const L = sp.L;
+    if (c.agency === "sounder") return sounderWave(L, SOUNDER_F59_WAVE);
     if (c.agency === "amtrak" && c.route === "Piedmont") {
       // Piedmont (NCDOT): silver; a blue cab and roof sweeping down in a
       // white-edged curve to the sill behind the cab; dark gray along the top

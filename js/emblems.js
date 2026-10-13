@@ -26,6 +26,9 @@ const LOGOS = {
   // SunRail: the round emblem, a train under palms and the sun over the
   // name on a black banner.
   southshore: [3.651, false], sunrail: [1.155, false],
+  // Sounder (Sound Transit): the "ST SoundTransit" mark, white on the blue.
+  // Sound Transit logo, Wikimedia Commons (public domain).
+  sounder: [6.58, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   // Caltrans' mark and name (Charger and Venture sides); the San Joaquins
@@ -54,6 +57,20 @@ const LETTERING = {
     font: 'font-family="Eurostile, Microgramma, Bank Gothic, Arial Black, Helvetica Neue, sans-serif" font-weight="800" letter-spacing="0.04em"' },
   "nictd-orange": { text: "NICTD", aspect: 3.5, color: "#e8661f",
     font: 'font-family="Eurostile, Microgramma, Bank Gothic, Arial Black, Helvetica Neue, sans-serif" font-weight="800" letter-spacing="0.04em"' },
+  // Sounder: "SOUNDER" big in tall, condensed cream capitals edged in dark
+  // blue, low on the side. fit: set exactly aspect x h wide, by stretching
+  // the letters ("spacingAndGlyphs") or only the gaps between them ("spacing").
+  "sounder-word": { text: "SOUNDER", aspect: 3.6, color: "#f3f0e4", fit: "spacingAndGlyphs",
+    font: 'font-family="Arial Narrow, Helvetica Neue, Arial, sans-serif" font-weight="700" stroke="#1d2f5e" stroke-width="0.12" paint-order="stroke"' },
+  // New Mexico Rail Runner Express has no logo file on Commons: its name in
+  // widely spaced serif capitals, as lettered on the cars, with "NEW MEXICO"
+  // small above and "EXPRESS" small below.
+  "rail-runner": { text: "RAIL RUNNER", aspect: 19, color: "#5e3237", fit: "spacing",
+    font: 'font-family="Trajan Pro, Palatino, Georgia, Times New Roman, serif"' },
+  "new-mexico": { text: "NEW MEXICO", aspect: 13, color: "#5e3237", fit: "spacing",
+    font: 'font-family="Trajan Pro, Palatino, Georgia, Times New Roman, serif"' },
+  "rr-express": { text: "EXPRESS", aspect: 9, color: "#5e3237", fit: "spacing",
+    font: 'font-family="Trajan Pro, Palatino, Georgia, Times New Roman, serif"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 
@@ -61,7 +78,8 @@ const n = (v) => Math.round(v * 1000) / 1000;
 function image(key, x, y, h, dark) {
   if (LETTERING[key]) {
     const l = LETTERING[key];
-    return `<text x="${n(x)}" y="${n(y + h * 0.32)}" font-size="${n(h)}" fill="${dark ? "#ffffff" : l.color}" text-anchor="middle" ${l.font}>${l.text}</text>`;
+    const fit = l.fit ? ` textLength="${n(l.aspect * h)}" lengthAdjust="${l.fit}"` : "";
+    return `<text x="${n(x)}" y="${n(y + h * 0.32)}" font-size="${n(h)}" fill="${dark ? "#ffffff" : l.color}" text-anchor="middle"${fit} ${l.font}>${l.text}</text>`;
   }
   if (!LOGOS[key]) return "";
   const [aspect, white] = LOGOS[key];
