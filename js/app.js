@@ -1225,8 +1225,15 @@ function renderDetail() {
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
     t.estimated ? `Estimated · ${fmtAgo(t.updated)}` : `<span class="signal" title="Last GPS report">${SIGNAL_ICON}${fmtAgo(t.updated)}</span>`,
   ].filter(Boolean);
+  // Tracking to a stop: the line from the train to it is drawn in the line's
+  // color, and the stops after it are greyed out.
+  const rec = state.tracked.find((r) => r.id === t.id);
+  const ahead = t.stops?.findIndex((s) => s.status !== "past") ?? -1;
+  const dest = !rec || !t.stops ? -1 : rec.stopKey ? t.stops.findIndex((s) => s.key === rec.stopKey) : t.stops.length - 1;
+  const leg = (i) => dest < 0 || ahead < 0 ? ""
+    : i === dest ? " dest" : i > dest ? " beyond" : i >= ahead ? " ride" : i === ahead - 1 ? " ride-from" : "";
   const stops = t.stops?.length
-    ? `<h3 class="section-title">Stops</h3><div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s) => {
+    ? `<h3 class="section-title">Stops</h3>${ahead >= 0 && !rec ? '<p class="stops-hint">Tap a stop’s circle to track the train until there.</p>' : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
         const late = lateMin > 1
           ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
@@ -1234,7 +1241,7 @@ function renderDetail() {
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
-        return `<li class="${s.status}${sid ? " link" : ""}"${link}><span>${esc(s.name)}</span><span class="stop-end"><span class="time">${fmtTime(s.time, s.tz)}${late}</span>${trackToButton(t, s)}</span></li>`;
+        return `<li class="${s.status}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -1583,14 +1590,13 @@ function trackButton(t) {
   return `<button class="btn primary small" data-track="${esc(t.id)}">Track this train</button>`;
 }
 
-// A pin beside each stop still ahead: tracks the train until it gets there
-// (filled on the stop it's tracked to; tapping that one stops tracking).
-const PIN_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 14.6s-4.6-4.3-4.6-7.9a4.6 4.6 0 0 1 9.2 0c0 3.6-4.6 7.9-4.6 7.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="6.7" r="1.7" stroke="currentColor" stroke-width="1.3" style="fill:var(--pin-dot)"/></svg>`;
-function trackToButton(t, s) {
-  if (s.status === "past" || !s.key) return '<span class="track-to" aria-hidden="true"></span>';
-  const on = state.tracked.find((r) => r.id === t.id)?.stopKey === s.key;
-  const label = on ? `Stop tracking to ${s.name}` : `Track until ${s.name}`;
-  return `<button type="button" class="track-to${on ? " on" : ""}" data-track-to="${esc(s.key)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${PIN_ICON}</button>`;
+// Each stop's circle on the stop list. On a stop still ahead it's a button
+// that tracks the train until there; on the stop it's tracked to, tapping
+// it again stops tracking.
+function stopDot(s, isDest) {
+  if (s.status === "past" || !s.key) return '<span class="stop-dot" aria-hidden="true"></span>';
+  const label = isDest ? `Stop tracking to ${s.name}` : `Track until ${s.name}`;
+  return `<button type="button" class="stop-dot" data-track-to="${esc(s.key)}" aria-pressed="${isDest}" aria-label="${esc(label)}" title="${esc(label)}"></button>`;
 }
 
 function trackTo(t, key) {

@@ -272,29 +272,6 @@ a { color: var(--accent); }
 
 .tracking-note { font-size: var(--fs-sm); font-weight: 600; color: var(--good); }
 
-/* The pin beside each upcoming stop: track the train until there. */
-.stops .stop-end { display: flex; align-items: center; gap: var(--s1); flex: none; }
-.track-to {
-  --pin-dot: transparent;
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  margin: -4px -4px -4px 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--faint);
-  fill: none;
-  cursor: pointer;
-}
-.track-to:hover, .track-to:focus-visible { color: var(--text); background: var(--hover); }
-.track-to:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.track-to.on { color: var(--line-color, var(--accent)); fill: currentColor; --pin-dot: var(--panel-solid); }
-span.track-to { cursor: default; }
-
 /* ---------- Service notices ---------- */
 
 .notices { flex: none; }
@@ -872,17 +849,43 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .stops li:first-child::before { top: 50%; }
 .stops li:last-child::before { bottom: 50%; }
 
-.stops li::after {
+/* The stop's circle; on stops still ahead, a button: tap to track the
+   train until there. The button is bigger than the circle, for fingers. */
+.stop-dot {
+  position: absolute;
+  left: -5px;
+  top: calc(50% - 11px);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  z-index: 1;
+}
+.stop-dot::before {
   content: "";
   position: absolute;
-  left: 1px;
-  top: calc(50% - 5px);
+  left: 6px;
+  top: 6px;
   width: 10px;
   height: 10px;
+  box-sizing: border-box;
   border-radius: 50%;
   background: var(--panel-solid);
   border: 2px solid var(--faint);
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
+button.stop-dot { cursor: pointer; }
+button.stop-dot:hover::before, button.stop-dot:focus-visible::before {
+  transform: scale(1.5);
+  border-color: var(--line-color, var(--accent));
+  background: color-mix(in srgb, var(--line-color, var(--accent)) 22%, var(--panel-solid));
+}
+button.stop-dot:active::before { transform: scale(1.2); }
+button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.stops-hint { margin: 2px 0 0; font-size: var(--fs-xs); color: var(--muted); }
 
 /* Each stop opens its station. */
 .stops li.link { cursor: pointer; border-radius: var(--r-sm); }
@@ -893,11 +896,37 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 }
 .stops li.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .stops li.past { color: var(--faint); }
-.stops li.past::after { background: var(--faint); border-color: var(--faint); }
+.stops li.past .stop-dot::before { background: var(--faint); border-color: var(--faint); }
 .stops li.next { font-weight: 650; }
-.stops li.next::after { border-color: var(--line-color, var(--accent)); background: var(--line-color, var(--accent)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--line-color, var(--accent)) 25%, transparent); }
+.stops li.next .stop-dot::before { border-color: var(--line-color, var(--accent)); background: var(--line-color, var(--accent)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--line-color, var(--accent)) 25%, transparent); }
 .stops .time { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .stops .time .late { color: var(--warn); }
+
+/* Tracking to a stop: the line from the train to it is drawn in the line's
+   color and the stops after it are greyed out. */
+.stops li.ride::before { left: 4.5px; width: 3px; background: var(--line-color, var(--accent)); }
+.stops li.ride-from::before, .stops li.dest::before {
+  left: 4.5px; width: 3px;
+  background: linear-gradient(var(--line), var(--line)) center top / 2px 50% no-repeat,
+    linear-gradient(var(--line-color, var(--accent)), var(--line-color, var(--accent))) center bottom / 3px 50% no-repeat;
+}
+.stops li.dest::before {
+  background: linear-gradient(var(--line-color, var(--accent)), var(--line-color, var(--accent))) center top / 3px 50% no-repeat,
+    linear-gradient(var(--line), var(--line)) center bottom / 2px 50% no-repeat;
+}
+/* Where the line is only half a row long already (first and last stops). */
+.stops li.ride-from:first-child::before, .stops li.dest:last-child::before { background: var(--line-color, var(--accent)); }
+.stops li.dest:first-child::before { left: 5px; width: 2px; background: var(--line); }
+.stops li.dest { font-weight: 650; }
+.stops li.dest .stop-dot::before {
+  transform: scale(1.4);
+  border: 3px solid var(--line-color, var(--accent));
+  background: var(--panel-solid);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--line-color, var(--accent)) 28%, transparent);
+}
+.stops li.dest button.stop-dot:hover::before { transform: scale(1.55); }
+.stops li.beyond, .stops li.beyond .time, .stops li.beyond .time .late { color: var(--faint); }
+.stops li.beyond .stop-dot::before { border-color: var(--line); }
 
 .section-title {
   flex: none;
