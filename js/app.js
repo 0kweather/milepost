@@ -1885,7 +1885,14 @@ const RAIL_LAYERS = ["tt-rail-0", "tt-rail-1", "tt-rail-2"];
 map.on("mousemove", (e) => {
   if (!canHover || !map.getLayer("tt-rail-0")) return;
   const box = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
-  if (map.queryRenderedFeatures(box, { layers: ["tt-trains", ...STATION_LAYERS].filter((l) => map.getLayer(l)) }).length) return;
+  // A train or station under the pointer (or its callout) wins over the track.
+  const over = ["tt-trains", ...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l));
+  const near = [[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]];
+  if (hoverStation || map.queryRenderedFeatures(near, { layers: over }).length) {
+    if (popup._railHover) popup.remove();
+    popup._railHover = false;
+    return;
+  }
   const rail = map.queryRenderedFeatures(box, { layers: RAIL_LAYERS })[0];
   if (!rail) {
     if (popup._railHover) popup.remove();
@@ -1915,6 +1922,7 @@ function applyStationCallouts() {
 function hoverStationTo(id) {
   if (id === hoverStation) return;
   hoverStation = id;
+  if (id && popup._railHover) { popup.remove(); popup._railHover = false; } // the track's popup gives way
   applyStationCallouts();
 }
 
