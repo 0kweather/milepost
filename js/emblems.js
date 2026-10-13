@@ -16,7 +16,7 @@ const LOGOS = {
   njt: [4.44, true], "njt-word": [4.98, true], septa: [1, true], "septa-word": [3.98, false], "septa-mark-white": [1.384, false],
   "mta-inverse": [0.91, false], metra: [3.68, true], caltrain: [1.77, false],
   metrolink: [7.75, true], "metrolink-teal": [7.75, false], rtd: [2.2, true], capmetro: [4.14, true], trirail: [4.4, false], "trirail-onnavy": [4.4, false],
-  smart: [3.31, false], frontrunner: [12.85, true],
+  smart: [3.31, false], frontrunner: [12.85, true], marc: [3.85, true],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   // Caltrans' mark and name (Charger and Venture sides); the San Joaquins

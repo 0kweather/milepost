@@ -34,6 +34,12 @@ const FLEETS = {
     [1500, 1533, "singleCab"], [1600, 1652, "single"],
     [200, 258, "single"], [350, 389, "single"], [500, 542, "single"], [600, 653, "single"],
   ],
+  // MARC's single-level MARC II cars, GP39s and HHP-8s have no drawing yet.
+  marc: [
+    [10, 35, "mp36"], [80, 87, "charger"],
+    [7800, 7834, "bilevel"], [7845, 7858, "bilevelCab"], [7870, 7876, "bilevel"], [7890, 7896, "bilevel"],
+    [8000, 8034, "multilevel"], [8045, 8059, "multilevelCab"], [8090, 8094, "multilevel"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -250,6 +256,19 @@ function typicalFor(t, reported) {
       return single
         ? set("Diesel locomotive with single-level coaches", [loco, 1], ["single", 5], ["singleCab", 1])
         : set("Diesel locomotive with bi-level coaches", [loco, 1], ["bilevel", 5], [reported === "kawasakiCab" ? "kawasakiCab" : "rotemCab", 1]);
+    }
+    case "marc": {
+      // Penn Line: mostly SC-44 Chargers (some HHP-8 electrics), its rush-hour
+      // trains mostly Kawasaki bi-levels, MultiLevels at other times. Camden
+      // and Brunswick: MP36s (Chargers too on the Brunswick) with MultiLevels.
+      const route = t.route || "";
+      const loco = ["mp36", "charger"].includes(reported) ? reported : /Penn/i.test(route) ? "charger" : "mp36";
+      const kawasaki = ["bilevel", "bilevelCab"].includes(reported) || (/Penn/i.test(route) && !["multilevel", "multilevelCab"].includes(reported));
+      const name = loco === "charger" ? "SC-44 Charger" : "MP36PH";
+      if (kawasaki) return set(`${name} locomotive with Kawasaki bi-levels (MultiLevels on some trains)`, [loco, 1], ["bilevel", 5], ["bilevelCab", 1]);
+      return /Camden/i.test(route)
+        ? set(`${name} locomotive with MultiLevel coaches (or Kawasaki bi-levels)`, [loco, 1], ["multilevel", 3], ["multilevelCab", 1])
+        : set(`${name} locomotive with MultiLevel coaches`, [loco, 1], ["multilevel", 4], ["multilevelCab", 1]);
     }
     case "septa": return set("Silverliner IV or V cars, usually 2 to 6", ["silverliner4", 4]);
     case "njt": return set("Electric or dual-mode locomotive with MultiLevel coaches", ["alp46", 1], ["multilevel", 5], ["multilevelCab", 1]);

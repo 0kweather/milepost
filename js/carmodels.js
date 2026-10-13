@@ -102,6 +102,26 @@ const AMTRAK = {
 const MBTA = { purple: "#80276c", yellow: "#f2c230", silver: "#c8ccd1", roof: "#4f545a", black: "#1d1f22" };
 const LIRR = { blue: "#1c3f94", yellow: "#f5c400" };
 const MNR_BLUE = "#2352b0";
+// MARC: a blue band over an orange stripe on silver or stainless; the
+// Chargers' blue is a deeper indigo.
+const MARC = { blue: "#2b4fae", indigo: "#363c8e", orange: "#f26f21", silver: "#c4c8cd" };
+// The Maryland flag MARC carries high on its equipment, w feet wide, centered
+// at (x, y): Calvert quarters (gold and black pales) and Crossland quarters
+// (red and white), too small to show the crosses.
+function mdFlag(x, y, w) {
+  const h = (w * 2) / 3, qw = w / 2, qh = h / 2, x0 = x - qw, y0 = y - qh;
+  let s = "";
+  for (const [qx, qy, calvert] of [[0, 1, true], [1, 1, false], [0, 0, false], [1, 0, true]]) {
+    const ax = x0 + qx * qw, ay = y0 + qy * qh;
+    if (calvert) {
+      s += rect(ax, ay, qw, qh, "#f2b51c");
+      for (let k = 1; k < 6; k += 2) s += rect(ax + (k * qw) / 6, ay, qw / 6, qh, "#1d1f22");
+    } else {
+      s += rect(ax, ay, qw, qh, "#ffffff") + rect(ax, ay + qh / 2, qw / 2, qh / 2, "#c8102e") + rect(ax + qw / 2, ay, qw / 2, qh / 2, "#c8102e");
+    }
+  }
+  return s;
+}
 
 // --- Siemens ACS-64: 66 ft 8 in over couplers, 12 ft 6 in to the roof,
 // trucks 9.9 m apart on 44 in wheels. A raked cab at each end; gray body,
@@ -366,12 +386,12 @@ export function charger(c, { phase7 = false } = {}) {
       [2.65, 9.35], [2.15, 9.1], [1.75, 6.0], [1.55, 5.0]]);
   const amtrak = c.agency === "amtrak", route = c.route || "";
   // Amtrak's state-supported routes keep their sponsors' liveries.
-  const scheme = cone ? "brightline" : c.agency === "via" ? "via" : c.agency === "mnr" ? "mnr" : !amtrak ? "plain"
+  const scheme = cone ? "brightline" : c.agency === "via" ? "via" : c.agency === "mnr" ? "mnr" : c.agency === "marc" ? "marc" : !amtrak ? "plain"
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
     : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
   const base = { phase7: AMTRAK.navy, brightline: "#d9dde2", via: "#585c61", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
-    cascades: "#1d4a45" }[scheme] || c.color;
+    cascades: "#1d4a45", marc: MARC.silver }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
   let s = "";
@@ -404,6 +424,17 @@ export function charger(c, { phase7 = false } = {}) {
       liv += path(poly([[18.2, sill], [19.0, sill], [22.3, 5.55], [L, 5.55], [L, 6.05], [21.9, 6.05]]), AMTRAK.red);
       liv += rect(0, sill, L, 0.2, "#1d1f22") + rect(0, sill + 0.2, L, 0.12, "#f4f5f6");
       break;
+    case "marc": {
+      // MARC (SC-44, 80-87): silver over a dark gray skirt edged in white; an
+      // indigo band over an orange stripe along the side, sweeping down the
+      // nose ahead of the cab, broken by the big louver, the logo and the
+      // grilles behind it; the roof dark behind the silver cab cap.
+      const band = (x0, x1) => rect(x0, 8.2, x1 - x0, 1.35, MARC.indigo) + rect(x0, 7.55, x1 - x0, 0.65, MARC.orange);
+      liv += rect(0, 0, L, 5.7, "#5b5f64") + rect(0, 5.7, L, 0.2, "#f4f5f6") + rect(16.5, 13.85, L, 1.5, "#33384a");
+      liv += band(9.0, 29.0) + band(58.0, L);
+      liv += path("M9.2 9.55Q6.0 9.55 2.3 5.9L4.1 5.9Q6.6 8.2 9.2 8.2Z", MARC.indigo) + path("M9.2 8.2Q6.6 8.2 4.1 5.9L5.6 5.9Q7.0 7.55 9.2 7.55Z", MARC.orange);
+      break;
+    }
     case "phase7": {
       // The lighter blue behind the swoosh; light gray roof over a white
       // roof-edge line; a red sill band under a thin white line.
@@ -495,7 +526,7 @@ export function charger(c, { phase7 = false } = {}) {
   // SC-44 (flanked by white and red on Phase VII); the state-supported
   // liveries show the wraparound windshield only, with a narrow cab side
   // window in the body color behind it.
-  const wide = !["midwest", "california", "surfliner", "cascades"].includes(scheme);
+  const wide = !["midwest", "california", "surfliner", "cascades", "marc"].includes(scheme);
   if (phase7 && !via && !cone) {
     liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
     liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
@@ -546,7 +577,8 @@ export function charger(c, { phase7 = false } = {}) {
   // Metro-North: the white MTA disc on the blue behind the cab door. Midwest:
   // "Amtrak Midwest" mid-side; northern California: Caltrans' mark and name;
   // Surfliner: "Pacific Surfliner" on the gray panel; Cascades: its logo on
-  // the cream.
+  // the cream. MARC: the big logo low on the silver between the louver and
+  // the grilles, the Maryland flag high at the rear.
   const mark = {
     phase7: { x: 20.5, y: 8.2, h: 3.9, dark: true, logo: "amtrak-stack" },
     brightline: { x: 35.5, y: 9.6, h: 3.0 },
@@ -556,9 +588,11 @@ export function charger(c, { phase7 = false } = {}) {
     california: { x: 41, y: 9.9, h: 1.8, logo: "caltrans" },
     surfliner: { x: 42, y: 9.3, h: 1.9, logo: "surfliner" },
     cascades: { x: 33, y: 9.4, h: 3.6, logo: "cascades-dark" },
+    marc: { x: 41.0, y: 8.1, h: 3.55 },
   }[scheme] || { x: 40, y: 9.0, h: 1.7 };
   s += badge(c, mark.x, mark.y, mark.h, mark);
   if (via) s += badge(c, 64.5, 7.7, 6.7, { logo: "via-leaf" });
+  if (scheme === "marc") s += mdFlag(67.4, 11.4, 1.7);
   s += outlineOf(d);
   return s;
 }
@@ -913,6 +947,51 @@ const mbtaCabEnd = (c, { x0 }) => {
 export const mbtaBilevel = (c) => bilevel(c, { ...MBTA_BL, paint: mbtaBand });
 export const mbtaCab = (c) => bilevel(c, { ...MBTA_BL, paint: mbtaBand, cab: mbtaCabEnd });
 
+// A MARC cab car's end, seen edge-on: the blue and orange chevrons on its
+// face show as a ladder of stripes at the corner. y0, y1: the chevron panel.
+const marcCabEnd = (y0, y1) => (c, { x0 }) => {
+  let s = rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)");
+  for (let k = 0; k < 4; k++) s += rect(x0, y0 + ((y1 - y0) * k) / 4, 0.42, (y1 - y0) / 4, k % 2 ? MARC.orange : MARC.blue);
+  return s;
+};
+
+// --- MARC III (Kawasaki, 1999-2001; MARC 7800-7896, cab cars 7845-7858):
+// the MBTA cars' body, with fewer, bigger windows: six two-pane windows
+// upstairs and five below (an equipment locker under the first), a fluted
+// panel between the decks and along the skirt; a big two-pane window in
+// each end section at mid level; the door at each extreme end under a small
+// transom. Paint: a blue band, edged below in orange, frames the upper
+// windows and steps down at each end, slanting, to run along the end
+// sections at mid level. The logo in white on the band at one end, the
+// Maryland flag high at the other.
+const MARC_KAW_UP = seq(22.55, 6.95, 6), MARC_KAW_LOW = seq(29.5, 6.95, 5);
+const kawDoor = (x) => ({ x, w: 2.6, y0: 4.0, y1: 10.5, glassY: 0.5, glassH: 0.35 });
+const MARC_KAW = { ...MBTA_BL,
+  rows: [{ xs: MARC_KAW_UP, y: 11.0, w: 5.45, h: 2.4, r: 0.4 }, { xs: MARC_KAW_LOW, y: 4.6, w: 5.45, h: 2.2, r: 0.4 },
+    { xs: [10.4, 69.5], y: 6.8, w: 5.45, h: 2.45, r: 0.4 }],
+  doors: [kawDoor(1.35), kawDoor(81.38)],
+  badge: { x: 78.0, y: 8.5, h: 1.15, dark: true },
+  extra: (c, g) => {
+    // Center mullions, the transoms over the doors, lockers on the lower level.
+    let s = lines(MARC_KAW.rows.flatMap((r) => r.xs.map((x) => [x + r.w / 2, r.y + 0.08, x + r.w / 2, r.y + r.h - 0.08])), C.gasket, 0.9);
+    s += win(1.65, 11.3, 2.0, 0.75, 0.15) + win(g.L - 3.65, 11.3, 2.0, 0.75, 0.15);
+    s += rect(22.55, 4.8, 5.45, 1.8, "none", 0.45, 'rx="0.12"') + rect(11.4, 4.5, 3.6, 1.5, "none", 0.45, 'rx="0.12"');
+    return s + rect(13.6, 11.4, 1.7, 0.55, "rgba(20,22,25,0.45)", 0.4) + slats(13.6, 11.4, 1.7, 0.55, 0.25);
+  },
+};
+function marcKawPaint(c, g) {
+  const L = g.L, ribs = (a, b, y0, y1) => lines(Array.from({ length: Math.floor((y1 - y0) / 0.32) + 1 }, (_, k) => [a, y0 + k * 0.32, b, y0 + k * 0.32]), C.steelShade, 0.8);
+  let s = rect(0, 0, L, 17, C.steel) + ribs(21.0, L - 21.0, 7.1, 10.4) + ribs(18.6, L - 18.6, 1.6, 4.2);
+  // One half of the band (the other is its mirror image): along the end
+  // section, up the slant, along the upper windows to the middle.
+  const half = path(poly([[3.95, 9.27], [15.9, 9.27], [19.5, 13.7], [L / 2, 13.7], [L / 2, 11.0], [21.6, 11.0], [18.4, 7.7], [3.95, 7.7]]), MARC.blue) +
+    path(poly([[3.95, 7.7], [18.4, 7.7], [21.6, 11.0], [L / 2, 11.0], [L / 2, 10.6], [21.95, 10.6], [18.75, 7.16], [3.95, 7.16]]), MARC.orange);
+  s += half + `<g transform="matrix(-1 0 0 1 ${L} 0)">${half}</g>`;
+  return s + mdFlag(11.6, 11.6, 1.5);
+}
+export const marcKawasaki = (c) => bilevel(c, { ...MARC_KAW, paint: marcKawPaint });
+export const marcKawasakiCab = (c) => bilevel(c, { ...MARC_KAW, paint: marcKawPaint, cab: marcCabEnd(7.0, 8.4) });
+
 // --- Bombardier/Alstom MultiLevel (NJ Transit 7000-7767; MultiLevel III
 // 8000s, the same body): 85 ft, 14 ft 6 in so it clears the Hudson tunnels.
 // Low end roofs over the trucks rise to the full height over the two decks.
@@ -941,9 +1020,23 @@ function njtPaint(c, g) {
   s += rect(18.0, 6.25, L - 36.0, 1.25, `url(#${id})`);
   return s;
 }
-export const multilevel = (c) => bilevel(c, { ...ML, paint: njtPaint });
-export const multilevelCab = (c) => bilevel(c, { ...ML, paint: njtPaint,
-  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") });
+// MARC IV (2014; MARC 8000-8094, cab cars 8045-8059): the same body.
+// Stainless, a blue band over an orange stripe between the decks, through
+// the end sections and their windows, stopping at the doors; the logo in
+// white on the band beside the end window (at the cab end of a cab car),
+// the Maryland flag over the other end window.
+function marcMlPaint(c, g) {
+  const L = g.L;
+  let s = rect(0, 0, L, 17, C.steel);
+  for (const [a, b] of [[0.7, 1.3], [4.05, 11.8], [14.55, 70.45], [73.2, 80.95], [83.7, L - 0.7]]) {
+    s += rect(a, 7.7, b - a, 1.3, MARC.blue) + rect(a, 7.2, b - a, 0.5, MARC.orange);
+  }
+  return s + mdFlag(75.35, 10.3, 1.2);
+}
+const marcMlBadge = (x) => ({ x, y: 8.35, h: 0.95, dark: true });
+export const multilevel = (c) => bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(78.7) } : { paint: njtPaint }) });
+export const multilevelCab = (c) => bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(6.3), cab: marcCabEnd(5.55, 6.5) } : { paint: njtPaint,
+  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") }) });
 
 // --- Gallery cars (Metra: Nippon Sharyo 2002-05 and Amerail 1994-96 design):
 // 85 ft, 15 ft 10 in, fluted stainless, the upper level a pair of balconies
@@ -1996,7 +2089,7 @@ export const hsp46 = (c) => cabUnit(c, {
 const genericPaint = (c, sp) => rect(0, 0, sp.L, sp.sill + 1.0, "#2a2d31") + rect(0, sp.sill + 1.0, sp.L, 0.45, c.color || "#1f5fad");
 
 // --- MotivePower MP36PH-3C (Metra 401-427, Caltrain 923-928, UTA FrontRunner
-// 1-21, MBTA 010-011): 68 ft, 15 ft 6 in, Blomberg trucks 42 ft 10 in apart,
+// 1-21, MBTA 010-011, MARC 10-35): 68 ft, 15 ft 6 in, Blomberg trucks 42 ft 10 in apart,
 // 9 ft 4 in wheelbase, 40 in wheels. A long, bulbous nose ahead of a raked
 // windshield set well back (front and corner panes); the cab side window,
 // then the cab door 13 ft back from the nose, with a louvered box below the
@@ -2005,8 +2098,10 @@ const genericPaint = (c, sp) => rect(0, 0, sp.L, sp.sill + 1.0, "#2a2d31") + rec
 export const mp36 = (c) => cabUnit(c, {
   // Metra: a big white logo on the blue toward the rear and a small blue one
   // under the cab window. FrontRunner: the name small toward the rear. MBTA
-  // units carry the T disc in their paint.
-  badge: (c) => ({ metra: [{ x: 43.8, y: 7.0, h: 3.7, dark: true }, { x: 10.7, y: 7.5, h: 0.95 }], frontrunner: { x: 47, y: 9.3, h: 0.75 } })[c.agency],
+  // units carry the T disc in their paint. MARC: the logo big on the hood,
+  // breaking the band.
+  badge: (c) => ({ metra: [{ x: 43.8, y: 7.0, h: 3.7, dark: true }, { x: 10.7, y: 7.5, h: 0.95 }], frontrunner: { x: 47, y: 9.3, h: 0.75 },
+    marc: { x: 42.4, y: 7.8, h: 4.0 } })[c.agency],
   roof: 15.5, sill: 4.55, rearR: 1.1,
   nose: [[2.0, 4.55], ["q", 0.6, 4.9, 0.6, 6.4], ["q", 0.7, 8.4, 1.9, 9.1], [3.5, 10.1], [4.7, 12.6], ["q", 5.6, 15.5, 9.5, 15.5]],
   glass: [[[4.0, 10.4], [4.95, 12.45], [6.1, 12.45], [6.1, 10.4]], [[6.3, 10.45], [6.3, 12.45], [8.5, 12.45], [8.5, 10.6]]],
@@ -2065,6 +2160,18 @@ export const mp36 = (c) => cabUnit(c, {
         s += path(poly([[0, 10.7], [xd(10.7), 10.7], [xd(top), top], [0, top]]), P) + rect(0, 0, L, 4.9, MBTA.black) + tape(0, L, 4.65);
         s += lines([[0, 10.7, L, 10.7], [0, 6.4, 37.8, 6.4], [37.8, 6.4, 38.4, 4.9], [xd(6.4), 6.4, xd(top), top], [0, 4.9, L, 4.9]], Y, 1.0);
         return s + tDisc(24.1, 8.6, 1.0);
+      }
+      case "marc": {
+        // MARC: silver under a dark gray roof that drops behind the cab; a
+        // white line over the black underframe. A blue band over an orange
+        // stripe runs the length of the side, broken for the logo, and sweeps
+        // down the nose to the headlights; the Maryland flag high at the rear.
+        const band = (x0, x1) => rect(x0, 7.5, x1 - x0, 1.5, MARC.blue) + rect(x0, 6.95, x1 - x0, 0.55, MARC.orange);
+        let s = rect(0, 0, L, sp.roof + 1, MARC.silver) + path(`M0 12.85L15.4 12.85L15.9 12.0L${L} 12.0L${L} 17L0 17Z`, "#3a4048");
+        s += rect(0, 0, L, 4.85, "#26292d") + rect(0, 4.85, L, 0.14, "#eef0f2");
+        s += band(10.4, 34.2) + band(50.6, L);
+        s += path("M10.5 9.0Q3.5 9.0 0.4 6.2L0.4 5.0Q3.5 7.5 10.5 7.5Z", MARC.blue) + path("M10.5 7.5Q3.5 7.5 0.4 5.0L0.4 4.4Q3.5 6.95 10.5 6.95Z", MARC.orange);
+        return s + mdFlag(64.5, 10.9, 1.4);
       }
       default: return genericPaint(c, sp);
     }
@@ -2480,9 +2587,10 @@ export const MODELS = {
   viewlinerSleeper: M(viewlinerSleeper, 85.33),
   viewlinerDiner: M(viewlinerDiner, 85.33),
   viewlinerBaggage: M(viewlinerBaggage, 85.33),
-  bilevel: M((c) => (c.agency === "mbta" ? mbtaBilevel(c) : bombardierBilevel(c)), (ag) => (ag === "mbta" ? 85.33 : 85)),
-  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c) : bombardierCab(c)), (ag) => (ag === "mbta" ? 85.33 : 85), true),
-  kawasakiCab: M(mbtaCab, 85.33, true),
+  bilevel: M((c) => (c.agency === "mbta" ? mbtaBilevel(c) : c.agency === "marc" ? marcKawasaki(c) : bombardierBilevel(c)), (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85)),
+  bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c) : bombardierCab(c)),
+    (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85), true),
+  kawasakiCab: M((c) => (c.agency === "marc" ? marcKawasakiCab(c) : mbtaCab(c)), 85.33, true),
   rotemCab: M(mbtaCab, 85.33, true),
   multilevel: M(multilevel, 85),
   multilevelCab: M(multilevelCab, 85, true),
