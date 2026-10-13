@@ -1123,7 +1123,9 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .rr-stat.good strong { color: var(--good); }
 .rr-stat.warn strong { color: var(--warn); }
 .rr-lines { list-style: none; margin: var(--s2) 0 0; padding: 0; flex: none; }
-.rr-lines li { display: flex; justify-content: space-between; gap: var(--s3); padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-base); }
+.rr-lines li { border-bottom: 1px solid var(--line); }
+.rr-line { display: flex; justify-content: space-between; gap: var(--s3); width: 100%; padding: 7px var(--s2); margin: 0 calc(-1 * var(--s2)); box-sizing: content-box; border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; font-size: var(--fs-base); text-align: left; cursor: pointer; }
+.rr-line:hover, .rr-line:focus-visible { background: var(--hover); outline: none; }
 .rr-lines li:last-child { border-bottom: 0; }
 .rr-lines .sub { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
 .rr-trains, .rr-stations { display: grid; gap: 2px; margin: var(--s2) calc(-1 * var(--s2)) 0; flex: none; }

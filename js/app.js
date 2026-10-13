@@ -42,6 +42,7 @@ const state = {
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
   railroad: null,        // railroad whose page is open
+  line: null,            // ...and the line, on a line's page
   predictions: null,     // live MBTA predictions for the selected station
   showStations: store.get("tt-stations", true),
   // Mark trains late when GPS shows a delay their railroad hasn't reported
@@ -360,6 +361,23 @@ function addLayers() {
       },
     }, firstSymbol);
   });
+  // A railroad's or a line's track, lit up while its page is open
+  // (applyFocus): a soft glow under the strands, a solid line over them.
+  map.addSource("focus", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({
+    id: "tt-focus-glow",
+    type: "line",
+    source: "focus",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["get", "color"], "line-opacity": 0.22, "line-width": byZoom((w) => w * 6) },
+  }, "tt-rail-casing");
+  map.addLayer({
+    id: "tt-focus-line",
+    type: "line",
+    source: "focus",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["get", "color"], "line-width": byZoom((w) => w * 1.8) },
+  }, firstSymbol);
   // Other main-line track (freight) from the basemap, faintly, when zoomed in.
   // Yards, sidings and spurs are left out; they turn terminals into a tangle.
   map.addLayer({
@@ -572,7 +590,10 @@ function addLayers() {
   applySelectionFilter();
 }
 
-map.on("style.load", addLayers);
+map.on("style.load", () => {
+  addLayers();
+  applyFocus();
+});
 
 // Start with the attribution folded into its ⓘ button.
 map.once("load", () => {
@@ -718,6 +739,7 @@ function railCollection() {
 
 function redrawRail() {
   map.getSource("rail")?.setData(railCollection());
+  applyFocus();
 }
 
 function redrawStations() {
@@ -781,6 +803,7 @@ function loadRail() {
       snapStations();
       computePositions();
       animateTo();
+      applyFocus(); // a line's track is traced along the rails
     })
     .catch((err) => console.warn("rail index", err)); // trains stay at reported positions
   return railLoading;
@@ -940,8 +963,8 @@ async function start() {
       if (wantedStation) selectStation(wantedStation);
       else if (AGENCIES[wantedRailroad]) {
         // Framed once the map is ready (a shared link may open before it is).
-        openRailroad(wantedRailroad, { fly: false });
-        const frame = () => frameRailroad(wantedRailroad);
+        openRailroad(wantedRailroad, { fly: false, line: new URL(location.href).searchParams.get("line") });
+        const frame = () => frameFocus();
         mapLoaded ? frame() : map.once("load", frame);
       }
       renderResults();
@@ -1503,12 +1526,13 @@ function renderStation() {
     <p class="estimate-note">Times are live predictions from each railroad.</p>`;
 }
 
-// ---------- Railroad pages ----------
-// From the i beside each railroad: the map frames its network; the page shows
-// what's running, its lines, its fleet, its busiest stations and where the
-// data comes from.
+// ---------- Railroad and line pages ----------
+// From the i beside each railroad: the map frames its network and lights up
+// its track; the page shows what's running, its
+// lines, its fleet, its busiest stations and where the data comes from. Each
+// line has a page of its own, with just its track lit up.
 
-function openRailroad(id, { fly = true } = {}) {
+function openRailroad(id, { fly = true, line = null } = {}) {
   if (!AGENCIES[id]) return;
   if (state.hidden.has(id)) {
     state.hidden.delete(id);
@@ -1518,29 +1542,122 @@ function openRailroad(id, { fly = true } = {}) {
     redrawRail();
   }
   clearInterval(predictionTimer);
-  Object.assign(state, { selected: null, station: null, predictions: null, car: null, returnTo: null, railroad: id });
-  $("back-btn").lastChild.textContent = " All trains";
+  Object.assign(state, { selected: null, station: null, predictions: null, car: null, returnTo: null, railroad: id, line });
+  focusCache.key = null;
+  $("back-btn").lastChild.textContent = line ? ` ${AGENCIES[id].short}` : " All trains";
   setFollow(false);
   setUrlSelection();
   applySelectionFilter();
   showDetailView(true);
   renderAll();
-  if (fly) frameRailroad(id);
+  if (fly) frameFocus();
   if (isPhone) setSheet("");
 }
+const openLine = (id, name, opts = {}) => openRailroad(id, { ...opts, line: name });
 
-// Its stations and running trains, framed beside the panel.
-function frameRailroad(id) {
+// "Framingham / Worcester Line" and "Framingham/Worcester Line" are one line,
+// and a timetable's "Franklin / Foxboro Line" is the "Franklin Line" (short
+// names like "S Line" must match exactly).
+const lineKey = (l) => String(l).toLowerCase().replace(/\bline\b/g, "").replace(/[^a-z0-9]/g, "");
+const sameLine = (x, y) => x === y || (Math.min(x.length, y.length) >= 5 && (x.includes(y) || y.includes(x)));
+const onLine = (t, name) => Boolean(t.route) && lineKey(t.route) === lineKey(name);
+
+// The open page's trains: the railroad's, or the line's.
+function focusTrains() {
+  const { railroad: id, line } = state;
+  return [...state.trains.values()].filter((t) => t.agency === id && (!line || onLine(t, line)));
+}
+function lineStations(id, name) {
+  const k = lineKey(name);
+  const listed = [...state.stations.values()].filter((st) => st.members.some((m) => m.agency === id && (m.lines || []).some((l) => sameLine(lineKey(l), k))));
+  if (listed.length) return listed;
+  // Railroads whose station lists don't name lines (Amtrak): the stops of
+  // the line's train with the most of them.
+  const longest = focusTrains().filter((t) => onLine(t, name)).sort((x, y) => (y.stops?.length || 0) - (x.stops?.length || 0))[0];
+  return [...new Set((longest?.stops || []).map((s) => state.stationOfKey?.get(s.key)).filter(Boolean))].map((sid) => state.stations.get(sid)).filter(Boolean);
+}
+
+// Places along a line in order: from the one farthest from the middle, each
+// next the nearest one left.
+function orderAlong(items, posOf) {
+  if (items.length < 3) return items;
+  const P = items.map(posOf);
+  const mid = { lon: P.reduce((s, p) => s + p.lon, 0) / P.length, lat: P.reduce((s, p) => s + p.lat, 0) / P.length };
+  const kx = Math.cos((mid.lat * Math.PI) / 180);
+  const d = (p, q) => Math.hypot((p.lon - q.lon) * kx, p.lat - q.lat);
+  let start = 0;
+  P.forEach((p, i) => { if (d(p, mid) > d(P[start], mid)) start = i; });
+  const order = [start], left = new Set(P.keys());
+  left.delete(start);
+  while (left.size) {
+    const last = P[order[order.length - 1]];
+    let best = -1;
+    for (const j of left) if (best < 0 || d(last, P[j]) < d(last, P[best])) best = j;
+    order.push(best);
+    left.delete(best);
+  }
+  return order.map((i) => items[i]);
+}
+
+// The track to light up: the railroad's whole network, or the line's, traced
+// along the rails between the stops its running trains make and between its
+// stations in order.
+const focusCache = { key: null, features: [] };
+function focusFeatures() {
+  const { railroad: id, line } = state;
+  if (!id || !state.railGeo) return [];
+  const key = `${id}|${line || ""}`;
+  if (focusCache.key === key) return focusCache.features;
+  const props = { color: AGENCIES[id].color };
+  const features = line
+    ? lineTrack(id, line).map((coordinates) => ({ type: "Feature", geometry: { type: "LineString", coordinates }, properties: props }))
+    : state.railGeo.features.filter((f) => !f.properties.h && [f.properties.a, f.properties.b, f.properties.c].includes(id))
+      .map((f) => ({ type: "Feature", geometry: f.geometry, properties: props }));
+  if (features.length) Object.assign(focusCache, { key, features }); // else the rail index may not be ready yet
+  return features;
+}
+function lineTrack(id, name) {
+  const rail = state.rail;
+  if (!rail) return [];
+  const seqs = focusTrains().map((t) => (t.stops || []).map((s) => state.stopPos.get(s.key)).filter(Boolean)).filter((s) => s.length > 1);
+  seqs.push(orderAlong(lineStations(id, name), stationPos).map(stationPos)); // stretches no train is on now
+  const done = new Set(), out = [];
+  for (const seq of seqs) {
+    for (let i = 1; i < seq.length; i++) {
+      const p = [seq[i - 1].lon, seq[i - 1].lat], q = [seq[i].lon, seq[i].lat];
+      const k = [p, q].map((x) => x.map((v) => v.toFixed(4)).join()).sort().join("|");
+      if (done.has(k)) continue;
+      done.add(k);
+      const path = rail.route(rail.snap(p, 1500, id), rail.snap(q, 1500, id), id);
+      if (path?.coords.length > 1) out.push(path.coords);
+    }
+  }
+  return out;
+}
+
+// Light up the open page's track (or clear it).
+function applyFocus() {
+  map.getSource("focus")?.setData({ type: "FeatureCollection", features: focusFeatures() });
+}
+
+// The lit-up track, stations and trains, framed beside the panel.
+function frameFocus() {
+  const { railroad: id, line } = state;
   const b = new maplibregl.LngLatBounds();
-  for (const st of state.stations.values()) if (st.agencies.includes(id)) b.extend([stationPos(st).lon, stationPos(st).lat]);
-  for (const t of state.trains.values()) if (t.agency === id && Number.isFinite(t.lat)) b.extend([t.lon, t.lat]);
+  for (const f of focusFeatures()) {
+    const g = f.geometry;
+    for (const c of g.type === "LineString" ? g.coordinates : g.coordinates.flat()) b.extend(c);
+  }
+  const stations = line ? lineStations(id, line) : [...state.stations.values()].filter((st) => st.agencies.includes(id));
+  for (const st of stations) b.extend([stationPos(st).lon, stationPos(st).lat]);
+  for (const t of focusTrains()) if (Number.isFinite(t.lat)) b.extend([t.lon, t.lat]);
   if (b.isEmpty()) return;
   const pad = panelPadding();
   map.fitBounds(b, { padding: { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) }, maxZoom: 11, duration: 900 });
 }
 
-// A railroad page section under a heading that folds it away (with its
-// count, so a folded section still says something).
+// A page section under a heading that folds it away (with its count, so a
+// folded section still says something).
 function rrSection(key, title, count, body) {
   const open = !state.rrCollapsed.has(key);
   return `<section class="rr-sec${open ? "" : " collapsed"}">
@@ -1556,23 +1673,82 @@ function rrSection(key, title, count, body) {
 // the consist that car runs in), so its cars draw and open model pages like
 // a live train's.
 const fleetTrain = (id, route, number) => ({ id: `fleet:${id}:${route || ""}:${number || ""}`, agency: id, route: route || null,
-  number: null, fleet: true, backLabel: AGENCIES[id].name, cars: number ? { numbers: [number], complete: false } : null, stops: null });
-// "Framingham / Worcester Line" and "Framingham/Worcester Line" are one line.
-const lineKey = (l) => String(l).toLowerCase().replace(/\bline\b/g, "").replace(/[^a-z0-9]/g, "");
+  number: null, fleet: true, backLabel: state.line || AGENCIES[id].name, cars: number ? { numbers: [number], complete: false } : null, stops: null });
+
+// The model page for a car tapped in a page's fleet.
+function fleetModelPage(id, el) {
+  // A car seen on a running train is drawn from that train, while it runs.
+  const live = state.car.train && state.trains.get(state.car.train);
+  return renderModelPage(live ? { ...live, fleet: true, backLabel: state.line || AGENCIES[id].name } : fleetTrain(id, state.car.fleet, state.car.number), el);
+}
+
+// Every car type running on these lines: from their typical trains, the
+// trains running now (Amtrak's equipment goes by train, not line) and, for a
+// whole railroad, its fleet roster. Each is drawn once and opens its model
+// page; locomotives first, then powered cars, then coaches.
+function equipmentList(id, lineNames, trains, roster) {
+  const a = AGENCIES[id], kinds = new Map(); // type key -> { route, number, trainId, i, c }
+  const add = (c, from) => c?.cars.forEach((car, i) => {
+    const k = car.type?.key;
+    if (k && !kinds.has(k)) kinds.set(k, { ...from, i, c });
+  });
+  for (const name of lineNames.length ? lineNames : [null]) add(consistOf(fleetTrain(id, name)), { route: name });
+  for (const t of trains) add(consistOf(t), { route: t.route, trainId: t.id });
+  if (roster) {
+    for (const { number } of fleetSamples(id)) add(consistOf(fleetTrain(id, lineNames[0] ?? null, number)), { route: lineNames[0] ?? null, number });
+  }
+  const rank = (k) => ({ diesel: 0, electric: 0, emu: 1 })[kinds.get(k).c.cars[kinds.get(k).i].type.kind] ?? 2;
+  const html = [...kinds.keys()].sort((x, y) => rank(x) - rank(y)).map((k) => {
+    const { route, number, trainId, i, c } = kinds.get(k);
+    const m = modelOf(c, i), car = c.cars[i];
+    const sub = [m?.type, m?.fleet].filter(Boolean).join(" · ");
+    return `<button class="rr-car" data-fleet-car data-route="${esc(route || "")}" data-number="${esc(number || "")}" data-train="${esc(trainId || "")}" data-i="${i}">
+      ${carSvg(c, i, a.color, 128)}
+      <span><span class="title">${esc(m?.model || car.type?.name || "Car")}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
+    </button>`;
+  }).join("");
+  return { html, count: kinds.size };
+}
+
+const statTile = (n, label, cls = "") => `<div class="rr-stat ${cls}"><strong>${n}</strong><span>${label}</span></div>`;
+function trainStats(trains) {
+  const late = trains.filter((t) => t.delayMin > 5).length;
+  const onTime = trains.filter((t) => t.delayMin != null && t.delayMin <= 5).length;
+  return `<div class="rr-stats">
+      ${statTile(trains.length, trains.length === 1 ? "train running" : "trains running")}
+      ${statTile(onTime, "on time", "good")}
+      ${statTile(late, "over 5 min late", late ? "warn" : "")}
+    </div>`;
+}
+function runningList(a, trains, withLine) {
+  const running = [...trains].sort((x, y) => String(x.route || "").localeCompare(String(y.route || "")) ||
+    String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
+  return `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
+        ${plate(t.number || a.short, a.color, "sm")}
+        <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([withLine && t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
+        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
+      </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
+      : `<p class="empty">No ${esc(a.short)} trains are reporting here right now.</p>`}</div>`;
+}
+function stationButtons(id, list) {
+  const a = AGENCIES[id];
+  return `<div class="rr-stations">${list.map((st) => {
+    const d = st.members.find((m) => m.agency === id)?.daily;
+    return `<button class="result" data-station="${esc(st.id)}">
+      <span class="station-icon" style="--c:${a.color}"></span>
+      <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, d ? `${d} ${a.short} trains a weekday` : ""].filter(Boolean).join(" · "))}</span></span>
+      <span></span></button>`;
+  }).join("")}</div>`;
+}
 
 function renderRailroad() {
+  if (state.line) return renderLine();
   const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
-  if (state.car?.page && state.car.fleet != null) {
-    // A car seen on a running train is drawn from that train, while it runs.
-    const live = state.car.train && state.trains.get(state.car.train);
-    return renderModelPage(live ? { ...live, fleet: true, backLabel: a.name } : fleetTrain(id, state.car.fleet, state.car.number), el);
-  }
+  if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
   const src = SOURCES.find((s) => s.agencies.includes(id));
   const avail = src ? sourceAvailability(src) : { ok: false };
   const status = state.sourceStatus[src?.id];
-  const trains = [...state.trains.values()].filter((t) => t.agency === id);
-  const late = trains.filter((t) => t.delayMin > 5).length;
-  const onTime = trains.filter((t) => t.delayMin != null && t.delayMin <= 5).length;
+  const trains = focusTrains();
   const estimated = trains.filter((t) => t.estimated).length;
   const stations = [...state.stations.values()].filter((st) => st.agencies.includes(id));
 
@@ -1590,45 +1766,16 @@ function renderRailroad() {
     if (!lines.has(k)) lines.set(k, { name: t.route, running: 0 });
     lines.get(k).running++;
   }
-  // A timetable's longer name for a running line ("Franklin / Foxboro Line"
-  // for "Franklin Line") folds into it.
+  // A timetable's longer name for a running line folds into it.
   const runningKeys = [...lines].filter(([, l]) => l.running).map(([k]) => k);
-  for (const [k, l] of lines) if (!l.running && runningKeys.some((r) => k.includes(r) || r.includes(k))) lines.delete(k);
+  for (const [k, l] of lines) if (!l.running && runningKeys.some((r) => sameLine(k, r))) lines.delete(k);
   const lineList = [...lines.values()].sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
+  const fleet = equipmentList(id, lineList.map((l) => l.name), trains, true);
 
-  // Equipment: every car type it runs, from its lines' typical trains, the
-  // trains running now (Amtrak's equipment goes by train, not line) and its
-  // fleet roster, each drawn once and opening its model page.
-  const kinds = new Map(); // type key -> { route, number, trainId, i, c }
-  const addKinds = (c, from) => c?.cars.forEach((car, i) => {
-    const k = car.type?.key;
-    if (k && !kinds.has(k)) kinds.set(k, { ...from, i, c });
-  });
-  for (const l of lineList.length ? lineList : [{ name: null }]) addKinds(consistOf(fleetTrain(id, l.name)), { route: l.name });
-  for (const t of trains) addKinds(consistOf(t), { route: t.route, trainId: t.id });
-  for (const { number } of fleetSamples(id)) {
-    const route = lineList[0]?.name ?? null;
-    addKinds(consistOf(fleetTrain(id, route, number)), { route, number });
-  }
-  // Locomotives first, then powered cars, then coaches.
-  const rank = (k) => ({ diesel: 0, electric: 0, emu: 1 })[kinds.get(k).c.cars[kinds.get(k).i].type.kind] ?? 2;
-  const equipment = [...kinds.keys()].sort((x, y) => rank(x) - rank(y)).map((k) => {
-    const { route, number, trainId, i, c } = kinds.get(k);
-    const m = modelOf(c, i), car = c.cars[i];
-    const sub = [m?.type, m?.fleet].filter(Boolean).join(" · ");
-    return `<button class="rr-car" data-fleet-car data-route="${esc(route || "")}" data-number="${esc(number || "")}" data-train="${esc(trainId || "")}" data-i="${i}">
-      ${carSvg(c, i, a.color, 128)}
-      <span><span class="title">${esc(m?.model || car.type?.name || "Car")}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
-    </button>`;
-  }).join("");
-
-  const stat = (n, label, cls = "") => `<div class="rr-stat ${cls}"><strong>${n}</strong><span>${label}</span></div>`;
   const source = !avail.ok ? avail.reason || "Not connected"
     : estimated && estimated === trains.length ? "Positions estimated from predicted times"
     : trains.length ? "Live GPS positions" : "No trains reporting right now";
   const updated = status?.at ? ` · updated ${fmtAgo(status.at)}` : "";
-  const running = [...trains].sort((x, y) => String(x.route || "").localeCompare(String(y.route || "")) ||
-    String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
   // Busiest: most of its trains on a weekday (else its timetable's stops a week).
   const busy = (st) => { const m = st.members.find((x) => x.agency === id); return [m?.daily || 0, m?.trips || 0]; };
   const busiest = [...stations].sort((x, y) => busy(y)[0] - busy(x)[0] || busy(y)[1] - busy(x)[1]).slice(0, 5);
@@ -1639,26 +1786,32 @@ function renderRailroad() {
       <h2>${esc(a.name)}</h2>
       <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
     </div>
-    <div class="rr-stats">
-      ${stat(trains.length, trains.length === 1 ? "train running" : "trains running")}
-      ${stat(onTime, "on time", "good")}
-      ${stat(late, "over 5 min late", late ? "warn" : "")}
-    </div>
+    ${trainStats(trains)}
     ${lineList.length > 1 ? rrSection("lines", "Lines", lineList.length,
-      `<ul class="rr-lines">${lineList.map((l) => `<li><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"}</span></li>`).join("")}</ul>`) : ""}
-    ${rrSection("running", "Running now", trains.length, `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
-        ${plate(t.number || a.short, a.color, "sm")}
-        <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
-        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
-      </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
-      : `<p class="empty">No ${esc(a.short)} trains are reporting right now.</p>`}</div>`)}
-    ${equipment ? rrSection("fleet", "Fleet", kinds.size, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${equipment}</div>`) : ""}
-    ${busiest.length ? rrSection("stations", "Stations", stations.length, `<p class="rr-hint">The busiest:</p>
-      <div class="rr-stations">${busiest.map((st) => `<button class="result" data-station="${esc(st.id)}">
-        <span class="station-icon" style="--c:${a.color}"></span>
-        <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, (() => { const d = st.members.find((m) => m.agency === id)?.daily; return d ? `${d} ${a.short} trains a weekday` : ""; })()].filter(Boolean).join(" · "))}</span></span>
-        <span></span></button>`).join("")}</div>`) : ""}
+      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
+    ${rrSection("running", "Running now", trains.length, runningList(a, trains, true))}
+    ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}
+    ${busiest.length ? rrSection("stations", "Busiest stations", busiest.length, `<p class="rr-hint">Of its ${stations.length}, by trains a weekday.</p>${stationButtons(id, busiest)}`) : ""}
     ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
+}
+
+// A line's page: what's running on it, its stations in order and its fleet.
+function renderLine() {
+  const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
+  if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
+  const trains = focusTrains();
+  const stations = orderAlong(lineStations(id, name), stationPos);
+  const fleet = equipmentList(id, [name], trains, false);
+  el.innerHTML = `
+    <div class="hero">
+      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
+      <h2>${esc(name)}</h2>
+      ${stations.length ? `<p class="station-facts"><span>${stations.length} stations · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
+    </div>
+    ${trainStats(trains)}
+    ${rrSection("running", "Running now", trains.length, runningList(a, trains, false))}
+    ${stations.length ? rrSection("line-stations", "Stations", stations.length, stationButtons(id, stations)) : ""}
+    ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}`;
 }
 
 // ---------- Tracked trains ----------
@@ -1837,6 +1990,8 @@ function renderAll() {
   renderResults();
   renderCredits();
   if (state.selected || state.station || state.railroad) renderDetail();
+  // A line opened before its trains loaded is traced once they have.
+  if (state.railroad && focusCache.key !== `${state.railroad}|${state.line || ""}`) applyFocus();
 }
 
 
@@ -1860,6 +2015,7 @@ function applySelectionFilter() {
     map.setFilter(l, ["==", ["get", "id"], sid]);
   }
   applyStationCallouts();
+  applyFocus();
   ping(Boolean(ids.length || sid));
   // Which trains show can depend on the selection and tracking (visible()).
   redraw();
@@ -1910,8 +2066,10 @@ function setUrlSelection() {
   url.searchParams.delete("train");
   url.searchParams.delete("station");
   url.searchParams.delete("railroad");
+  url.searchParams.delete("line");
   if (state.selected) url.searchParams.set("train", state.selected);
   if (state.railroad) url.searchParams.set("railroad", state.railroad);
+  if (state.line) url.searchParams.set("line", state.line);
   if (state.station) url.searchParams.set("station", state.station);
   history.replaceState(null, "", url);
 }
@@ -1927,6 +2085,7 @@ function showDetailView(open) {
 function select(id, { fly = true } = {}) {
   state.returnTo = null;
   state.railroad = null;
+  state.line = null;
   $("back-btn").lastChild.textContent = " All trains";
   if (state.selected !== id) state.car = null;
   state.selected = id;
@@ -1983,6 +2142,7 @@ function selectStation(id, { fly = true } = {}) {
   if (!st) return;
   state.selected = null;
   state.railroad = null;
+  state.line = null;
   state.station = id;
   state.predictions = null;
   setFollow(false);
@@ -2011,7 +2171,9 @@ function closeDetail() {
   $("back-btn").lastChild.textContent = " All trains";
   // Back to the station a train was opened from, or the train a station was,
   // or the railroad page either was.
-  if (back?.railroad && !state.railroad) return openRailroad(back.railroad, { fly: false });
+  if (back?.railroad && !state.railroad) return openRailroad(back.railroad, { fly: false, line: back.line || null });
+  // Back from a line's page to its railroad's.
+  if (state.line) return openRailroad(state.railroad);
   if (state.selected && typeof back === "string" && state.stations.has(back)) return selectStation(back, { fly: false });
   if (state.station && back?.train && state.trains.has(back.train)) {
     state.station = null;
@@ -2019,6 +2181,7 @@ function closeDetail() {
   }
   state.station = null;
   state.railroad = null;
+  state.line = null;
   state.car = null;
   select(null);
 }
@@ -2207,6 +2370,8 @@ on("train-detail", "click", (e) => {
     else state.car.page = false;
     return renderDetail();
   }
+  const lineBtn = e.target.closest("[data-line]");
+  if (lineBtn && state.railroad) return openLine(state.railroad, lineBtn.dataset.line);
   const section = e.target.closest("[data-rr-section]");
   if (section) {
     const key = section.dataset.rrSection;
@@ -2229,18 +2394,18 @@ on("train-detail", "click", (e) => {
   if (stop) return untrack(stop.dataset.untrack);
   const b = e.target.closest("[data-select]");
   if (b) {
-    const from = state.station, railroad = state.railroad;
+    const from = state.station, railroad = state.railroad, line = state.line;
     select(b.dataset.select);
-    // "back" from this train goes to the station or railroad it was opened from
-    state.returnTo = railroad ? { railroad } : from;
+    // "back" from this train goes to the station, railroad or line it was opened from
+    state.returnTo = railroad ? { railroad, line } : from;
     $("back-btn").lastChild.textContent = railroad ? ` ${AGENCIES[railroad].short}` : from ? " Station" : " All trains";
   }
   const st = e.target.closest("[data-station]");
   if (st) {
-    const railroad = state.railroad;
+    const railroad = state.railroad, line = state.line;
     selectStation(st.dataset.station);
     if (railroad) {
-      state.returnTo = { railroad };
+      state.returnTo = { railroad, line };
       $("back-btn").lastChild.textContent = ` ${AGENCIES[railroad].short}`;
     }
   }
