@@ -940,7 +940,8 @@ async function start() {
     .catch((err) => console.warn("stations", err));
   if (RELAY) {
     try {
-      const res = await fetch(`${RELAY.replace(/\/$/, "")}/status`);
+      // Fresh every load, so a railroad just switched on in the relay shows at once.
+      const res = await fetch(`${RELAY.replace(/\/$/, "")}/status`, { cache: "no-cache" });
       state.relayFeeds = (await res.json()).feeds;
       redrawStations();
     } catch {
