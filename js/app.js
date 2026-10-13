@@ -1348,8 +1348,12 @@ function renderDetail() {
   el.dataset.train = t.id;
   el.innerHTML = `
     <div class="hero">
-      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
-      <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${esc(trainTitle(t))}</h2></div>
+      <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}" title="${esc(a.name)}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
+      <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route
+        // The title is the train's line: it opens the line's page (or, with
+        // no line, the railroad's).
+        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" title="${esc(t.route)}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
+        : `<button type="button" class="hero-link" data-railroad="${t.agency}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
         ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(t.statusText)}</span>` : ""}
@@ -2376,6 +2380,8 @@ function closeDetail() {
   // Back to the station a train was opened from, or the train a station was,
   // or the railroad page either was.
   if (back?.railroad && !state.railroad) return openRailroad(back.railroad, { fly: false, line: back.line || null });
+  // Back to the train a line or railroad page was opened from.
+  if (state.railroad && back?.train && state.trains.has(back.train)) return select(back.train, { fly: false });
   // Back from a line's page to its railroad's.
   if (state.line) return openRailroad(state.railroad);
   if (state.selected && typeof back === "string" && state.stations.has(back)) return selectStation(back, { fly: false });
@@ -2584,10 +2590,18 @@ on("train-detail", "click", (e) => {
     state.servedOpen.has(id) ? state.servedOpen.delete(id) : state.servedOpen.add(id);
     return renderDetail();
   }
-  const openLineBtn = e.target.closest("[data-open-line]");
-  if (openLineBtn) return openLine(openLineBtn.dataset.lineRailroad, openLineBtn.dataset.openLine);
-  const railroadBtn = e.target.closest("[data-railroad]");
-  if (railroadBtn) return openRailroad(railroadBtn.dataset.railroad);
+  const openLineBtn = e.target.closest("[data-open-line]"), railroadBtn = e.target.closest("[data-railroad]");
+  if (openLineBtn || railroadBtn) {
+    const fromTrain = state.selected && state.trains.get(state.selected);
+    if (openLineBtn) openLine(openLineBtn.dataset.lineRailroad, openLineBtn.dataset.openLine);
+    else openRailroad(railroadBtn.dataset.railroad);
+    // "back" from a line or railroad opened from a train goes to the train
+    if (fromTrain) {
+      state.returnTo = { train: fromTrain.id };
+      $("back-btn").lastChild.textContent = ` ${fromTrain.number ? `Train ${fromTrain.number}` : "Train"}`;
+    }
+    return;
+  }
   const section = e.target.closest("[data-rr-section]");
   if (section) {
     const key = section.dataset.rrSection;

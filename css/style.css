@@ -1189,3 +1189,8 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .sb-toggle:hover, .sb-toggle:focus-visible { background: var(--hover); outline: none; }
 .sb-lines { list-style: none; margin: 0 0 var(--s2) 22px; padding: 0; }
 .sb-lines li + li { border-top: 1px solid var(--line); }
+
+/* A train page's railroad and title open the railroad's and the line's pages. */
+.hero-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.hero-link:hover, .hero-link:focus-visible { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; outline: none; }
+.hero-go { margin-left: 6px; color: var(--faint); font-weight: 400; }
