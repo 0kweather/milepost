@@ -612,6 +612,8 @@ const inLists = (t) => !state.hidden.has(t.agency);
 // Trains drawn on the map.
 function visible(t) {
   if (state.hidden.has(t.agency)) return false;
+  // A line's page shows only its railroad's trains.
+  if (state.line && t.agency !== state.railroad) return false;
   // The selected and tracked trains always show.
   if (t.id === state.selected || state.tracked.some((r) => r.id === t.id)) return true;
   if (state.onlyTracked && state.tracked.length) return false;
@@ -677,10 +679,14 @@ function snapStations() {
 }
 const stationPos = (st) => st.draw || st;
 
+// A station's railroads on the map: those switched on, and on a line's page
+// only the line's railroad.
+const stationAgencies = (st) => st.agencies.filter((a) => agencyShown(a) && (!state.line || a === state.railroad));
+
 function stationCollection() {
   const features = [];
   for (const st of state.stations.values()) {
-    const shown = st.agencies.filter(agencyShown);
+    const shown = stationAgencies(st);
     if (!shown.length) continue;
     const pos = stationPos(st);
     features.push({
@@ -703,7 +709,7 @@ function footprintCollection() {
   const features = [];
   for (const st of state.stations.values()) {
     if (!st.footprint) continue;
-    const shown = st.agencies.filter(agencyShown);
+    const shown = stationAgencies(st);
     if (!shown.length) continue;
     features.push({
       type: "Feature",
@@ -2002,6 +2008,7 @@ function renderAll() {
 
 // ---------- Selection ----------
 
+let stationsShownFor = null; // railroad whose stations alone show (a line's page)
 function applySelectionFilter() {
   if (!map.getLayer("tt-trains")) return;
   const id = state.selected || "", sid = state.station || "";
@@ -2021,6 +2028,12 @@ function applySelectionFilter() {
   }
   applyStationCallouts();
   applyFocus();
+  // Stations are filtered to the railroad on a line's page.
+  const only = state.line ? state.railroad : null;
+  if (only !== stationsShownFor) {
+    stationsShownFor = only;
+    redrawStations();
+  }
   ping(Boolean(ids.length || sid));
   // Which trains show can depend on the selection and tracking (visible()).
   redraw();
