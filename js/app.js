@@ -1613,6 +1613,10 @@ function allLines() {
   return out;
 }
 
+// A line's own color where its trains carry one (GO's, MBTA's), else its
+// railroad's.
+const lineColor = (id, name) => focusTrains().find((t) => onLine(t, name) && t.routeColor)?.routeColor || AGENCIES[id].color;
+
 // The open page's trains: the railroad's, or the line's.
 function focusTrains() {
   const { railroad: id, line } = state;
@@ -1705,9 +1709,11 @@ const focusCache = { key: null, features: [] };
 function focusFeatures() {
   const { railroad: id, line } = state;
   if (!id || !state.railGeo) return [];
-  const key = `${id}|${line || ""}`;
+  // The line's color arrives with its trains, so it's part of the key.
+  const color = line ? lineColor(id, line) : AGENCIES[id].color;
+  const key = `${id}|${line || ""}|${color}`;
   if (focusCache.key === key) return focusCache.features;
-  const props = { color: AGENCIES[id].color };
+  const props = { color };
   const features = line
     ? lineTrack(id, line).map((coordinates) => ({ type: "Feature", geometry: { type: "LineString", coordinates }, properties: props }))
     : state.railGeo.features.filter((f) => !f.properties.h && [f.properties.a, f.properties.b, f.properties.c].includes(id))
@@ -1834,6 +1840,16 @@ function runningList(a, trains, withLine) {
       </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
       : `<p class="empty">No ${esc(a.short)} trains are reporting here right now.</p>`}</div>`;
 }
+// A line's stations joined by a line in its color, like a train's stops.
+function lineDiagram(id, list, color) {
+  const a = AGENCIES[id];
+  return `<ol class="stops line-stops" style="--line-color:${color}">${list.map((st) => {
+    const d = st.members.find((m) => m.agency === id)?.daily;
+    return `<li class="link" data-station="${esc(st.id)}" role="button" tabindex="0" title="${esc(st.name)} station">
+      <span class="stop-dot" aria-hidden="true"></span><span>${esc(st.name)}</span><span class="time">${d ? `${d} a weekday` : ""}</span></li>`;
+  }).join("")}</ol>`;
+}
+
 function stationButtons(id, list) {
   const a = AGENCIES[id];
   return `<div class="rr-stations">${list.map((st) => {
@@ -1914,7 +1930,7 @@ function renderLine() {
     </div>
     ${trainStats(trains)}
     ${rrSection("running", "Running now", trains.length, runningList(a, trains, false))}
-    ${stations.length ? rrSection("line-stations", "Stations", stations.length, stationButtons(id, stations)) : ""}
+    ${stations.length ? rrSection("line-stations", "Stations", stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}
     ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}`;
 }
 
@@ -2095,7 +2111,7 @@ function renderAll() {
   renderCredits();
   if (state.selected || state.station || state.railroad) renderDetail();
   // A line opened before its trains loaded is traced once they have.
-  if (state.railroad && focusCache.key !== `${state.railroad}|${state.line || ""}`) applyFocus();
+  if (state.railroad && focusCache.key !== `${state.railroad}|${state.line || ""}|${state.line ? lineColor(state.railroad, state.line) : AGENCIES[state.railroad].color}`) applyFocus();
 }
 
 
@@ -2422,6 +2438,8 @@ function openCar(fig) {
 }
 on("train-detail", "keydown", (e) => {
   if (e.target.closest?.("[data-track-to]")) return; // the pin is its own button
+  const stationLi = e.target.closest?.("li[data-station]");
+  if (stationLi && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return stationLi.click(); }
   const stopLink = e.target.closest?.("[data-stop-station]");
   if (stopLink && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return openStop(stopLink); }
   const fig = e.target.closest?.("[data-car]");
