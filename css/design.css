@@ -283,7 +283,6 @@ html, body {
 .rr-stat span { font-size: var(--fs-sm); font-weight: 500; }
 
 .pill { padding: 5px 12px; font-size: var(--fs-sm); }
-.meta li { border-radius: var(--r-pill) !important; }
 .model-card { border-radius: 18px; background: var(--group); border: 0; }
 .plate { border-radius: 7px; }
 
@@ -520,25 +519,40 @@ kbd {
 .menu-about p { margin: 0; padding: 8px 14px 0; background: var(--group); font-size: var(--fs-sm); color: var(--muted); }
 .menu-about p:last-child { padding-bottom: 12px; border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
 
-/* ---------- Install as an app ---------- */
+.menu-link[hidden] { display: none; }
 
-.menu-link[hidden], .install[hidden] { display: none; }
-.install {
-  display: flex; align-items: center; gap: 12px; margin: 4px 16px 6px; padding: 10px 10px 10px 12px;
-  border-radius: var(--r-card); background: var(--group); box-shadow: 0 0 0 0.5px var(--line);
+/* ---------- On board, and the train's facts: equal chips, two to a row,
+ * each group set off by a line ---------- */
+
+.on-board, .facts { padding: 12px 0; border-top: 0.5px solid var(--line); border-bottom: 0; }
+.on-board-title { margin: 0 0 8px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.chips li {
+  display: flex; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 12px; box-sizing: border-box;
+  border-radius: 12px !important; background: var(--group); font-size: var(--fs-sm); color: var(--muted);
+  white-space: nowrap; overflow: hidden;
 }
-.install img { width: 40px; height: 40px; border-radius: 10px; flex: none; box-shadow: 0 0 0 0.5px var(--line); }
-.install-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
-.install-text strong { font-size: var(--fs-base); font-weight: 600; }
-.install-text span { font-size: var(--fs-sm); color: var(--muted); }
-.install-x { width: 26px; height: 26px; flex: none; border: 0; border-radius: 50%; background: var(--fill); color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
-
-/* ---------- On board (from a train's cars) ---------- */
-
-.on-board { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
-.on-board-title { width: 100%; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
-.amenity {
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 14px;
-  background: var(--fill); font-size: var(--fs-sm); font-weight: 500;
-}
+.chips li > span { text-overflow: ellipsis; }
+.chips li > span { overflow: hidden; color: var(--text); font-weight: 500; }
 .amenity svg { color: var(--accent); flex: none; }
+
+/* ---------- A train's facts as widget tiles ---------- */
+
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ft { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: 14px; background: var(--group); }
+.ft.wide { grid-column: 1 / -1; }
+.ft:last-child:nth-child(even):not(.wide) { grid-column: auto; }
+.ft-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ft-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.ft-value { font-family: var(--font-rounded); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ft-value small { margin-left: 3px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.ft-value .ft-name { font-family: var(--font); font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.ft-value .inferred { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-thickness: 1.5px; cursor: help; }
+.ft-sub { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ft-bar { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.ft-bar > span { display: block; height: 100%; background: var(--accent); transform-origin: left; border-radius: 2px; }
+.ft-compass { width: 38px; height: 38px; flex: none; }
+.ft-compass circle { fill: none; stroke: var(--line); stroke-width: 2; }
+.ft-compass path { fill: var(--accent); }
+.ft-signal { color: var(--good); flex: none; }
+.ft-signal svg { width: 20px; height: 20px; }

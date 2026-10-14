@@ -1125,15 +1125,37 @@ function statusClass(t) {
   return "bad";
 }
 
-// The heading chip; a direction worked out from the next stop is marked.
-function headingChip(t) {
-  const est = state.est.get(t.id);
-  const b = t.bearing ?? est?.bearing;
-  if (b == null) return null;
-  const dir = HEADINGS[Math.round(b / 45) % 8];
-  return t.bearing == null && est?.inferred
-    ? `<span class="inferred" title="Worked out from the train's next stop; its railroad doesn't report a heading">Heading <strong>${dir}</strong></span>`
-    : `Heading <strong>${dir}</strong>`;
+// A train's facts as widget tiles: its next stop and how soon, its speed,
+// which way it's heading (a compass), when it left, and how fresh its
+// position is.
+function factTiles(t) {
+  const tiles = [];
+  const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
+  const nextName = next?.name || t.nextStop;
+  if (nextName) {
+    const at = next && Date.parse(next.time);
+    tiles.push(tile("Next stop", `<span class="ft-name">${esc(nextName)}</span>`,
+      at ? `${at > Date.now() ? `in ${esc(fmtIn(at))} · ` : ""}${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
+  }
+  if (t.speedMph != null && !t.estimated) {
+    const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
+    tiles.push(tile("Speed", `${v}<small>${km ? "km/h" : "mph"}</small>`,
+      `<span class="ft-bar"><span style="transform:scaleX(${Math.min(1, t.speedMph / 125).toFixed(3)})"></span></span>`));
+  }
+  const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
+  if (b != null) {
+    const inferred = t.bearing == null && est?.inferred;
+    tiles.push(tile("Heading", `<span${inferred ? ` class="inferred" title="Worked out from the train's next stop; its railroad doesn't report a heading"` : ""}>${HEADINGS[Math.round(b / 45) % 8]}</span>`,
+      "", "", `<svg class="ft-compass" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18"/><path d="M20 6l5 14h-10z" transform="rotate(${Math.round(b)} 20 20)"/></svg>`));
+  }
+  if (t.departedOn) tiles.push(tile("Left", `<span class="ft-name">${esc(t.departedOn)}</span>`));
+  tiles.push(t.estimated
+    ? tile("Position", '<span class="ft-name">Estimated</span>', `from predicted times · ${esc(fmtAgo(t.updated))}`)
+    : tile("GPS", `<span class="ft-name">${esc(fmtAgo(t.updated))}</span>`, "", "", `<span class="ft-signal">${SIGNAL_ICON}</span>`));
+  return `<div class="facts">${tiles.join("")}</div>`;
+}
+function tile(label, value, sub = "", cls = "", aside = "") {
+  return `<div class="ft${cls ? ` ${cls}` : ""}"><div class="ft-main"><span class="ft-label">${label}</span><span class="ft-value">${value}</span>${sub ? `<span class="ft-sub">${sub}</span>` : ""}</div>${aside}</div>`;
 }
 
 function trainTitle(t) {
@@ -1269,11 +1291,7 @@ function fmtAgo(ms) {
 
 const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
-// Speed in the chosen units.
 const KM_PER_MI = 1.609344;
-const speedText = (mph) => state.units === "km"
-  ? `<strong>${Math.round(mph * KM_PER_MI)}</strong> km/h`
-  : `<strong>${Math.round(mph)}</strong> mph`;
 
 // ---------- Service notices ----------
 
@@ -1349,13 +1367,7 @@ function renderDetail() {
   loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
-  const chips = [
-    t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
-    t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
-    headingChip(t),
-    t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
-    t.estimated ? `Estimated · ${fmtAgo(t.updated)}` : `<span class="signal" title="Last GPS report">${SIGNAL_ICON}${fmtAgo(t.updated)}</span>`,
-  ].filter(Boolean);
+  const tiles = factTiles(t);
   // Tracking: the rider taps the stop they got on at, then the one they're
   // getting off at. The ride between is drawn in the line's color; the stops
   // before and after it are greyed out.
@@ -1407,8 +1419,9 @@ function renderDetail() {
       </div>
       ${consistSection(t)}
     </div>
+    ${onBoardFor(t)}
     ${noticesHtml(t)}
-    ${chips.length ? `<ul class="meta">${chips.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
+    ${tiles}
     ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
     ${stops}`;
   el.scrollTop = keepScroll;
@@ -1437,8 +1450,7 @@ function consistSection(t) {
   if (open != null) strip = strip.replace(`data-car="${open}" `, `data-car="${open}" aria-pressed="true" `);
   return `<div class="consist">
     <div class="consist-strip${open != null ? " has-open" : ""}">${strip}</div>
-    ${open != null ? modelCard(t, c, open) : ""}</div>
-    ${onBoard(c)}`;
+    ${open != null ? modelCard(t, c, open) : ""}</div>`;
 }
 
 // What a train has on board, read from its cars: a dining car, a café,
@@ -1459,14 +1471,15 @@ const AMENITIES = [
   ["business", "Business class", ["amfleetBusiness", "acelaCoach"]],
   ["autos", "Your car rides along", ["autorack"]],
 ];
+const onBoardFor = (t) => { const c = consistOf(t); return c ? onBoard(c) : ""; };
 function onBoard(c) {
   const keys = new Set(c.cars.map((car) => car.type?.key).filter(Boolean));
   const has = AMENITIES.filter(([, , types]) => types.some((k) => keys.has(k)));
   if (!has.length) return "";
-  return `<div class="on-board" aria-label="${c.typical ? "Usually on board" : "On board"}">
-    <span class="on-board-title">${c.typical ? "Usually on board" : "On board"}</span>
-    ${has.map(([id, label]) => `<span class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg>${label}</span>`).join("")}
-  </div>`;
+  return `<section class="on-board" aria-label="${c.typical ? "Usually on board" : "On board"}">
+    <h3 class="on-board-title">${c.typical ? "Usually on board" : "On board"}</h3>
+    <ul class="chips">${has.map(([id, label]) => `<li class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg><span>${label}</span></li>`).join("")}</ul>
+  </section>`;
 }
 
 // ---------- Train models ----------
@@ -3188,24 +3201,14 @@ initTimeZones();
 
 // ---------- Install as an app ----------
 // Installable (manifest.webmanifest, sw.js). Chrome and Edge offer their own
-// install prompt; on an iPhone it's Share, then Add to Home Screen. Phones
-// get a one-time card at the top of the list; Settings keeps the option.
+// install prompt; on an iPhone it's Share, then Add to Home Screen. Settings
+// (Help) has the option wherever it's possible.
 
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 let installPrompt = null;
-function showInstall() {
-  const can = !standalone && (installPrompt || isIOS);
-  $("install-btn").hidden = !can;
-  const card = $("install");
-  card.hidden = !can || !isPhone || store.get("tt-install-dismissed", false);
-  if (card.hidden) return;
-  card.innerHTML = `<img src="img/apple-touch-icon.png" alt="" width="40" height="40">
-    <span class="install-text"><strong>Trainsheet as an app</strong><span>${isIOS && !installPrompt ? "Tap Share, then Add to Home Screen" : "Full screen, on your home screen"}</span></span>
-    ${installPrompt ? '<button type="button" class="btn small primary" data-install>Install</button>' : ""}
-    <button type="button" class="install-x" data-install-dismiss aria-label="Not now">×</button>`;
-}
+const showInstall = () => { $("install-btn").hidden = standalone || !(installPrompt || isIOS); };
 async function install() {
   if (!installPrompt) return toast("In Safari, tap Share, then Add to Home Screen.");
   installPrompt.prompt();
@@ -3220,15 +3223,7 @@ addEventListener("beforeinstallprompt", (e) => {
 });
 addEventListener("appinstalled", () => {
   installPrompt = null;
-  store.set("tt-install-dismissed", true);
   showInstall();
-});
-on("install", "click", (e) => {
-  if (e.target.closest("[data-install]")) return install();
-  if (e.target.closest("[data-install-dismiss]")) {
-    store.set("tt-install-dismissed", true);
-    showInstall();
-  }
 });
 on("install-btn", "click", () => { toggleMenu(false); install(); });
 showInstall();
