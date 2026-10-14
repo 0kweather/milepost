@@ -1772,7 +1772,7 @@ function atStation(st, extras) {
     for (const [k, v] of Object.entries(x)) o[k] = typeof v === "number" && k !== "pr" ? Math.max(o[k] ?? 0, v) : v;
   }
   const rows = [];
-  const row = (icon, label, detail = "") => rows.push(`<li><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ROW_ICON[icon]}</svg><span>${esc(label)}</span>${detail ? `<span class="am-detail">${esc(detail)}</span>` : ""}</li>`);
+  const row = (icon, label, detail = "") => rows.push(`<li><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ROW_ICON[icon]}</svg><span>${esc(T(label))}</span>${detail ? `<span class="am-detail">${esc(detail)}</span>` : ""}</li>`);
   if (f?.ticketWindow || o.k) row("ticket", "Ticket office");
   const machines = f?.machines || o.v;
   if (machines) row("machine", machines === 1 ? "Ticket machine" : "Ticket machines", machines > 1 ? `${machines}` : "");
@@ -1783,18 +1783,18 @@ function atStation(st, extras) {
   if (lot || o.p != null) {
     const spaces = lot?.spaces || o.p;
     const fee = lot && (lot.fee.match(/Daily Max:\s*\$\d+/i)?.[0].replace(/Daily Max:\s*/i, "") || lot.fee.match(/\$\d+(\.\d\d)?/)?.[0]);
-    row("parking", o.pr ? "Park and ride" : "Parking", [spaces ? `${spaces.toLocaleString()} spaces` : "", fee ? `${fee} a day` : ""].filter(Boolean).join(" · "));
+    row("parking", o.pr ? "Park and ride" : "Parking", [spaces ? T("{n} spaces", { n: spaces.toLocaleString(locale) }) : "", fee ? T("{fee} a day", { fee }) : ""].filter(Boolean).join(" · "));
   }
   const bikes = f?.bikes || o.b;
-  if (f?.bikes || o.b != null) row("bike", "Bike parking", bikes ? `${bikes} spaces` : "");
+  if (f?.bikes || o.b != null) row("bike", "Bike parking", bikes ? T("{n} spaces", { n: bikes }) : "");
   if (o.s) row("share", "Bike share");
   if (o.x) row("taxi", "Taxi stand");
   if (o.f) row("food", "Places to eat nearby", `${o.f}`);
   if (!rows.length && !address) return "";
   const map = address && `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-  return rrSection("at-station", "At the station", null, `${rows.length ? `<ul class="amenities">${rows.join("")}</ul>` : ""}
+  return rrSection("at-station", T("At the station"), null, `${rows.length ? `<ul class="amenities">${rows.join("")}</ul>` : ""}
     ${address ? `<a class="st-address" href="${esc(map)}" target="_blank" rel="noopener"><span>${esc(address)}</span><span aria-hidden="true">↗</span></a>` : ""}
-    ${rows.length ? `<p class="estimate-note">From ${f ? "the MBTA and " : ""}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>; may be incomplete.</p>` : ""}`);
+    ${rows.length ? `<p class="estimate-note">${T(f ? "From the MBTA and OpenStreetMap; may be incomplete." : "From OpenStreetMap; may be incomplete.").replace("OpenStreetMap", '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>')}</p>` : ""}`);
 }
 
 // ---------- Railroad and line pages ----------
