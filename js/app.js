@@ -1146,13 +1146,27 @@ function factTiles(t) {
   if (b != null) {
     const inferred = t.bearing == null && est?.inferred;
     tiles.push(tile("Heading", `<span${inferred ? ` class="inferred" title="Worked out from the train's next stop; its railroad doesn't report a heading"` : ""}>${HEADINGS[Math.round(b / 45) % 8]}</span>`,
-      "", "", `<svg class="ft-compass" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18"/><path d="M20 6l5 14h-10z" transform="rotate(${Math.round(b)} 20 20)"/></svg>`));
+      "", "", compassSvg(b)));
   }
   if (t.departedOn) tiles.push(tile("Left", `<span class="ft-name">${esc(t.departedOn)}</span>`));
   tiles.push(t.estimated
     ? tile("Position", '<span class="ft-name">Estimated</span>', `from predicted times · ${esc(fmtAgo(t.updated))}`)
-    : tile("GPS", `<span class="ft-name">${esc(fmtAgo(t.updated))}</span>`, "", "", `<span class="ft-signal">${SIGNAL_ICON}</span>`));
+    : tile("GPS", `<span class="ft-name ft-gps">${SIGNAL_ICON}${esc(fmtAgo(t.updated))}</span>`));
   return `<div class="facts">${tiles.join("")}</div>`;
+}
+// A small compass: a dial with ticks at the quarters and N marked, and a
+// needle pointing the way the train is heading.
+function compassSvg(bearing) {
+  const ticks = Array.from({ length: 12 }, (_, i) => {
+    const major = i % 3 === 0, a = (i * 30 * Math.PI) / 180, r1 = major ? 14.5 : 16, r2 = 18;
+    return `<line x1="${(22 + r1 * Math.sin(a)).toFixed(2)}" y1="${(22 - r1 * Math.cos(a)).toFixed(2)}" x2="${(22 + r2 * Math.sin(a)).toFixed(2)}" y2="${(22 - r2 * Math.cos(a)).toFixed(2)}" class="${major ? "major" : ""}"/>`;
+  }).join("");
+  return `<svg class="ft-compass" viewBox="0 0 44 44" aria-hidden="true">
+    <circle cx="22" cy="22" r="21" class="dial"/>${ticks}
+    <text x="22" y="12.2" text-anchor="middle">N</text>
+    <g transform="rotate(${Math.round(bearing)} 22 22)"><path d="M22 9.5l4 12.5h-8z" class="tip"/><path d="M22 34.5l4-12.5h-8z" class="tail"/></g>
+    <circle cx="22" cy="22" r="2" class="hub"/>
+  </svg>`;
 }
 function tile(label, value, sub = "", cls = "", aside = "") {
   return `<div class="ft${cls ? ` ${cls}` : ""}"><div class="ft-main"><span class="ft-label">${label}</span><span class="ft-value">${value}</span>${sub ? `<span class="ft-sub">${sub}</span>` : ""}</div>${aside}</div>`;
@@ -2022,17 +2036,6 @@ function lineDiagram(id, list, color) {
   }).join("")}</ol>`;
 }
 
-function stationButtons(id, list) {
-  const a = AGENCIES[id];
-  return `<div class="rr-stations">${list.map((st) => {
-    const d = st.members.find((m) => m.agency === id)?.daily;
-    return `<button class="result" data-station="${esc(st.id)}">
-      <span class="station-icon" style="--c:${a.color}"></span>
-      <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, d ? `${d} ${a.short} trains a weekday` : ""].filter(Boolean).join(" · "))}</span></span>
-      <span></span></button>`;
-  }).join("")}</div>`;
-}
-
 function renderRailroad() {
   if (state.line) return renderLine();
   const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
@@ -2068,9 +2071,6 @@ function renderRailroad() {
     : estimated && estimated === trains.length ? "Positions estimated from predicted times"
     : trains.length ? "Live GPS positions" : "No trains reporting right now";
   const updated = status?.at ? ` · updated ${fmtAgo(status.at)}` : "";
-  // Busiest: most of its trains on a weekday (else its timetable's stops a week).
-  const busy = (st) => { const m = st.members.find((x) => x.agency === id); return [m?.daily || 0, m?.trips || 0]; };
-  const busiest = [...stations].sort((x, y) => busy(y)[0] - busy(x)[0] || busy(y)[1] - busy(x)[1]).slice(0, 5);
 
   el.innerHTML = `
     <div class="hero">
@@ -2084,7 +2084,6 @@ function renderRailroad() {
       `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
     ${rrSection("running", "Running now", trains.length, runningList(a, trains, true))}
     ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}
-    ${busiest.length ? rrSection("stations", "Busiest stations", busiest.length, `<p class="rr-hint">Of its ${stations.length}, by trains a weekday.</p>${stationButtons(id, busiest)}`) : ""}
     ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
 

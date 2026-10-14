@@ -551,8 +551,13 @@ kbd {
 .ft-sub { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ft-bar { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--fill); overflow: hidden; }
 .ft-bar > span { display: block; height: 100%; background: var(--accent); transform-origin: left; border-radius: 2px; }
-.ft-compass { width: 38px; height: 38px; flex: none; }
-.ft-compass circle { fill: none; stroke: var(--line); stroke-width: 2; }
-.ft-compass path { fill: var(--accent); }
-.ft-signal { color: var(--good); flex: none; }
-.ft-signal svg { width: 20px; height: 20px; }
+.ft-compass { width: 46px; height: 46px; flex: none; }
+.ft-compass .dial { fill: var(--fill); }
+.ft-compass line { stroke: var(--faint); stroke-width: 1; stroke-linecap: round; }
+.ft-compass line.major { stroke: var(--muted); stroke-width: 1.6; }
+.ft-compass text { font: 700 6.5px var(--font); fill: var(--muted); }
+.ft-compass .tip { fill: var(--accent); }
+.ft-compass .tail { fill: var(--faint); }
+.ft-compass .hub { fill: var(--panel-solid); stroke: var(--accent); stroke-width: 1.2; }
+.ft-gps { display: inline-flex; align-items: center; gap: 6px; }
+.ft-gps svg { width: 15px; height: 15px; color: var(--good); flex: none; }
