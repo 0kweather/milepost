@@ -3157,7 +3157,54 @@ setChecked("infer-toggle", state.inferDelays);
 setChecked("heading-toggle", state.inferHeading);
 initTimeZones();
 
-// The guided tour (js/tour.js), from Settings or the list's footer.
+// ---------- Install as an app ----------
+// Installable (manifest.webmanifest, sw.js). Chrome and Edge offer their own
+// install prompt; on an iPhone it's Share, then Add to Home Screen. Phones
+// get a one-time card at the top of the list; Settings keeps the option.
+
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+function showInstall() {
+  const can = !standalone && (installPrompt || isIOS);
+  $("install-btn").hidden = !can;
+  const card = $("install");
+  card.hidden = !can || !isPhone || store.get("tt-install-dismissed", false);
+  if (card.hidden) return;
+  card.innerHTML = `<img src="img/apple-touch-icon.png" alt="" width="40" height="40">
+    <span class="install-text"><strong>Trainsheet as an app</strong><span>${isIOS && !installPrompt ? "Tap Share, then Add to Home Screen" : "Full screen, on your home screen"}</span></span>
+    ${installPrompt ? '<button type="button" class="btn small primary" data-install>Install</button>' : ""}
+    <button type="button" class="install-x" data-install-dismiss aria-label="Not now">×</button>`;
+}
+async function install() {
+  if (!installPrompt) return toast("In Safari, tap Share, then Add to Home Screen.");
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  showInstall();
+}
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  showInstall();
+});
+addEventListener("appinstalled", () => {
+  installPrompt = null;
+  store.set("tt-install-dismissed", true);
+  showInstall();
+});
+on("install", "click", (e) => {
+  if (e.target.closest("[data-install]")) return install();
+  if (e.target.closest("[data-install-dismiss]")) {
+    store.set("tt-install-dismissed", true);
+    showInstall();
+  }
+});
+on("install-btn", "click", () => { toggleMenu(false); install(); });
+showInstall();
+
+// The guided tour (js/tour.js), from Settings (Help).
 function takeTour() {
   toggleMenu(false);
   startTour({ state, map, select, selectStation, closeDetail, setSheet, isPhone, targetOf, visible,

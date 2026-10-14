@@ -357,12 +357,17 @@ html, body {
 .menu { border-radius: 20px; width: 320px; padding: 10px; }
 .menu-title { margin: 14px 8px 6px; font-size: var(--fs-sm); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
 .menu .toggle { margin: 0; border-radius: 0; background: var(--group); position: relative; padding: 10px 12px; }
-.menu .menu-title + .toggle, .menu .menu-select + .toggle, .menu .segmented + .toggle { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
+.menu .menu-title + .toggle, .menu .segmented + .toggle { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
 .menu .toggle:has(+ .menu-title), .menu .toggle:last-child { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
 .menu .toggle + .toggle::before { content: ""; position: absolute; top: 0; left: 66px; right: 0; height: 0.5px; background: var(--line); }
 .menu .toggle:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
 .menu .segmented { margin: 0 0 4px; }
-.menu-select { border-radius: 11px; border: 0; background: var(--group); }
+/* The time zone picker heads the card the 24-hour clock toggle finishes. */
+.menu-select {
+  width: 100%; margin: 0; padding: 12px 14px; border: 0; background: var(--group);
+  border-radius: var(--r-card) var(--r-card) 0 0; font-size: var(--fs-base);
+}
+.menu .menu-select + .toggle::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; height: 0.5px; background: var(--line); }
 
 .toast {
   border-radius: var(--r-pill) !important;
@@ -514,3 +519,16 @@ kbd {
 .menu-about[open] > summary { border-radius: 0; }
 .menu-about p { margin: 0; padding: 8px 14px 0; background: var(--group); font-size: var(--fs-sm); color: var(--muted); }
 .menu-about p:last-child { padding-bottom: 12px; border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
+
+/* ---------- Install as an app ---------- */
+
+.menu-link[hidden], .install[hidden] { display: none; }
+.install {
+  display: flex; align-items: center; gap: 12px; margin: 4px 16px 6px; padding: 10px 10px 10px 12px;
+  border-radius: var(--r-card); background: var(--group); box-shadow: 0 0 0 0.5px var(--line);
+}
+.install img { width: 40px; height: 40px; border-radius: 10px; flex: none; box-shadow: 0 0 0 0.5px var(--line); }
+.install-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
+.install-text strong { font-size: var(--fs-base); font-weight: 600; }
+.install-text span { font-size: var(--fs-sm); color: var(--muted); }
+.install-x { width: 26px; height: 26px; flex: none; border: 0; border-radius: 50%; background: var(--fill); color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }

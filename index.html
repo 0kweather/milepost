@@ -7,6 +7,13 @@
   <meta name="description" content="Live map of passenger trains across the United States — Amtrak, Brightline and commuter railroads in one place.">
   <link rel="icon" type="image/svg+xml" href="img/icon.svg">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Trainsheet">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <link rel="stylesheet" href="css/style.css?v=dev">
   <link rel="stylesheet" href="css/design.css?v=dev">
@@ -37,6 +44,7 @@
         </button>
       </div>
 
+      <div id="install" class="install" hidden></div>
       <div id="results" class="results" hidden></div>
       <div id="recents" class="recents" hidden></div>
       <div id="agencies" class="agencies"></div>
@@ -118,6 +126,7 @@
     </label>
     <div class="menu-title">Help</div>
     <button type="button" class="menu-link" id="tour-btn">Take a tour<span aria-hidden="true">›</span></button>
+    <button type="button" class="menu-link" id="install-btn" hidden>Install as an app<span aria-hidden="true">›</span></button>
     <button type="button" class="menu-link keys-link" id="keys-btn">Keyboard shortcuts<span aria-hidden="true">›</span></button>
     <details class="menu-about">
       <summary>About the data</summary>
