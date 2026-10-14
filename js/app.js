@@ -1316,46 +1316,76 @@ const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 const KM_PER_MI = 1.609344;
 
-// ---------- Crowding (NJ Transit) ----------
-// How full an NJ Transit train is, overall and car by car, from its Rail
-// Data API through the relay; read when the train is opened, then every
-// minute while it stays open.
+// ---------- Crowding ----------
+// How full a train is, car by car: NJ Transit's (its Rail Data API) and the
+// LIRR's and Metro-North's (their TrainTime app's data), through the relay.
+// Read when the train is opened, then every minute while it stays open.
+// Each car: { no, level (0 nearly empty .. 3 standing room), pct?, color?,
+// count?, rest, quiet }, front first.
+
+const CROWD_LEVELS = ["Nearly empty", "Plenty of seats", "Few seats left", "Standing room only"];
+const CROWD_COLORS = ["var(--good)", "var(--good)", "var(--warn)", "var(--bad)"];
+const MTA_LEVEL = { EMPTY: 0, MANY_SEATS: 1, FEW_SEATS: 2, SRO: 3 };
+const levelOfPct = (pct) => (pct == null ? null : pct < 10 ? 0 : pct < 40 ? 1 : pct < 75 ? 2 : 3);
+
+function crowdFrom(agency, d) {
+  const c = d?.crowd;
+  if (!c) return null;
+  if (agency === "njt") {
+    const cars = (c.sections || []).flatMap((x) => x.cars).filter((k) => k.position != null).sort((x, y) => x.position - y.position)
+      .map((k) => ({ no: k.no, level: levelOfPct(k.pct), pct: k.pct, color: k.color, count: k.count, rest: k.rest, quiet: false }));
+    return { level: levelOfPct(c.pct), count: c.count, at: c.at || d.at, cars };
+  }
+  const cars = c.cars.filter((k) => !k.loco).map((k) => ({ no: k.no, level: MTA_LEVEL[k.level] ?? null, count: k.count, rest: k.rest, quiet: k.quiet }));
+  const known = cars.filter((k) => k.level != null);
+  if (!known.length) return null;
+  const counted = cars.filter((k) => k.count != null);
+  // (No time: TrainTime doesn't say when its counts were taken.)
+  return { level: Math.round(known.reduce((n, k) => n + k.level, 0) / known.length), count: counted.length ? counted.reduce((n, k) => n + k.count, 0) : null, at: null, cars };
+}
 
 function loadCrowd(t) {
-  if (t.agency !== "njt" || !RELAY || !t.number) return;
+  const url = !RELAY || !t.number ? null
+    : t.agency === "njt" ? `/njt-crowd/${encodeURIComponent(t.number)}`
+    : t.agency === "lirr" || t.agency === "mnr" ? `/mta-crowd/${t.agency}/${encodeURIComponent(t.number)}` : null;
+  if (!url) return;
   const c = state.crowd;
   if (c?.id === t.id && Date.now() - c.at < 60 * 1000) return;
   state.crowd = { id: t.id, at: Date.now(), data: c?.id === t.id ? c.data : null };
-  fetch(`${RELAY.replace(/\/$/, "")}/njt-crowd/${encodeURIComponent(t.number)}`)
+  fetch(`${RELAY.replace(/\/$/, "")}${url}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (state.crowd?.id !== t.id) return;
-      state.crowd.data = d?.crowd || null;
+      state.crowd.data = crowdFrom(t.agency, d);
       if (state.selected === t.id) renderDetail();
     })
     .catch(() => {});
 }
 
 const RESTROOM_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M7 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm10 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5 8h4l1.5 7H9v6.5H5V15H3.5zm10 0h4v7h-1v6.5h-2V15h-1z"/></svg>';
-function crowdLevel(pct) {
-  if (pct == null) return "";
-  return pct < 35 ? "Plenty of seats" : pct < 70 ? "Some seats" : pct < 100 ? "Standing room only" : "Full";
-}
+const QUIET_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4zM16.3 9.3l1.4-1.4L20 10.2l2.3-2.3 1.4 1.4-2.3 2.3 2.3 2.3-1.4 1.4-2.3-2.3-2.3 2.3-1.4-1.4 2.3-2.3z"/></svg>';
 function crowdSection(t) {
   const c = state.crowd?.id === t.id && state.crowd.data;
-  if (!c || c.pct == null) return "";
-  const cars = (c.sections || []).flatMap((x) => x.cars).filter((k) => k.position != null).sort((x, y) => x.position - y.position);
-  // Where there's most room, when the train is busy enough for it to matter.
-  const parts = (c.sections || []).filter((x) => x.pct != null).sort((x, y) => x.pct - y.pct);
-  const tip = c.pct >= 35 && parts.length > 1 && parts[parts.length - 1].pct - parts[0].pct >= 15
-    ? T({ Front: "Most room toward the front.", Middle: "Most room in the middle.", Back: "Most room toward the back." }[parts[0].pos] || "") : "";
-  const color = c.color || "var(--good)";
+  if (!c || c.level == null) return "";
+  const cars = c.cars || [];
+  // Where there's most room, when the train is busy enough for it to matter:
+  // its front third against its rear third.
+  const third = Math.max(1, Math.floor(cars.length / 3));
+  const avg = (list) => { const k = list.filter((x) => x.level != null); return k.length ? k.reduce((n, x) => n + (x.pct ?? x.level * 30), 0) / k.length : null; };
+  const front = avg(cars.slice(0, third)), rear = avg(cars.slice(-third));
+  const tip = c.level >= 1 && cars.length > 2 && front != null && rear != null && Math.abs(front - rear) >= 15
+    ? T(front < rear ? "Most room toward the front." : "Most room toward the back.") : "";
   return `<section class="crowd" aria-label="${T("How full")}">
     <h3 class="on-board-title">${T("How full")}</h3>
-    <div class="crowd-head"><span class="crowd-dot" style="--c:${esc(color)}"></span><strong>${T(crowdLevel(c.pct))}</strong>
+    <div class="crowd-head"><span class="crowd-dot" style="--c:${CROWD_COLORS[c.level]}"></span><strong>${T(CROWD_LEVELS[c.level])}</strong>
       <span class="crowd-sub">${[c.count != null ? Tn(c.count, "about {n} person on board", "about {n} people on board") : "", c.at ? fmtAgo(c.at) : ""].filter(Boolean).map(esc).join(" · ")}</span></div>
-    ${cars.length ? `<div class="crowd-cars">${cars.map((k) => `<div class="cc" title="${esc(T("Car {n}: {pct}% full", { n: k.no, pct: k.pct ?? "?" }))}">
-        <span class="cc-fill" style="height:${Math.max(4, Math.min(100, k.pct ?? 0))}%;background:${esc(k.color || color)}"></span>${k.rest ? `<span class="cc-rest" title="${T("Restroom")}">${RESTROOM_ICON}</span>` : ""}</div>`).join("")}</div>
+    ${cars.length ? `<div class="crowd-cars">${cars.map((k) => {
+      const h = k.level == null ? 0 : Math.max(6, Math.min(100, k.pct ?? [8, 35, 70, 100][k.level]));
+      const what = k.level == null ? T("no count") : k.pct != null ? T("{pct}% full", { pct: k.pct }) : T(CROWD_LEVELS[k.level]);
+      return `<div class="cc${k.level == null ? " none" : ""}" title="${esc(`${k.no ? T("Car {n}", { n: k.no }) : ""}: ${what}${k.quiet ? ` · ${T("Quiet car")}` : ""}`)}">
+        <span class="cc-fill" style="height:${h}%;background:${esc(k.color || CROWD_COLORS[k.level] || "transparent")}"></span>
+        <span class="cc-icons">${k.rest ? RESTROOM_ICON : ""}${k.quiet ? QUIET_ICON : ""}</span></div>`;
+    }).join("")}</div>
       <div class="crowd-ends"><span>${T("Front")}</span><span>${T("Rear")}</span></div>` : ""}
     ${tip ? `<p class="crowd-tip">${esc(tip)}</p>` : ""}
   </section>`;
@@ -2175,6 +2205,17 @@ const skeletonRows = (n = 3) => Array.from({ length: n }, (_, i) =>
   `<div class="sk-row" aria-hidden="true"><span class="sk sk-plate"></span><span class="sk-lines"><span class="sk" style="width:${[62, 48, 70][i % 3]}%"></span><span class="sk sk-sub" style="width:${[38, 30, 44][i % 3]}%"></span></span><span class="sk sk-end"></span></div>`).join("");
 const isLoading = (agency) => state.sourceStatus[SOURCES.find((s) => s.agencies.includes(agency))?.id]?.status === "loading";
 
+// The trains running on a line now, for its page.
+function runningList(a, trains) {
+  const running = [...trains].sort((x, y) => String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
+  return `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
+        ${plate(t.number || a.short, a.color, "sm")}
+        <span><span class="title">${esc(t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t))}</span><br><span class="sub">${esc(t.nextStop ? T("next {place}", { place: t.nextStop }) : "")}</span></span>
+        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "<span></span>"}
+      </button>`).join("") + (running.length > 40 ? `<p class="sub">${T("and {n} more", { n: running.length - 40 })}</p>` : "")
+      : `<p class="empty">${esc(T("None of its trains are running right now."))}</p>`}</div>`;
+}
+
 // A line's stations joined by a line in its color, like a train's stops.
 function lineDiagram(id, list, color) {
   const a = AGENCIES[id];
@@ -2303,6 +2344,7 @@ function renderLine() {
       ${consistSection(typical)}
     </div>
     ${trainStats(trains)}
+    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains))}
     ${stations.length ? rrSection("line-stations", T("Stations"), stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
   const shown = el.querySelector(".consist-strip");
   if (shown) shown.scrollLeft = keepStrip;
