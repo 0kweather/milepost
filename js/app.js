@@ -3106,7 +3106,7 @@ function toggleShortcuts(open = !document.querySelector(".keys-sheet")) {
   el.addEventListener("click", (e) => { if (!e.target.closest(".keys-card")) toggleShortcuts(false); });
   document.body.append(el);
 }
-on("keys-btn", "click", () => toggleShortcuts());
+on("keys-btn", "click", () => { toggleMenu(false); toggleShortcuts(); });
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
   if (document.querySelector(".tour-card")) return; // the tour has its own keys
@@ -3164,7 +3164,6 @@ function takeTour() {
               padding: panelPadding });
 }
 on("tour-btn", "click", takeTour);
-on("tour-menu-btn", "click", takeTour);
 
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {

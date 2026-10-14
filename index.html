@@ -41,17 +41,6 @@
       <div id="recents" class="recents" hidden></div>
       <div id="agencies" class="agencies"></div>
 
-      <footer class="foot">
-        <button type="button" class="link-btn tour-link" id="tour-btn">Take a tour</button>
-        <button type="button" class="link-btn tour-link keys-link" id="keys-btn">Keyboard shortcuts</button>
-        <details>
-          <summary>About the data</summary>
-          <p>Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
-          <p>Railroads often don't post a delay until well after it starts. Trainsheet watches GPS for trains still at a station after their posted departure, or too far out to make their next stop on time, and adds that delay itself. Those delays are underlined with dots. You can turn this off in Settings.</p>
-          <p id="credits"></p>
-          <p><a href="https://github.com/0kweather/trainsheet">Source on GitHub</a></p>
-        </details>
-      </footer>
     </section>
 
     <!-- Train detail view -->
@@ -75,7 +64,6 @@
   </aside>
 
   <div id="settings-menu" class="menu" role="dialog" aria-label="Settings" hidden>
-    <button type="button" class="btn small tour-menu-btn" id="tour-menu-btn">Take a tour of Trainsheet</button>
     <div class="menu-title">Appearance</div>
     <div class="segmented" id="theme-choice">
       <button data-theme-choice="auto">Auto</button>
@@ -128,6 +116,16 @@
       <span class="switch" aria-hidden="true"></span>
       <span class="toggle-text"><strong>Catch unreported delays</strong><span>Mark a train late when GPS shows it running behind what its railroad reports</span></span>
     </label>
+    <div class="menu-title">Help</div>
+    <button type="button" class="menu-link" id="tour-btn">Take a tour<span aria-hidden="true">›</span></button>
+    <button type="button" class="menu-link keys-link" id="keys-btn">Keyboard shortcuts<span aria-hidden="true">›</span></button>
+    <details class="menu-about">
+      <summary>About the data</summary>
+      <p>Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
+      <p>Railroads often don't post a delay until well after it starts. Trainsheet watches GPS for trains still at a station after their posted departure, or too far out to make their next stop on time, and adds that delay itself. Those delays are underlined with dots. You can turn this off above.</p>
+      <p id="credits"></p>
+      <p><a href="https://github.com/0kweather/trainsheet">Source on GitHub</a></p>
+    </details>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>

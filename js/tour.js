@@ -1,7 +1,7 @@
 // The guided tour: a short walk through the app that drives the real thing.
 // It spotlights one part at a time with a card beside it, opening a live
-// train and one of its stations along the way. Started from Settings or the
-// list's footer; Escape or × ends it, the arrow keys step through.
+// train and one of its stations along the way. Started from Settings
+// (Help); Escape or × ends it, the arrow keys step through.
 
 let tour = null; // { steps, i, demo, frame, el: { shade, ring, card } }
 
