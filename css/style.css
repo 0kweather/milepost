@@ -1068,7 +1068,7 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
     transition: height 0.25s ease;
   }
 
-  .panel.collapsed { height: 132px; }
+  .panel.collapsed { height: calc(132px + var(--tracked-h, 0px)); }
   .panel.expanded { height: 86vh; }
 
   .sheet-handle {
@@ -1095,7 +1095,7 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
   }
 
   .maplibregl-ctrl-bottom-right { bottom: calc(46vh + 4px); transition: bottom 0.25s ease; }
-  body.sheet-collapsed .maplibregl-ctrl-bottom-right { bottom: 136px; }
+  body.sheet-collapsed .maplibregl-ctrl-bottom-right { bottom: calc(136px + var(--tracked-h, 0px)); }
   body.sheet-expanded .maplibregl-ctrl-bottom-right { bottom: calc(86vh + 4px); }
   .toast { bottom: calc(46vh + 16px); }
 }

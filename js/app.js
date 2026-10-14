@@ -96,6 +96,9 @@ const state = {
 };
 let goingBack = false; // going back doesn't count as opening something (for Recents)
 let islandsShown = new Map(); // tracked train id -> when its island first showed
+// On phones the tracked trains sit at the top of the sheet, as they used to:
+// floating over the map, they'd cover the expanded sheet's top.
+if (matchMedia("(max-width: 720px)").matches) document.getElementById("panel")?.insertBefore(document.getElementById("tracked"), document.getElementById("view-list"));
 
 // ---------- Theme ----------
 
@@ -2394,6 +2397,8 @@ function renderTracked() {
     }
   }
   islandsShown = new Map(state.tracked.map((r) => [r.id, islandsShown.get(r.id) ?? now]));
+  // On phones, keep the cards visible when the sheet is collapsed.
+  document.documentElement.style.setProperty("--tracked-h", `${el.hidden || !isPhone ? 0 : el.offsetHeight}px`);
 }
 
 function openTracked(id) {
@@ -2639,7 +2644,7 @@ function closeDetailTo() {
 
 function panelPadding() {
   // Clear of the tracked trains' islands across the top of the map, too.
-  const islands = $("tracked"), top = islands && !islands.hidden ? islands.getBoundingClientRect().bottom : 0;
+  const islands = $("tracked"), top = islands && !islands.hidden && !isPhone ? islands.getBoundingClientRect().bottom : 0;
   if (matchMedia("(max-width: 720px)").matches) return { bottom: window.innerHeight * 0.46, top, left: 0, right: 0 };
   return { left: 360, top, bottom: 0, right: 0 };
 }

@@ -388,9 +388,11 @@ html, body {
 
 @media (max-width: 720px) {
   .panel { top: auto; left: 0; bottom: 0; width: auto; border-radius: 24px 24px 0 0; }
-  .tracked { top: calc(env(safe-area-inset-top) + 10px); left: 10px; right: 10px; }
+  /* In the sheet, at its top (moved there by app.js). */
+  .panel .tracked { position: static; flex: none; padding: 4px 14px 6px; pointer-events: auto; }
+  .panel .tracked .live { width: 100%; }
   .maplibregl-ctrl-bottom-left { left: 0; bottom: calc(46vh + 4px); transition: bottom 0.25s ease; }
-  body.sheet-collapsed .maplibregl-ctrl-bottom-left { bottom: 136px; }
+  body.sheet-collapsed .maplibregl-ctrl-bottom-left { bottom: calc(136px + var(--tracked-h, 0px)); }
   body.sheet-expanded .maplibregl-ctrl-bottom-left { bottom: calc(86vh + 4px); }
   .sheet-handle::after { width: 36px; height: 5px; border-radius: 3px; top: 7px; }
 }
