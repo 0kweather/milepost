@@ -90,6 +90,7 @@ const state = {
   rrCollapsed: new Set(store.get("tt-rr-collapsed", [])),
   servedOpen: new Set(),  // railroads whose lines are unfolded on station pages
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
+  crowd: null,           // { id, at, data }: the selected NJ Transit train's crowding (relay /njt-crowd)
   est: new Map(),        // train id -> position on the track { lat, lon, bearing }
   rail: null,            // RailIndex (routing and snapping; uses every track)
   railGeo: null,         // rail.geojson as loaded; drawn filtered by railCollection()
@@ -1315,6 +1316,51 @@ const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 const KM_PER_MI = 1.609344;
 
+// ---------- Crowding (NJ Transit) ----------
+// How full an NJ Transit train is, overall and car by car, from its Rail
+// Data API through the relay; read when the train is opened, then every
+// minute while it stays open.
+
+function loadCrowd(t) {
+  if (t.agency !== "njt" || !RELAY || !t.number) return;
+  const c = state.crowd;
+  if (c?.id === t.id && Date.now() - c.at < 60 * 1000) return;
+  state.crowd = { id: t.id, at: Date.now(), data: c?.id === t.id ? c.data : null };
+  fetch(`${RELAY.replace(/\/$/, "")}/njt-crowd/${encodeURIComponent(t.number)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (state.crowd?.id !== t.id) return;
+      state.crowd.data = d?.crowd || null;
+      if (state.selected === t.id) renderDetail();
+    })
+    .catch(() => {});
+}
+
+const RESTROOM_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M7 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm10 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5 8h4l1.5 7H9v6.5H5V15H3.5zm10 0h4v7h-1v6.5h-2V15h-1z"/></svg>';
+function crowdLevel(pct) {
+  if (pct == null) return "";
+  return pct < 35 ? "Plenty of seats" : pct < 70 ? "Some seats" : pct < 100 ? "Standing room only" : "Full";
+}
+function crowdSection(t) {
+  const c = state.crowd?.id === t.id && state.crowd.data;
+  if (!c || c.pct == null) return "";
+  const cars = (c.sections || []).flatMap((x) => x.cars).filter((k) => k.position != null).sort((x, y) => x.position - y.position);
+  // Where there's most room, when the train is busy enough for it to matter.
+  const parts = (c.sections || []).filter((x) => x.pct != null).sort((x, y) => x.pct - y.pct);
+  const tip = c.pct >= 35 && parts.length > 1 && parts[parts.length - 1].pct - parts[0].pct >= 15
+    ? T({ Front: "Most room toward the front.", Middle: "Most room in the middle.", Back: "Most room toward the back." }[parts[0].pos] || "") : "";
+  const color = c.color || "var(--good)";
+  return `<section class="crowd" aria-label="${T("How full")}">
+    <h3 class="on-board-title">${T("How full")}</h3>
+    <div class="crowd-head"><span class="crowd-dot" style="--c:${esc(color)}"></span><strong>${T(crowdLevel(c.pct))}</strong>
+      <span class="crowd-sub">${[c.count != null ? Tn(c.count, "about {n} person on board", "about {n} people on board") : "", c.at ? fmtAgo(c.at) : ""].filter(Boolean).map(esc).join(" · ")}</span></div>
+    ${cars.length ? `<div class="crowd-cars">${cars.map((k) => `<div class="cc" title="${esc(T("Car {n}: {pct}% full", { n: k.no, pct: k.pct ?? "?" }))}">
+        <span class="cc-fill" style="height:${Math.max(4, Math.min(100, k.pct ?? 0))}%;background:${esc(k.color || color)}"></span>${k.rest ? `<span class="cc-rest" title="${T("Restroom")}">${RESTROOM_ICON}</span>` : ""}</div>`).join("")}</div>
+      <div class="crowd-ends"><span>${T("Front")}</span><span>${T("Rear")}</span></div>` : ""}
+    ${tip ? `<p class="crowd-tip">${esc(tip)}</p>` : ""}
+  </section>`;
+}
+
 // ---------- Service notices ----------
 
 const NOTICE_REFRESH_MS = 2 * 60 * 1000;
@@ -1387,6 +1433,7 @@ function renderDetail() {
   if (shown && el.dataset.train) stripScroll.set(el.dataset.train, shown.scrollLeft);
   if (state.car?.page && state.car.id === t.id) return renderModelPage(t, el);
   loadNotices(t);
+  loadCrowd(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
   const tiles = factTiles(t);
@@ -1442,6 +1489,7 @@ function renderDetail() {
       ${consistSection(t)}
     </div>
     ${onBoardFor(t)}
+    ${crowdSection(t)}
     ${noticesHtml(t)}
     ${tiles}
     ${t.estimated ? `<p class="estimate-note">${T("This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.")}</p>` : ""}

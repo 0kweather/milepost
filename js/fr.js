@@ -163,6 +163,22 @@ export default {
   "Copy a link to the open train": "Copier un lien vers le train ouvert",
   "Link copied.": "Lien copié.",
 
+  // ----- How full -----
+  "How full": "Taux d’occupation",
+  "Plenty of seats": "Beaucoup de places",
+  "Some seats": "Quelques places",
+  "Standing room only": "Places debout seulement",
+  "Full": "Complet",
+  "about {n} person on board": "environ {n} personne à bord",
+  "about {n} people on board": "environ {n} personnes à bord",
+  "Car {n}: {pct}% full": "Voiture {n} : {pct} % occupée",
+  "Restroom": "Toilettes",
+  "Front": "Avant",
+  "Rear": "Arrière",
+  "Most room toward the front.": "Plus de place vers l’avant.",
+  "Most room in the middle.": "Plus de place au milieu.",
+  "Most room toward the back.": "Plus de place vers l’arrière.",
+
   // ----- Cars and models -----
   "Built": "Construction",
   "Fleet": "Matériel roulant",
