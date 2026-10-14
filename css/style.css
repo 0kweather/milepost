@@ -1267,3 +1267,23 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .v-arrow { display: inline-block; vertical-align: -0.12em; }
 .v-arrow.left { transform: scaleX(-1); }
 .back .v-arrow { margin-right: 4px; vertical-align: -1px; }
+
+/* The railroad list: each railroad's disc, solid while its trains show,
+   hollow when they're hidden. */
+.rr-disc {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--b);
+  color: var(--bt);
+  border: 2px solid var(--b);
+  font: 700 11px/1 var(--font);
+  letter-spacing: -0.03em;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.rr-disc[data-n="3"] { font-size: 9px; }
+.agency.off .rr-disc { background: transparent; color: var(--faint); border-color: var(--faint); }
+.agency.unavailable .rr-disc { background: transparent; color: var(--faint); border: 2px dashed var(--faint); }
+.check-hit:hover .rr-disc { box-shadow: 0 0 0 3px var(--hover); }
