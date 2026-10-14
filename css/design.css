@@ -1,9 +1,8 @@
 /* Trainsheet's look, after Apple's system design: San Francisco type with
  * large bold titles, the system colors, materials (frosted glass) over the
- * map, inset grouped lists on rounded cards, iOS controls. Two striking
- * touches: each page's top is washed in its railroad's or line's color (as
- * Apple Music does with album art), and tracked trains are Live
- * Activity-style cards with a countdown and a progress bar.
+ * map, inset grouped lists on rounded cards, iOS controls, widget-style
+ * stats, and tracked trains as Live Activity-style cards with a countdown
+ * and a progress bar.
  *
  * Loaded after style.css; it redefines the tokens and restyles components.
  */
@@ -44,7 +43,6 @@
   --bad: #d70015;
   --switch-on: #34c759;
   --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --wash: 26%;                            /* how strongly a page's color tints its top */
 }
 
 :root[data-theme="dark"] {
@@ -65,7 +63,6 @@
   --bad: #ff453a;
   --switch-on: #30d158;
   --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 12px 40px rgba(0, 0, 0, 0.6);
-  --wash: 34%;
 }
 
 html, body {
@@ -214,13 +211,6 @@ html, body {
 
 /* ---------- Pages ---------- */
 
-/* The top of each page washed in its railroad's or line's color (set in
-   app.js as --tint), fading into the panel. */
-#view-train {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tint, transparent) var(--wash), transparent) 0,
-    color-mix(in srgb, var(--tint, transparent) calc(var(--wash) / 3), transparent) 160px, transparent 300px);
-  transition: background 0.4s ease;
-}
 .detail-top { padding-top: 14px; }
 .back { font-size: 17px; letter-spacing: -0.02em; color: var(--accent); }
 

@@ -1282,10 +1282,6 @@ function noticesBlock(list, route = null, title = "Service notices") {
   </div>`;
 }
 
-// The open page's color (its line's, else its railroad's), washed across the
-// top of the panel (design.css).
-const tint = (color) => $("view-train").style.setProperty("--tint", color || "transparent");
-
 const stripScroll = new Map();
 // A press in the panel holds off feed redraws until it's released: replacing
 // the row under the pointer between press and release loses the tap.
@@ -1318,7 +1314,6 @@ function renderDetail() {
   loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
-  tint(lineColor);
   const chips = [
     t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
     t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
@@ -1515,7 +1510,6 @@ function renderStation() {
   const st = state.stations.get(state.station);
   const el = $("train-detail");
   if (!st) return;
-  tint(AGENCIES[st.agencies[0]]?.color);
   const trains = [...state.trains.values()].filter(inLists);
   const arrivals = state.stationView === "arr";
   const extras = state.stationExtras?.id === st.id ? state.stationExtras : null;
@@ -1943,7 +1937,6 @@ function stationButtons(id, list) {
 function renderRailroad() {
   if (state.line) return renderLine();
   const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
-  tint(a.color);
   if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
   const src = SOURCES.find((s) => s.agencies.includes(id));
   const avail = src ? sourceAvailability(src) : { ok: false };
@@ -1998,7 +1991,6 @@ function renderRailroad() {
 // A line's page: what's running on it, its stations in order and its fleet.
 function renderLine() {
   const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
-  tint(lineColor(id, name));
   // The line's typical train, drawn and tappable like a train page's cars.
   const typical = fleetTrain(id, name);
   if (state.car?.page && state.car.id === typical.id) return renderModelPage(typical, el);
