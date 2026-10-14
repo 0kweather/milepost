@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt crowd)";
+const RELAY_VERSION = "2026-10-14 (njt store)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -215,12 +215,36 @@ async function njtApi(method, form, server = njtServer) {
   if (!res.ok && !json?.errorMessage) throw new Error(`NJ Transit API HTTP ${res.status}`);
   return json;
 }
+// The token, and when to next ask for one, are kept in the Store (shared by
+// every copy of the relay, and across deploys) as well as in memory.
+const storeOf = (env) => env.STORE?.get(env.STORE.idFromName("njt"));
+async function storeGet(env) {
+  try { return await (await storeOf(env).fetch("https://store/get")).json(); } catch { return {}; }
+}
+async function storeSet(env, data) {
+  try { await storeOf(env).fetch("https://store/set", { method: "POST", body: JSON.stringify(data) }); } catch {}
+}
+// The next midnight in New York, when NJ Transit's daily limits reset.
+function nextNyMidnight() {
+  const now = Date.now();
+  const p = Object.fromEntries(nyParts.formatToParts(new Date(now)).map((x) => [x.type, +x.value]));
+  return now + ((24 - (p.hour % 24)) * 60 - p.minute) * 60 * 1000 + 60 * 1000;
+}
 async function njtGetToken(env) {
   // Back to production when it may have taken the account since.
   if (njtServer === "test" && Date.now() - njtProductionRefused > 6 * 3600 * 1000) { njtServer = "production"; njtToken = null; }
   if (njtToken && njtToken.server === njtServer && Date.now() - njtToken.at < 23 * 3600 * 1000) return njtToken.token;
-  if (Date.now() - njtTokenTried < 10 * 60 * 1000) throw new Error("NJ Transit token: waiting before asking again");
+  const kept = await storeGet(env);
+  if (kept.token && Date.now() - kept.at < 23 * 3600 * 1000) {
+    njtToken = { token: kept.token, at: kept.at, server: kept.server };
+    njtServer = kept.server;
+    if (kept.server === "test") njtProductionRefused = kept.productionRefused || Date.now();
+    return njtToken.token;
+  }
+  const wait = Math.max(njtTokenTried + 10 * 60 * 1000, kept.tried ? kept.tried + 10 * 60 * 1000 : 0, kept.blockedUntil || 0);
+  if (Date.now() < wait) throw new Error("NJ Transit token: waiting before asking again");
   njtTokenTried = Date.now();
+  await storeSet(env, { ...kept, tried: njtTokenTried });
   const creds = { username: env.NJT_USERNAME, password: env.NJT_PASSWORD };
   let r = await njtApi("getToken", creds);
   if (njtServer === "production" && /missing user account/i.test(r?.errorMessage || "")) {
@@ -228,8 +252,13 @@ async function njtGetToken(env) {
     njtServer = "test";
     r = await njtApi("getToken", creds);
   }
-  if (r?.Authenticated !== "True" || !r.UserToken) throw new Error(`NJ Transit token refused${r?.errorMessage ? `: ${r.errorMessage}` : ""}`);
+  if (r?.Authenticated !== "True" || !r.UserToken) {
+    // Out of tokens for today: nobody asks again until midnight.
+    if (/daily usage limit/i.test(r?.errorMessage || "")) await storeSet(env, { ...kept, tried: njtTokenTried, blockedUntil: nextNyMidnight() });
+    throw new Error(`NJ Transit token refused${r?.errorMessage ? `: ${r.errorMessage}` : ""}`);
+  }
   njtToken = { token: r.UserToken, at: Date.now(), server: njtServer };
+  await storeSet(env, { token: njtToken.token, at: njtToken.at, server: njtServer, productionRefused: njtProductionRefused, tried: njtTokenTried });
   return njtToken.token;
 }
 // One train's crowding (getTrainStopList's CAPACITY): how full it is, by
@@ -477,6 +506,18 @@ async function fetchNjtDv(ctx, env) {
   const trains = Object.values(st.trains).filter((t) => t.stops).map(({ id, line, abbr, color, dest, stops }) => ({ id, line, abbr, color, dest, stops }));
   njtMem = { st, at: now, json: { at: now, trains, vehicles: gps } };
   return Response.json(njtMem.json);
+}
+
+// Shared storage for every copy of the relay: a small JSON record.
+export class Store {
+  constructor(ctx) { this.ctx = ctx; }
+  async fetch(request) {
+    if (request.method === "POST") {
+      await this.ctx.storage.put("data", await request.json());
+      return new Response("ok");
+    }
+    return Response.json((await this.ctx.storage.get("data")) || {});
+  }
 }
 
 export default {

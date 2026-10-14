@@ -3,3 +3,13 @@ main = "worker.js"
 compatibility_date = "2025-01-01"
 # Keep variables set in the Cloudflare dashboard (API keys) across deploys.
 keep_vars = true
+
+# Shared storage every copy of the relay uses (and that survives deploys):
+# NJ Transit's daily login token, of which only 10 can be had a day.
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
