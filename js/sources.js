@@ -428,8 +428,10 @@ export function advanceEstimated(t) {
 // The relay scrapes NJ Transit's DepartureVision: each running train's line,
 // destination and stop list with predicted times and which stops it has left
 // ({ at, trains: [{ id, line, abbr, color, dest, stops: [{ name, time,
-// departed, status }] }] }). There are no GPS positions, so trains are placed
-// between stations from those times.
+// departed, status }] }], vehicles }). With NJ Transit's Rail Data API (an
+// account on the relay), vehicles gives each moving train's GPS position,
+// next stop and seconds late ([{ id, line, next, lat, lon, late, at }]);
+// trains without one are placed between stations from their stop times.
 const NJT_LINES = [[/Atl/i, "Atlantic City Rail Line"], [/Gladstone/i, "Gladstone Branch"], [/Morris|M&E|Morristown/i, "Morris & Essex Line"],
   [/Montclair|Boonton/i, "Montclair-Boonton Line"], [/Bergen|Main/i, "Main/Bergen County Line"], [/Northeast|NEC/i, "Northeast Corridor"],
   [/Coast/i, "North Jersey Coast Line"], [/Pascack/i, "Pascack Valley Line"], [/Princeton/i, "Princeton Shuttle"],
@@ -468,6 +470,10 @@ async function parseNjt(json) {
   const { byId, idOf } = await loadNjtStations();
   const now = nowSec(), at = (json.at || Date.now()) / 1000;
   const out = [];
+  // GPS positions from the Rail Data API, by train number (reported within
+  // the last five minutes).
+  const gps = new Map((json.vehicles || []).filter((v) => !v.at || Date.now() - v.at < 5 * 60 * 1000).map((v) => [String(v.id), v]));
+  const stationName = (raw) => { const id = idOf(raw); return id && byId[id] ? byId[id][0] : raw; };
   for (const tr of json.trains || []) {
     const line = NJT_LINES.find(([re]) => re.test(`${tr.line} ${tr.abbr}`))?.[1];
     if (!line || !tr.stops?.length) continue;   // SEPTA and Amtrak trains on the boards
@@ -501,25 +507,47 @@ async function parseNjt(json) {
     const first = prog.list[0], last = prog.list[prog.list.length - 1];
     const nextStop = prog.dwelling ? prog.at : prog.next;
     const name = (st) => byId[st.stopId][0];
+    const v = gps.get(String(tr.id));
+    gps.delete(String(tr.id));
     out.push(train({
       id: `njt:${tr.id}`,
       agency: "njt",
       number: tr.id,
       route: line,
       routeColor: tr.color || null,
-      lat: prog.lat,
-      lon: prog.lon,
-      bearing: prog.bearing ?? null,
       origin: name(first),
       destination: name(last),
-      nextStop: name(nextStop),
-      statusText: prog.dwelling && prog.at === first ? `At ${name(first)}` : prog.dwelling ? `At ${name(prog.at)}` : null,
-      updated: at * 1000,
-      estimated: true,
-      leg: prog.leg || null,
       stops: mtaStops("njt", prog.list, byId, now, nextStop, prog.dwelling ? prog.at : null),
-      // Kept so estimated positions can be advanced between refreshes.
-      _progress: { stops, lookup: byId },
+      ...(v ? {
+        // Where its GPS puts it, and NJ Transit's own delay.
+        lat: v.lat, lon: v.lon,
+        nextStop: v.next ? stationName(v.next) : name(nextStop),
+        delayMin: v.late != null ? v.late / 60 : null,
+        statusText: v.late != null ? delayText(v.late / 60) : null,
+        updated: v.at || at * 1000,
+      } : {
+        lat: prog.lat,
+        lon: prog.lon,
+        bearing: prog.bearing ?? null,
+        nextStop: name(nextStop),
+        statusText: prog.dwelling && prog.at === first ? `At ${name(first)}` : prog.dwelling ? `At ${name(prog.at)}` : null,
+        updated: at * 1000,
+        estimated: true,
+        leg: prog.leg || null,
+        // Kept so estimated positions can be advanced between refreshes.
+        _progress: { stops, lookup: byId },
+      }),
+    }));
+  }
+  // Moving trains the boards haven't listed yet: their position and next stop.
+  for (const v of gps.values()) {
+    const line = NJT_LINES.find(([re]) => re.test(v.line || ""))?.[1];
+    if (!line) continue;
+    out.push(train({
+      id: `njt:${v.id}`, agency: "njt", number: v.id, route: line,
+      lat: v.lat, lon: v.lon, nextStop: v.next ? stationName(v.next) : null,
+      delayMin: v.late != null ? v.late / 60 : null, statusText: v.late != null ? delayText(v.late / 60) : null,
+      updated: v.at || at * 1000,
     }));
   }
   return out;

@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api 4)";
+const RELAY_VERSION = "2026-10-14 (njt api 5)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -197,26 +197,39 @@ let njtMem = null; // { st, at, json }
 // one is kept and reused; a refused token is replaced at most every 10
 // minutes. Positions are fetched at most every 20 seconds (the account
 // allows 40,000 calls a day).
-const NJT_API = "https://raildata.njtransit.com/api/TrainData";
-let njtToken = null;       // { token, at }
+// An account approved for NJ Transit's test server only (it has the same
+// live data) is used there until the production server takes it: the
+// production server is asked again every six hours.
+const NJT_SERVERS = { production: "https://raildata.njtransit.com/api/TrainData", test: "https://testraildata.njtransit.com/api/TrainData" };
+let njtServer = "production";
+let njtProductionRefused = 0;
+let njtToken = null;       // { token, at, server }
 let njtTokenTried = 0;     // when a token was last asked for
 let njtVehicles = null;    // { at, list }
-async function njtApi(method, form) {
+async function njtApi(method, form, server = njtServer) {
   const body = new FormData();
   for (const [k, v] of Object.entries(form)) body.append(k, v);
-  const res = await fetch(`${NJT_API}/${method}`, { method: "POST", body, headers: { accept: "application/json" } });
+  const res = await fetch(`${NJT_SERVERS[server]}/${method}`, { method: "POST", body, headers: { accept: "application/json" } });
   // Refusals come as HTTP 500 with { errorMessage }.
   const json = await res.json().catch(() => null);
   if (!res.ok && !json?.errorMessage) throw new Error(`NJ Transit API HTTP ${res.status}`);
   return json;
 }
 async function njtGetToken(env) {
-  if (njtToken && Date.now() - njtToken.at < 23 * 3600 * 1000) return njtToken.token;
+  // Back to production when it may have taken the account since.
+  if (njtServer === "test" && Date.now() - njtProductionRefused > 6 * 3600 * 1000) { njtServer = "production"; njtToken = null; }
+  if (njtToken && njtToken.server === njtServer && Date.now() - njtToken.at < 23 * 3600 * 1000) return njtToken.token;
   if (Date.now() - njtTokenTried < 10 * 60 * 1000) throw new Error("NJ Transit token: waiting before asking again");
   njtTokenTried = Date.now();
-  const r = await njtApi("getToken", { username: env.NJT_USERNAME, password: env.NJT_PASSWORD });
+  const creds = { username: env.NJT_USERNAME, password: env.NJT_PASSWORD };
+  let r = await njtApi("getToken", creds);
+  if (njtServer === "production" && /missing user account/i.test(r?.errorMessage || "")) {
+    njtProductionRefused = Date.now();
+    njtServer = "test";
+    r = await njtApi("getToken", creds);
+  }
   if (r?.Authenticated !== "True" || !r.UserToken) throw new Error(`NJ Transit token refused${r?.errorMessage ? `: ${r.errorMessage}` : ""}`);
-  njtToken = { token: r.UserToken, at: Date.now() };
+  njtToken = { token: r.UserToken, at: Date.now(), server: njtServer };
   return njtToken.token;
 }
 // "30-May-2024 02:30:44 PM" in New York, as epoch milliseconds.
@@ -463,7 +476,7 @@ export default {
       }
       try {
         const list = await fetchNjtVehicles(env);
-        return Response.json({ configured: list != null, vehicles: list?.length ?? 0, sample: list?.[0] ? { id: list[0].id, line: list[0].line, next: list[0].next } : null }, { headers: CORS });
+        return Response.json({ configured: list != null, server: njtServer, vehicles: list?.length ?? 0, sample: list?.[0] ? { id: list[0].id, line: list[0].line, next: list[0].next } : null }, { headers: CORS });
       } catch (err) {
         return Response.json({ configured: true, error: err.message }, { status: 502, headers: CORS });
       }
