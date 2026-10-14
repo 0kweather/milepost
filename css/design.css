@@ -81,8 +81,37 @@ html, body {
   border-radius: var(--r-lg);
 }
 
-.maplibregl-ctrl-group { border-radius: var(--r-md) !important; overflow: hidden; }
-.maplibregl-ctrl-group button { width: 36px; height: 36px; }
+/* Map controls as Apple Maps' capsules: locate me on its own, zoom stacked
+ * below, the credits as a round glass button, and a scale bar beside the
+ * panel. */
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 8px 0; }
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl:last-child { margin-bottom: 12px; }
+.maplibregl-ctrl-group { border-radius: 12px !important; overflow: hidden; border: 0.5px solid var(--glass-edge) !important; }
+.maplibregl-ctrl-group button { width: 42px !important; height: 40px !important; }
+.maplibregl-ctrl-group button + button { border-top: 0.5px solid var(--line) !important; }
+.maplibregl-ctrl-group button:hover { background: var(--hover) !important; }
+.maplibregl-ctrl-geolocate .maplibregl-ctrl-icon { transform: scale(0.9); }
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  min-height: 30px; min-width: 30px; border-radius: 15px !important;
+  background: var(--panel) !important; border: 0.5px solid var(--glass-edge);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow);
+}
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding: 0 !important; width: 30px; margin-right: 18px; } /* centred under the zoom buttons */
+.maplibregl-ctrl-attrib.maplibregl-compact-show { padding: 7px 36px 7px 12px !important; }
+.maplibregl-ctrl-attrib-button { width: 30px; height: 30px; border-radius: 15px; top: 0 !important; right: 0 !important; background-color: transparent !important; background-repeat: no-repeat !important; background-position: center !important; }
+:root[data-theme="dark"] .maplibregl-ctrl-attrib-button { filter: invert(1); }
+.maplibregl-ctrl-bottom-left { left: calc(12px + 372px + 4px); bottom: 4px; }
+.maplibregl-ctrl-scale {
+  position: relative; margin: 0 0 12px 12px !important;
+  padding: 0 0 3px; background: none !important; border: 0 !important; border-bottom: 2px solid var(--text) !important;
+  font: 700 11px/1 var(--font); color: var(--text); text-align: right;
+  text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--bg) 80%, transparent);
+}
+.maplibregl-ctrl-scale::before, .maplibregl-ctrl-scale::after { content: ""; position: absolute; bottom: -2px; width: 2px; height: 7px; background: var(--text); }
+.maplibregl-ctrl-scale::before { left: 0; }
+.maplibregl-ctrl-scale::after { right: 0; }
 
 /* ---------- Controls ---------- */
 
@@ -328,5 +357,8 @@ html, body {
 @media (max-width: 720px) {
   .panel { top: auto; left: 0; bottom: 0; width: auto; border-radius: 24px 24px 0 0; }
   .tracked { top: calc(env(safe-area-inset-top) + 10px); left: 10px; right: 10px; }
+  .maplibregl-ctrl-bottom-left { left: 0; bottom: calc(46vh + 4px); transition: bottom 0.25s ease; }
+  body.sheet-collapsed .maplibregl-ctrl-bottom-left { bottom: 136px; }
+  body.sheet-expanded .maplibregl-ctrl-bottom-left { bottom: calc(86vh + 4px); }
   .sheet-handle::after { width: 36px; height: 5px; border-radius: 3px; top: 7px; }
 }

@@ -122,6 +122,9 @@ const map = new maplibregl.Map({
 map.touchZoomRotate.disableRotation();
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 map.addControl(new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 10 } }), "bottom-right");
+// A scale bar in the chosen units, beside the panel (see design.css).
+const scaleBar = new maplibregl.ScaleControl({ maxWidth: 88, unit: state.units === "km" ? "metric" : "imperial" });
+map.addControl(scaleBar, "bottom-left");
 
 // Marker images are drawn on a canvas once per agency color: an arrow for
 // trains heading a known way, and a dot for the rare train whose direction
@@ -2789,6 +2792,7 @@ on("theme-choice", "click", (e) => {
 
 function applyUnits() {
   for (const b of $("units-choice")?.children || []) b.setAttribute("aria-pressed", String(b.dataset.units === state.units));
+  scaleBar.setUnit(state.units === "km" ? "metric" : "imperial");
 }
 on("units-choice", "click", (e) => {
   const b = e.target.closest("[data-units]");
