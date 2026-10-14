@@ -1144,7 +1144,7 @@ function factTiles(t) {
   if (nextName) {
     const at = next && Date.parse(next.time);
     tiles.push(tile(T("Next stop"), `<span class="ft-name">${esc(nextName)}</span>`,
-      at ? `${at > Date.now() ? `${esc(T("in {time}", { time: fmtIn(at) }))} · ` : ""}${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
+      at ? `${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
   }
   if (t.speedMph != null && !t.estimated) {
     const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
@@ -2521,7 +2521,7 @@ function renderTracked() {
       const stop = chosen || next;
       if (stop) {
         const time = Date.parse(stop.time);
-        where = `${chosen ? "" : `${T("Next:")} `}<strong>${esc(stop.name)}</strong>${time ? ` · ${fmtTime(stop.time, stop.tz)} · ${time > Date.now() ? T("in {time}", { time: fmtIn(time) }) : T("now")}` : ""}`;
+        where = `${chosen ? "" : `${T("Next:")} `}<strong>${esc(stop.name)}</strong>${time ? ` · ${fmtTime(stop.time, stop.tz)} · ${fmtIn(time) === T("now") ? T("now") : T("in {time}", { time: fmtIn(time) })}` : ""}`;
       } else if (t.nextStop) {
         where = `${T("Next:")} <strong>${esc(t.nextStop)}</strong>`;
       } else if (t.destination) {

@@ -130,6 +130,7 @@ export default {
   "Worked out from the train's next stop; its railroad doesn't report a heading": "Déduite du prochain arrêt du train; son réseau ne donne pas son cap",
   "Worked out by Trainsheet from GPS; not yet reported by the railroad": "Calculé par Trainsheet d’après le GPS; pas encore annoncé par le réseau",
   "in {time}": "dans {time}",
+  "Arriving now": "Arrivée imminente",
   "now": "maintenant",
   "Now": "Maint.",
   "{n}s ago": "il y a {n} s",
