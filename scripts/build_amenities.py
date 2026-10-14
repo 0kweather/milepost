@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 # Public Overpass servers, tried in turn when one is busy.
-OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter",
+OVERPASS = ["https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter"]
 BATCH = 10
 # Finished batches, so a run that stops partway resumes where it was.
@@ -28,13 +28,16 @@ CACHE = pathlib.Path("/tmp/trainsheet-amenities-cache")
 # building close by, parking further out, places to eat just around it
 # (downtowns have hundreds within a few blocks).
 NEAR, PARK, FOOD = 160, 400, 150
+# (radius, Overpass query): points for the small things, shapes for parking
+# lots (searching every kind of object for everything is what's slow).
 QUERY_PARTS = [
-    (PARK, '["amenity"~"^(parking|bicycle_parking|bicycle_rental|taxi)$"]'),
-    (NEAR, '["amenity"~"^(toilets|ticket_office)$"]'),
-    (NEAR, '["shop"="ticket"]'),
-    (NEAR, '["vending"="public_transport_tickets"]'),
-    (NEAR, '["highway"="elevator"]'),
-    (FOOD, '["amenity"~"^(cafe|restaurant|fast_food)$"]'),
+    (PARK, 'way["amenity"="parking"]'),
+    (PARK, 'node["amenity"~"^(parking|bicycle_parking|bicycle_rental|taxi)$"]'),
+    (NEAR, 'node["amenity"~"^(toilets|ticket_office)$"]'),
+    (NEAR, 'node["shop"="ticket"]'),
+    (NEAR, 'node["vending"="public_transport_tickets"]'),
+    (NEAR, 'node["highway"="elevator"]'),
+    (FOOD, 'node["amenity"~"^(cafe|restaurant|fast_food)$"]'),
 ]
 
 
@@ -47,9 +50,9 @@ def meters(a, b):
 def overpass(points, first=0):
     """Elements near these points, from the server `first` (then the others)."""
     body = "[out:json][timeout:90];(" + "".join(
-        f"nwr(around:{r},{lat},{lon}){sel};" for lat, lon in points for r, sel in QUERY_PARTS) + ");out center tags;"
+        f"{sel.split('[')[0]}(around:{r},{lat},{lon})[{sel.split('[', 1)[1]};" for lat, lon in points for r, sel in QUERY_PARTS) + ");out center tags;"
     data = urllib.parse.urlencode({"data": body}).encode()
-    for attempt in range(12):
+    for attempt in range(6):
         url = OVERPASS[(first + attempt) % len(OVERPASS)]
         req = urllib.request.Request(url, data=data, headers={"User-Agent": "trainsheet-build (github.com/0kweather/trainsheet)"})
         try:
@@ -82,14 +85,26 @@ print(f"{len(rows)} stations, {len(points)} places, {len(batches)} queries", flu
 found, lock, done = {}, threading.Lock(), [0]
 
 
-def fetch(n):
-    part = batches[n]
+def query(part, first):
+    """Elements near these points (cached). A batch the servers keep refusing
+    is split in two; a single place that still fails is skipped (rerun later)."""
     cached = CACHE / f"{part[0][0]}_{part[0][1]}_{len(part)}.json"
     if cached.exists():
-        els = json.loads(cached.read_text())
-    else:
-        els = overpass(part, first=n % len(OVERPASS))
-        cached.write_text(json.dumps(els))
+        return json.loads(cached.read_text())
+    try:
+        els = overpass(part, 0)
+    except RuntimeError:
+        if len(part) == 1:
+            print(f"  skipped {part[0]}", flush=True)
+            return []
+        half = len(part) // 2
+        return query(part[:half], first) + query(part[half:], first + 1)
+    cached.write_text(json.dumps(els))
+    return els
+
+
+def fetch(n):
+    els = query(batches[n], n % len(OVERPASS))
     with lock:
         for e in els:
             lat, lon = (e.get("lat"), e.get("lon")) if "lat" in e else (e.get("center", {}).get("lat"), e.get("center", {}).get("lon"))
@@ -140,7 +155,7 @@ def write():
 
 
 CACHE.mkdir(exist_ok=True)
-with ThreadPoolExecutor(len(OVERPASS)) as pool:
+with ThreadPoolExecutor(2) as pool:  # two at a time on the first server
     list(pool.map(fetch, range(len(batches))))
 write()
 print("finished", flush=True)
