@@ -252,6 +252,26 @@ function addImages() {
   }
 }
 
+// The basemap toned down after Vignelli's 1972 subway map: flat land, tan
+// water, parks and buildings barely there, roads white on the land, so the
+// rail lines and stations carry the map.
+function toneBasemap() {
+  const T = theme === "dark"
+    ? { land: "#121212", water: "#25231e", green: "#151714", built: "#171717", road: "#1f1f1f" }
+    : { land: "#f2f2ef", water: "#ddd5c1", green: "#e8ebe2", built: "#eaeae6", road: "#ffffff" };
+  for (const l of map.getStyle().layers) {
+    const id = l.id;
+    try {
+      if (l.type === "background") map.setPaintProperty(id, "background-color", T.land);
+      else if (l.type === "fill" && /water/.test(id)) map.setPaintProperty(id, "fill-color", T.water);
+      else if (l.type === "line" && /waterway|river/.test(id)) map.setPaintProperty(id, "line-color", T.water);
+      else if (l.type === "fill" && /park|wood|grass|landcover|forest|wetland/.test(id)) map.setPaintProperty(id, "fill-color", T.green);
+      else if (l.type === "fill" && /landuse|residential|building|aeroway/.test(id)) map.setPaintProperty(id, "fill-color", T.built);
+      else if (l.type === "line" && /highway|road|street|path|motorway|trunk|primary|secondary|tertiary|minor|service|bridge|tunnel/.test(id)) map.setPaintProperty(id, "line-color", T.road);
+    } catch { /* a layer drawn with a pattern: leave it */ }
+  }
+}
+
 function themeColors() {
   return theme === "dark"
     ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
@@ -306,6 +326,7 @@ function addLayers() {
   let lastShape = -1;
   baseLayers.forEach((l, i) => { if (l.type !== "symbol") lastShape = i; });
   const firstSymbol = baseLayers[lastShape + 1]?.id; // undefined = top of the stack
+  toneBasemap();
   // Keep the basemap quiet: of its labels only country and state names stay
   // (station names are the rest of the text); none of its rail layers (ours
   // replace them; its own draw every yard and siding up close); and its
@@ -1055,7 +1076,6 @@ setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 
 // ---------- Rendering: list ----------
 
-const CHECK = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="#fff" d="m9.5 16.2-4.2-4.2-1.4 1.4 5.6 5.6 11-11-1.4-1.4z"/></svg>';
 
 function agencyCounts() {
   const counts = {};
@@ -1074,7 +1094,7 @@ function renderAgencies() {
       if (!avail.ok) {
         rows.off.push(`
           <div class="agency unavailable" style="--swatch:${a.color}" title="${esc(avail.reason)}">
-            <span class="check-hit"><span class="check"></span></span>
+            <span class="check-hit"><span class="rr-disc" style="--b:${a.color};--bt:${inkOn(a.color)}">${esc(DISC[id] || a.short.slice(0, 2))}</span></span>
             <span class="agency-open"><span class="name">${esc(a.name)}<span class="sub">${esc(a.region)} · ${esc(avail.reason)}</span></span></span>
           </div>`);
         continue;
@@ -1086,7 +1106,7 @@ function renderAgencies() {
       else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline ›</span>`;
       rows[a.kind].push(`
         <div class="agency ${off ? "off" : ""}" style="--swatch:${a.color}">
-          <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${off ? "Show" : "Hide"} ${esc(a.name)} trains" title="${off ? "Show" : "Hide"} its trains"><span class="check">${CHECK}</span></button>
+          <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${off ? "Show" : "Hide"} ${esc(a.name)} trains" title="${off ? "Show" : "Hide"} its trains"><span class="rr-disc" data-n="${(DISC[id] || "").length}" style="--b:${a.color};--bt:${inkOn(a.color)}">${esc(DISC[id] || a.short.slice(0, 2))}</span></button>
           <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(a.name)}: what's running, its lines and fleet">
             <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)}</span></span>
             ${count}
@@ -1185,7 +1205,7 @@ function renderResults() {
   const lineBlock = lines.length ? `<div class="group-title">Lines</div>` + lines.slice(0, 6).map((l) => {
     const a = AGENCIES[l.agency];
     return `<button class="result" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}">
-      <span class="line-icon" style="--c:${a.color}"></span>
+      <span class="line-icon">${routeBullet(l.name, colorOfLine(l.agency, l.name))}</span>
       <span><span class="title">${esc(l.name)}</span><br><span class="sub">${esc(a.short)}</span></span>
       <span class="count">${l.running} running ›</span>
     </button>`;
@@ -1348,13 +1368,15 @@ function renderDetail() {
   el.dataset.train = t.id;
   el.innerHTML = `
     <div class="hero">
+      <div class="sign">
       <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
       <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route && !singleLine(t.agency)
         // The title is the train's line: it opens the line's page (or, with
         // no line or just the one, the railroad's).
-        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
-        : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
-      ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
+        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go">${arrowIcon(16)}</span></button>`
+        : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go">${arrowIcon(16)}</span></button>`}</h2></div>
+      ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">${arrowIcon(12)}</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
+      </div>
       <div class="hero-actions">
         ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(t.statusText)}</span>` : ""}
         ${trackButton(t)}
@@ -1373,6 +1395,9 @@ function renderDetail() {
 
 // A wifi-style signal mark beside the time of the train's last GPS report.
 const SIGNAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-label="GPS"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.8 6.2a9 9 0 0 1 12.4 0"/><path d="M4.1 8.7a5.6 5.6 0 0 1 7.8 0"/></g><circle cx="8" cy="11.6" r="1.4" fill="currentColor"/></svg>`;
+
+// The manual's arrow: a heavy shaft and a broad head at 45°.
+const arrowIcon = (size = 14, dir = "right") => `<svg class="v-arrow${dir === "left" ? " left" : ""}" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><path fill="currentColor" d="M2 10h14.2L9.6 3.4 12.4.6 23.8 12 12.4 23.4 9.6 20.6 16.2 14H2z"/></svg>`;
 
 const CLOSE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 
@@ -1571,7 +1596,7 @@ function renderStation() {
     const a = AGENCIES[l.agency], k = lineKey(l.name);
     // The line's own color where its trains carry one (GO's, MBTA's).
     const color = [...state.trains.values()].find((t) => t.agency === l.agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor || a.color;
-    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name"><span class="line-swatch" style="background:${color}"></span><span>${esc(l.name)}</span></span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`;
+    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name">${routeBullet(l.name, color)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`;
   };
   const servedBy = st.members.map((m) => {
     const a = AGENCIES[m.agency];
@@ -1595,12 +1620,14 @@ function renderStation() {
 
   el.innerHTML = `
     <div class="hero">
+      <div class="sign">
       <div class="agency-name" style="color:var(--muted)">
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2c4 0 8 .5 8 4v9.5a3.5 3.5 0 0 1-3.5 3.5l1.5 1.5v.5h-2l-2-2h-4l-2 2H6v-.5L7.5 19A3.5 3.5 0 0 1 4 15.5V6c0-3.5 4-4 8-4Zm0 2c-3.5 0-5.5.5-6 1.5V10h12V5.5C17.5 4.5 15.5 4 12 4ZM7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
         Station${st.place ? ` · ${esc(st.place)}` : ""}
       </div>
       <h2>${esc(st.name)}</h2>
       ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
+      </div>
     </div>
     ${rrSection("served", "Served by", st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
     ${noticesBlock(extras?.notices || [], null, "Station notices")}
@@ -1839,6 +1866,42 @@ function frameFocus() {
   map.fitBounds(b, { padding, maxZoom: 11, duration: 900 });
 }
 
+// Each railroad's disc in the list (solid while its trains show, hollow when
+// hidden): its initials, as the subway's route discs carry a letter.
+const DISC = {
+  amtrak: "A", brightline: "B", via: "VIA", mbta: "T", lirr: "LI", mnr: "MN", njt: "NJ", exo: "exo", go: "GO",
+  ctrail: "CT", marc: "M", vre: "VRE", septa: "S", metra: "M", southshore: "SS", rtd: "RTD", frontrunner: "FR",
+  railrunner: "RR", capmetro: "CM", trirail: "TR", sunrail: "SR", caltrain: "C", ace: "ACE", smart: "SM",
+  metrolink: "ML", sounder: "S",
+};
+
+// The subway's route disc: a line's initials in its color ("LW" for
+// Lakeshore West, "K" for Kitchener), black letters on light colors as on
+// the N/Q/R's yellow.
+function lineInitials(name) {
+  const words = String(name || "").replace(/\b(line|branch|corridor|service)\b/gi, " ").split(/[\s/–-]+/).filter(Boolean);
+  if (!words.length) return "";
+  if (/^\d+$/.test(words[0])) return words[0];
+  if (words.length === 1) return words[0].length <= 3 ? words[0].toUpperCase() : words[0][0].toUpperCase();
+  return words.slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+}
+function inkOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 170 ? "#111111" : "#ffffff";
+}
+function routeBullet(name, color, size = "") {
+  const text = lineInitials(name);
+  return `<span class="bullet${size ? ` ${size}` : ""}" data-n="${text.length}" style="--b:${color};--bt:${inkOn(color)}" aria-hidden="true">${esc(text)}</span>`;
+}
+// A line's own color wherever its trains carry one (GO's, MBTA's, exo's).
+function colorOfLine(agency, name) {
+  const k = lineKey(name);
+  for (const t of state.trains.values()) if (t.agency === agency && t.routeColor && t.route && sameLine(lineKey(t.route), k)) return t.routeColor;
+  return AGENCIES[agency].color;
+}
+
 // A page section under a heading that folds it away (with its count, so a
 // folded section still says something).
 function rrSection(key, title, count, body) {
@@ -1975,13 +2038,15 @@ function renderRailroad() {
 
   el.innerHTML = `
     <div class="hero">
+      <div class="sign">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${a.kind === "intercity" ? "Intercity" : "Commuter rail"} · ${esc(a.region)}</div>
       <h2>${esc(a.name)}</h2>
       <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
+      </div>
     </div>
     ${trainStats(trains)}
     ${lineList.length > 1 ? rrSection("lines", "Lines", lineList.length,
-      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
+      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span class="served-name">${routeBullet(l.name, colorOfLine(id, l.name))}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
     ${rrSection("running", "Running now", trains.length, runningList(a, trains, true))}
     ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}
     ${busiest.length ? rrSection("stations", "Busiest stations", busiest.length, `<p class="rr-hint">Of its ${stations.length}, by trains a weekday.</p>${stationButtons(id, busiest)}`) : ""}
@@ -2003,9 +2068,11 @@ function renderLine() {
   el.dataset.stripOf = typical.id;
   el.innerHTML = `
     <div class="hero">
+      <div class="sign">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
-      <h2>${esc(name)}</h2>
+      <div class="hero-title">${routeBullet(name, lineColor(id, name), "lg")}<h2>${esc(name)}</h2></div>
       ${stations.length ? `<p class="station-facts"><span>${stations.length} stations · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
+      </div>
       ${consistSection(typical)}
     </div>
     ${trainStats(trains)}

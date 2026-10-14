@@ -1,7 +1,10 @@
-/* One consistent set of measurements:
- *   spacing  4 px steps (--s1 … --s6)
- *   radii    small 6, medium 10, large 14, plus pill and circle
- *   text     12 / 13 / 14 / 15 / 18 / 22 px
+/* After the 1970 NYCTA Graphics Standards Manual (Unimark: Massimo
+ * Vignelli and Bob Noorda): one plain sans-serif in medium and bold; black
+ * and white, with color only where it means something (a railroad, a line,
+ * a delay); square modules; a black band with a thin rule along its top.
+ *   spacing  4 px steps on an 8 px grid (--s1 … --s6)
+ *   radii    nearly square: 2, 3, 4, plus pill and circle
+ *   text     12 / 13 / 14 / 15 / 18 / 24 px
  */
 :root {
   --s1: 4px;
@@ -11,9 +14,9 @@
   --s5: 20px;
   --s6: 24px;
 
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  --r-sm: 2px;
+  --r-md: 3px;
+  --r-lg: 4px;
   --r-pill: 999px;
 
   --fs-xs: 12px;
@@ -21,23 +24,31 @@
   --fs-base: 14px;
   --fs-md: 15px;
   --fs-lg: 18px;
-  --fs-xl: 22px;
+  --fs-xl: 24px;
 
-  --bg: #f4f3ef;
-  --panel: rgba(255, 255, 255, 0.62);
-  --glass-edge: rgba(255, 255, 255, 0.6);
-  --glass-blur: blur(24px) saturate(1.8);
+  /* The sign face: Helvetica (the manual's Standard Medium redrawn), with
+     the closest system faces after it. */
+  --font: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  /* The band across the top of every sign, and its rule. */
+  --band: #111111;
+  --band-text: #ffffff;
+  --band-rule: #ffffff;
+
+  --bg: #f2f2f0;
+  --panel: #ffffff;
   --panel-solid: #ffffff;
-  --text: #1b1d21;
-  --muted: #6b7079;
-  --faint: #9aa0a8;
-  --line: rgba(20, 24, 31, 0.09);
-  --hover: rgba(20, 24, 31, 0.05);
-  --accent: #1f5fad;
-  --good: #1a8a4a;
-  --warn: #b86e00;
-  --bad: #c0312b;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.12);
+  --text: #111111;
+  --muted: #5c5c5c;
+  --faint: #9a9a9a;
+  --line: rgba(0, 0, 0, 0.12);
+  --hover: rgba(0, 0, 0, 0.05);
+  --accent: #111111;
+  --link: #0039a6;          /* the A/C/E blue, for links */
+  --good: #00843d;
+  --warn: #c65f00;
+  --bad: #ee352e;           /* the 1/2/3 red */
+  --signal: #fccc0a;        /* the N/Q/R yellow */
+  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 10px rgba(0, 0, 0, 0.1);
   /* Train drawings: the ink of running gear and outlines; how far light,
      nearly colorless paint (stainless, silver, white) dims toward black; the
      body shading's low shadow, highlight and roof-edge shadow. */
@@ -51,20 +62,25 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #15171b;
-  --panel: rgba(24, 27, 32, 0.58);
-  --glass-edge: rgba(255, 255, 255, 0.09);
-  --panel-solid: #1c1f24;
-  --text: #eceef1;
-  --muted: #a0a6b0;
-  --faint: #6f7681;
-  --line: rgba(255, 255, 255, 0.09);
-  --hover: rgba(255, 255, 255, 0.06);
-  --accent: #6aa6ff;
-  --good: #4cc47e;
+  /* Dark is the signs as built since 1973: white on black. */
+  --band: #000000;
+  --band-text: #ffffff;
+  --band-rule: #ffffff;
+  --bg: #0b0b0b;
+  --panel: #141414;
+  --panel-solid: #141414;
+  --text: #f2f2f2;
+  --muted: #a3a3a3;
+  --faint: #6b6b6b;
+  --line: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.07);
+  --accent: #f2f2f2;
+  --link: #6c9cff;
+  --good: #3fbf6f;
   --warn: #f0a83a;
-  --bad: #ff6b62;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --bad: #ff5a52;
+  --signal: #fccc0a;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 12px rgba(0, 0, 0, 0.6);
   /* Running gear keeps its light-mode ink; stainless and white paint dim as
      if under softer light, while the liveries' colors stay true. */
   --car-neutral-dim: 12%;
@@ -83,21 +99,20 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: var(--fs-base)/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  font: 500 var(--fs-base)/1.4 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 
 #map { position: fixed; inset: 0; }
 
 button { font: inherit; color: inherit; cursor: pointer; }
-a { color: var(--accent); }
+a { color: var(--link); }
 
-/* Frosted glass, shared by the panel, the settings menu and the map controls. */
+/* Solid panels, like sign blanks: the panel, the settings menu and the map
+   controls. */
 .panel, .menu, .maplibregl-ctrl-group {
   background: var(--panel);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-edge);
+  border: 0;
   box-shadow: var(--shadow);
 }
 
@@ -141,7 +156,7 @@ a { color: var(--accent); }
 
 .icon-btn:hover { background: var(--hover); color: var(--text); }
 .icon-btn[hidden] { display: none; }
-.icon-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: transparent; }
+.icon-btn[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: transparent; }
 
 .search-row {
   display: flex;
@@ -183,9 +198,10 @@ a { color: var(--accent); }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   margin: var(--s3) var(--s4) var(--s2);
-  padding: 3px;
+  padding: 0;
   border-radius: var(--r-md);
-  background: var(--hover);
+  border: 1.5px solid var(--text);
+  overflow: hidden;
 }
 
 .segmented button {
@@ -197,12 +213,12 @@ a { color: var(--accent); }
   color: var(--muted);
 }
 
+/* The chosen one in solid black, like a lit sign. */
 .segmented button[aria-selected="true"],
 .segmented button[aria-pressed="true"] {
-  background: var(--panel-solid);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  background: var(--text);
+  color: var(--panel);
+  font-weight: 700;
 }
 
 /* ---------- Buttons ---------- */
@@ -218,7 +234,7 @@ a { color: var(--accent); }
 
 .btn:hover { background: var(--hover); }
 .btn.small { padding: 6px var(--s3); font-size: var(--fs-sm); }
-.btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--panel); }
 .btn.primary:hover { filter: brightness(1.08); }
 
 /* ---------- Tracked trains ---------- */
@@ -297,7 +313,7 @@ a { color: var(--accent); }
 .notices-count {
   min-width: 16px;
   padding: 0 5px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   color: var(--warn);
   text-align: center;
@@ -431,12 +447,12 @@ a { color: var(--accent); }
 }
 
 .group-title {
-  margin: var(--s3) var(--s2) var(--s1);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
+  margin: var(--s4) var(--s2) var(--s1);
+  padding-top: var(--s2);
+  border-top: 2px solid var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text);
 }
 
 /* A railroad's row: its checkbox shows or hides its trains; the rest opens
@@ -650,8 +666,9 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--s3) var(--s4) var(--s6);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 24px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 24px), transparent 100%);
+  /* Fades out at the bottom only: the sign band sits flush at the top. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
 }
 
 .stops-scroll { position: relative; flex: none; }
@@ -791,7 +808,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .pill {
   display: inline-block;
   padding: var(--s1) var(--s3);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   font-weight: 600;
   font-size: var(--fs-xs);
 }
@@ -819,7 +836,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
   align-items: center;
   gap: var(--s1);
   padding: var(--s1) var(--s3);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   background: var(--hover);
   font-size: var(--fs-xs);
   color: var(--muted);
@@ -967,14 +984,16 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .stops li.beyond.pv-ride, .stops li.beyond.pv-dest { color: inherit; }
 .stops li.beyond.pv-ride .time, .stops li.beyond.pv-dest .time { color: var(--muted); }
 
+/* Section headings as in the manual: bold, plain case, under a black rule. */
 .section-title {
   flex: none;
-  margin: var(--s4) 0 0;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
+  margin: var(--s5) 0 0;
+  padding-top: var(--s2);
+  border-top: 2px solid var(--text);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text);
 }
 
 .foot {
@@ -1152,7 +1171,7 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .rr-car .title { font-weight: 600; }
 .rr-car .sub { font-size: var(--fs-xs); color: var(--muted); }
 .rr-sec { flex: none; }
-.rr-count { min-width: 16px; padding: 0 5px; border-radius: var(--r-pill); background: var(--hover); color: var(--muted); text-align: center; line-height: 16px; }
+.rr-count { min-width: 16px; padding: 0 5px; border-radius: var(--r-sm); background: var(--hover); color: var(--muted); text-align: center; line-height: 16px; }
 .rr-sec.collapsed .chev { transform: rotate(-90deg); }
 
 /* Search results: a railroad's swatch, a line's stripe. */
@@ -1200,3 +1219,71 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .agency-name.hero-link:hover { opacity: 0.8; }
 .hero-go { display: inline-block; margin-left: 3px; color: var(--faint); font-weight: 400; transition: transform 0.15s ease, color 0.15s ease; }
 .hero-link:hover .hero-go { transform: translateX(3px); color: var(--hc, inherit); }
+
+/* ---------- Vignelli: signs, route discs, arrows ---------- */
+
+/* Each page opens with a sign: a black band, a thin white rule along its
+   top, the name in white. It spans the panel, flush under the back bar. */
+.sign {
+  position: relative;
+  margin: calc(-1 * var(--s3)) calc(-1 * var(--s4)) var(--s3);
+  padding: 22px var(--s4) var(--s4);
+  background: var(--band);
+  color: var(--band-text);
+}
+.sign::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--band-rule); }
+.sign .agency-name { color: var(--band-text) !important; }
+.sign h2 { color: var(--band-text); font-weight: 700; letter-spacing: -0.015em; }
+.sign .od, .sign .station-facts { color: rgba(255, 255, 255, 0.78); }
+.sign .od strong { color: var(--band-text); }
+.sign .od .arrow { color: rgba(255, 255, 255, 0.6); }
+.sign .hero-link:hover, .sign .hero-link:focus-visible { color: var(--band-text); }
+.sign .hero-go { color: rgba(255, 255, 255, 0.55); }
+.sign .hero-link:hover .hero-go { color: var(--band-text); }
+.sign .plate { box-shadow: none; }
+.hero { border-bottom: 0; }
+
+/* The route disc: a line's initials, bold, in its color. */
+.bullet {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--b);
+  color: var(--bt);
+  font: 700 11px/1 var(--font);
+  letter-spacing: -0.02em;
+}
+.bullet[data-n="3"] { font-size: 8.5px; }
+.bullet.lg { width: 36px; height: 36px; font-size: 17px; }
+.bullet.lg[data-n="2"] { font-size: 14px; }
+.bullet.lg[data-n="3"] { font-size: 11px; }
+.served-name .bullet { margin-top: -1px; }
+.rr-line .served-name { align-items: center; }
+
+/* The arrow points; on "back" it turns round. */
+.v-arrow { display: inline-block; vertical-align: -0.12em; }
+.v-arrow.left { transform: scaleX(-1); }
+.back .v-arrow { margin-right: 4px; vertical-align: -1px; }
+
+/* The railroad list: each railroad's disc, solid while its trains show,
+   hollow when they're hidden. */
+.rr-disc {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--b);
+  color: var(--bt);
+  border: 2px solid var(--b);
+  font: 700 11px/1 var(--font);
+  letter-spacing: -0.03em;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.rr-disc[data-n="3"] { font-size: 9px; }
+.agency.off .rr-disc { background: transparent; color: var(--faint); border-color: var(--faint); }
+.agency.unavailable .rr-disc { background: transparent; color: var(--faint); border: 2px dashed var(--faint); }
+.check-hit:hover .rr-disc { box-shadow: 0 0 0 3px var(--hover); }
