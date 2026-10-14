@@ -3329,7 +3329,7 @@ export const dm30ac = (c) => lirrDiesel(c, true);
 // band, sky blue under it, a deep blue wave rising along the side toward the
 // rear around a sky-blue ring (AMT's "eye"), silver above. exo's wordmark
 // is on the front only, not the sides.
-const EXO = { blue: "#2f6bd2", sky: "#63a5ec", royal: "#2945ad", white: "#eef1f4", silver: "#b9bec4", black: "#1f2125" };
+const EXO_NEW = { blue: "#2f6bd2", sky: "#63a5ec", royal: "#2945ad", white: "#eef1f4", silver: "#b9bec4", black: "#1f2125" };
 // The "exo" wordmark (img/logos/exo.svg, key "exo") at (x, y), h ft tall;
 // lettered in a heavy sans until the logo file is in place (badge() draws
 // nothing for a key LOGOS doesn't know).
@@ -3342,9 +3342,9 @@ function exoEye(x, y, rx, ry, gap) {
   const t = rx * 0.27;
   const a0 = ((gap - 26) * Math.PI) / 180, a1 = ((gap + 26) * Math.PI) / 180;
   const P = (a, k) => `${(x + Math.cos(a) * (rx + k)).toFixed(2)} ${(y + Math.sin(a) * (ry + k * (ry / rx))).toFixed(2)}`;
-  return `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${EXO.sky}"/>` +
-    `<ellipse cx="${x}" cy="${y}" rx="${(rx - t).toFixed(2)}" ry="${(ry - t * (ry / rx)).toFixed(2)}" fill="${EXO.royal}"/>` +
-    path(`M${x} ${y}L${P(a0, 1)}L${P(a1, 1)}Z`, EXO.royal);
+  return `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${EXO_NEW.sky}"/>` +
+    `<ellipse cx="${x}" cy="${y}" rx="${(rx - t).toFixed(2)}" ry="${(ry - t * (ry / rx)).toFixed(2)}" fill="${EXO_NEW.royal}"/>` +
+    path(`M${x} ${y}L${P(a0, 1)}L${P(a1, 1)}Z`, EXO_NEW.royal);
 }
 
 // --- Bombardier ALP-45DP (exo 1350-1369; NJ Transit 4500-4534 and the
@@ -3377,12 +3377,12 @@ export function alp45(c) {
   // either side of the middle, trucks.
   s += pilot(1.05, sill);
   s += rect(L - 2.0, 2.0, 1.0, sill - 2.0, "currentColor", 0, 'opacity="0.85"');
-  s += rect(1.6, 3.15, end - 1.6, sill - 3.15, EXO.black);
+  s += rect(1.6, 3.15, end - 1.6, sill - 3.15, EXO_NEW.black);
   for (const [a, b] of [[20.5, 34.5], [37.0, 51.0]]) {
     s += path(poly([[a, 3.2], [b, 3.2], [b, 2.2], ["q", b, 1.5, b - 0.7, 1.5], [a + 0.7, 1.5], ["q", a, 1.5, a, 2.2]]), "currentColor", 0, 'opacity="0.82"');
   }
   for (const k of [-1, 1]) s += truck(L / 2 + k * 21.74, { wb: 9.19, d: 44, kind: "loco", top: 3.15 });
-  let liv = rect(0, 0, L, roof + 1, njt ? "#a7acb3" : EXO.silver);
+  let liv = rect(0, 0, L, roof + 1, njt ? "#a7acb3" : EXO_NEW.silver);
   if (njt) {
     const grad = `ts-disco-${++clipSeq}`;
     liv += `<defs><linearGradient id="${grad}" gradientUnits="userSpaceOnUse" x1="14" x2="59" y1="0" y2="0"><stop offset="0" stop-color="#f26b21" stop-opacity="0"/>` +
@@ -3396,21 +3396,21 @@ export function alp45(c) {
     // The white band (top and bottom edges), the deep blue's top edge.
     const wTop = [[0, 7.35], [14, 7.35], [30, 8.0], [44, 9.45], [52, 10.45], [60, 10.75], [L, 10.25]];
     const wBot = [[0, 6.45], [14, 6.5], [30, 7.45], [44, 9.05], [52, 10.1], [60, 10.45], [L, 9.95]];
-    liv += between(wBot, 0, EXO.sky);
-    liv += between([[12, 3.4], [22, 4.4], [32, 5.9], [42, 7.5], [50, 8.9], [56, 9.85], [62, 10.2], [L, 9.7]], 0, EXO.royal, 12, L + 1);
+    liv += between(wBot, 0, EXO_NEW.sky);
+    liv += between([[12, 3.4], [22, 4.4], [32, 5.9], [42, 7.5], [50, 8.9], [56, 9.85], [62, 10.2], [L, 9.7]], 0, EXO_NEW.royal, 12, L + 1);
     // A thin sky-blue swoosh rising through the blue toward the eye.
-    liv += ribbon([[36, 6.2], [42, 7.2], [47, 8.4], [51, 9.5]], 0.32, EXO.sky, 36, 51);
+    liv += ribbon([[36, 6.2], [42, 7.2], [47, 8.4], [51, 9.5]], 0.32, EXO_NEW.sky, 36, 51);
     liv += exoEye(56.0, 7.0, 4.4, 3.1, 30);
-    liv += between(wTop, wBot, EXO.white);
+    liv += between(wTop, wBot, EXO_NEW.white);
     // The blue cab, its back edge curving from the band up to the roof.
-    liv += path(`M-1 7.35L13.4 7.35C14.6 11.0 19.0 13.6 24.2 ${roof}L24.2 ${roof + 1}L-1 ${roof + 1}Z`, EXO.blue);
-    liv += rect(0, 0, L, sill + 0.3, EXO.black);
+    liv += path(`M-1 7.35L13.4 7.35C14.6 11.0 19.0 13.6 24.2 ${roof}L24.2 ${roof + 1}L-1 ${roof + 1}Z`, EXO_NEW.blue);
+    liv += rect(0, 0, L, sill + 0.3, EXO_NEW.black);
   }
   // Cab glass: the windshield seen edge-on, the tall side window (exo: a
   // white mirror housing ahead of it).
   liv += path(poly([[2.3, 10.0], [4.2, 12.85], [4.95, 12.85], [4.95, 10.0]]), C.glass);
   liv += win(7.3, 8.1, 2.3, 2.3, 0.25);
-  s += path(d, njt ? "#a7acb3" : EXO.silver) + clipped(d, liv);
+  s += path(d, njt ? "#a7acb3" : EXO_NEW.silver) + clipped(d, liv);
   if (!njt) s += rect(6.55, 8.6, 0.5, 1.9, "#eceef0", 0.4, 'rx="0.12"');
   s += door(10.3, sill + 0.35, 2.4, 6.2, { glassY: 0.68, glassH: 0.22 });
   // Handrails beside the crew door (orange on NJ Transit's).
@@ -3464,12 +3464,12 @@ export const f59ph = (c) => cabUnit(c, {
     if (c.agency !== "exo") return genericPaint(c, sp);
     const wTop = [[0, 7.85], [17.5, 8.0], [26, 9.95], [35.4, 11.3], [44, 10.15], [52, 7.55], [L, 6.0]];
     const wBot = [[0, 7.05], [17.5, 7.25], [26, 9.35], [35.4, 10.95], [44, 9.8], [52, 7.25], [L, 5.75]];
-    let p = rect(0, 0, L, 17, EXO.silver);
-    p += between([[0, 12.45], [13.4, 12.2], [20, 11.9], [40, 11.3], [L, 10.4]], 0, EXO.sky);
-    p += between(wBot, 0, EXO.royal);
+    let p = rect(0, 0, L, 17, EXO_NEW.silver);
+    p += between([[0, 12.45], [13.4, 12.2], [20, 11.9], [40, 11.3], [L, 10.4]], 0, EXO_NEW.sky);
+    p += between(wBot, 0, EXO_NEW.royal);
     p += exoEye(38.8, 7.2, 4.6, 2.9, 160);
-    p += between(wTop, wBot, EXO.white);
-    return p + rect(0, 0, L, sp.sill + 0.4, EXO.black);
+    p += between(wTop, wBot, EXO_NEW.white);
+    return p + rect(0, 0, L, sp.sill + 0.4, EXO_NEW.black);
   },
 });
 
