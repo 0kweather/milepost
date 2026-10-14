@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api)";
+const RELAY_VERSION = "2026-10-14 (njt api 2)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -205,8 +205,10 @@ async function njtApi(method, form) {
   const body = new FormData();
   for (const [k, v] of Object.entries(form)) body.append(k, v);
   const res = await fetch(`${NJT_API}/${method}`, { method: "POST", body, headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`NJ Transit API HTTP ${res.status}`);
-  return res.json();
+  // Refusals come as HTTP 500 with { errorMessage }.
+  const json = await res.json().catch(() => null);
+  if (!res.ok && !json?.errorMessage) throw new Error(`NJ Transit API HTTP ${res.status}`);
+  return json;
 }
 async function njtGetToken(env) {
   if (njtToken && Date.now() - njtToken.at < 23 * 3600 * 1000) return njtToken.token;
