@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api 5)";
+const RELAY_VERSION = "2026-10-14 (njt api 6)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -417,6 +417,14 @@ async function fetchNjtDv(ctx, env) {
     }
   }
 
+  // Every train with a GPS position gets its stop list read too, though no
+  // board read so far has listed it.
+  const gps = await vehicles;
+  for (const v of gps || []) {
+    const t = (st.trains[v.id] ||= { id: v.id, line: v.line, dest: null });
+    t.seen = now;
+  }
+
   // Stop lists: trains never read first, then the stalest. A train that
   // won't leave for a while is read less often.
   const due = Object.values(st.trains).filter((t) => {
@@ -439,7 +447,7 @@ async function fetchNjtDv(ctx, env) {
   }
   ctx.waitUntil(cache.put(key, new Response(JSON.stringify(st), { headers: { "Cache-Control": "max-age=86400" } })).catch(() => {}));
   const trains = Object.values(st.trains).filter((t) => t.stops).map(({ id, line, abbr, color, dest, stops }) => ({ id, line, abbr, color, dest, stops }));
-  njtMem = { st, at: now, json: { at: now, trains, vehicles: await vehicles } };
+  njtMem = { st, at: now, json: { at: now, trains, vehicles: gps } };
   return Response.json(njtMem.json);
 }
 
