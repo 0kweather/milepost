@@ -107,9 +107,9 @@ const MNR_BLUE = "#2352b0";
 const GO = { green: "#56963a", lime: "#8cc63f", skirt: "#383c42", teal: "#1f9a70", cream: "#f1eedc" };
 // Lettering on a GO car side, h ft tall, reading left to right even on a
 // mirrored car.
-const goLetters = (c, x, y, h, text, fill, { weight = 600, spacing = 0 } = {}) =>
+const goLetters = (c, x, y, h, text, fill, { weight = 600, spacing = 0, family = "Helvetica Neue, Helvetica, Arial, sans-serif" } = {}) =>
   `<text transform="translate(${x} ${y}) scale(${c.mirrored ? -1 : 1} -1)" y="${(h * 0.36).toFixed(2)}" font-size="${h}" text-anchor="middle" font-weight="${weight}" ` +
-  `letter-spacing="${spacing}" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="${fill}">${text}</text>`;
+  `letter-spacing="${spacing}" font-family="${family}" fill="${fill}">${text}</text>`;
 // MARC: a blue band over an orange stripe on silver or stainless; the
 // Chargers' blue is a deeper indigo.
 const MARC = { blue: "#2b4fae", indigo: "#363c8e", orange: "#f26f21", silver: "#c4c8cd" };
@@ -163,6 +163,15 @@ function mdFlag(x, y, w) {
   return s;
 }
 
+// The US flag, w feet wide, its lower left corner at (x, y): thirteen
+// stripes, the blue canton (too small to show the stars).
+function usFlag(x, y, w) {
+  const h = w / 1.9, sh = h / 13;
+  let s = rect(x, y, w, h, "#ffffff");
+  for (let k = 0; k < 13; k += 2) s += rect(x, y + k * sh, w, sh, "#b22234");
+  return s + rect(x, y + 6 * sh, w * 0.4, 7 * sh, "#3c3b6e");
+}
+
 // A smooth curve through points (Catmull-Rom, as cubic Béziers), as path
 // data starting with its first point.
 function smoothPath(pts) {
@@ -196,6 +205,13 @@ function sounderWave(L, pts) {
 }
 // New Mexico Rail Runner Express: light gray, red and yellow.
 const RR = { body: "#e1e4e8", red: "#c9202f", yellow: "#f5a81c" };
+// ACE (Altamont Corridor Express), 2020 on: silver under a blue roof, blue
+// and magenta stripes, a dark gray skirt. The F40s keep the original scheme:
+// blue, white and a purplish magenta.
+const ACE = { silver: "#cdd0d5", blue: "#2c3f9e", magenta: "#a3246b", skirt: "#3b3f46", oldBlue: "#2f5cb8", plum: "#8e2a6e" };
+// exo (Montréal): white or stainless with a light blue band over navy; the
+// Chargers silver and black.
+const EXO = { white: "#e8ecef", sky: "#5f9fe3", navy: "#203b8c", deep: "#1c2d70", cream: "#f2eedf", royal: "#2f45b8", ink: "#1b1e2e", red: "#b3124e" };
 
 // --- Siemens ACS-64: 66 ft 8 in over couplers, 12 ft 6 in to the roof,
 // trucks 9.9 m apart on 44 in wheels. A raked cab at each end; gray body,
@@ -469,12 +485,12 @@ export function charger(c, { phase7 = false } = {}) {
       [2.65, 9.35], [2.15, 9.1], [1.75, 6.0], [1.55, 5.0]]);
   const amtrak = c.agency === "amtrak", route = c.route || "";
   // Amtrak's state-supported routes keep their sponsors' liveries.
-  const scheme = cone ? "brightline" : c.agency === "via" ? "via" : c.agency === "mnr" ? "mnr" : c.agency === "marc" ? "marc" : !amtrak ? "plain"
+  const scheme = cone ? "brightline" : ["via", "mnr", "marc", "ace", "exo"].includes(c.agency) ? c.agency : !amtrak ? "plain"
     : MIDWEST_ROUTES.has(route) ? "midwest" : ["Capitol Corridor", "San Joaquins"].includes(route) ? "california"
     : route === "Pacific Surfliner" ? "surfliner" : route === "Amtrak Cascades" ? "cascades" : "phase7";
   const p7 = scheme === "phase7";
   const base = { phase7: AMTRAK.navy, brightline: "#d9dde2", via: "#585c61", midwest: "#c3c8ce", california: "#bfc4ca", surfliner: "#c3c8ce", mnr: "#c3c8ce",
-    cascades: "#1d4a45", marc: MARC.silver }[scheme] || c.color;
+    cascades: "#1d4a45", marc: MARC.silver, ace: ACE.silver, exo: "#b4b8bc" }[scheme] || c.color;
   // Metro-North's SC-42DM also runs on third rail into Grand Central.
   const shoe = scheme === "mnr";
   let s = "";
@@ -516,6 +532,32 @@ export function charger(c, { phase7 = false } = {}) {
       liv += rect(0, 0, L, 5.7, "#5b5f64") + rect(0, 5.7, L, 0.2, "#f4f5f6") + rect(16.5, 13.85, L, 1.5, "#33384a");
       liv += band(9.0, 29.0) + band(58.0, L);
       liv += path("M9.2 9.55Q6.0 9.55 2.3 5.9L4.1 5.9Q6.6 8.2 9.2 8.2Z", MARC.indigo) + path("M9.2 8.2Q6.6 8.2 4.1 5.9L5.6 5.9Q7.0 7.55 9.2 7.55Z", MARC.orange);
+      break;
+    }
+    case "ace": {
+      // ACE (SC-44, 3110-3115): silver over a dark gray skirt edged in
+      // white; the blue roof comes down over the cab and the nose. A stripe,
+      // magenta over blue, runs from the nose to the narrow grille ahead of
+      // the big X-braced one, broken by the door, a wedge of blue over its
+      // rear end; behind the grilles a short piece of blue between magenta.
+      // The cab glass is only the windshield's edge in the blue.
+      const band = (x0, x1) => rect(x0, 7.7, x1 - x0, 0.75, ACE.magenta) + rect(x0, 6.95, x1 - x0, 0.75, ACE.blue);
+      liv += rect(0, 0, L, 5.25, ACE.skirt) + rect(0, 5.25, L, 0.35, "#f1f2f4");
+      liv += band(2.4, 12.2) + band(14.9, 48.2) + path(poly([[48.2, 8.45], [47.5, 8.45], [46.6, 8.0], [48.2, 8.0]]), ACE.blue);
+      liv += rect(58.0, 6.95, L - 58.0, 0.6, ACE.magenta) + rect(58.0, 7.55, L - 58.0, 0.7, ACE.blue) + rect(58.0, 8.25, L - 58.0, 0.2, ACE.magenta);
+      liv += path(`M0 6.9L2.45 6.9L2.75 9.6Q4.9 10.4 6.2 12.2Q7.4 13.85 9.6 13.85L${L} 13.85L${L} ${roof + 1}L0 ${roof + 1}Z`, ACE.blue);
+      liv += path(poly([[2.85, 9.85], [4.9, 12.95], [6.4, 12.95]]), C.glass) + win(7.7, 9.5, 1.5, 2.6, 0.25);
+      liv += usFlag(4.4, 8.8, 1.9) + line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
+      break;
+    }
+    case "exo": {
+      // exo (EC-42, 1400-1409): silver; the nose, windshield and a cap over
+      // the cab black, the black running on along the roof edge past the
+      // door; the rear end black, its front edge upright from the roof to
+      // the small louvered panel, then slanting forward to the sill. "allo
+      // exo" big in black between the tall intake and the grilles.
+      liv += path(`M0 0L2.3 0L2.3 7.0Q4.2 10.9 6.8 13.65L16.5 13.65L16.5 ${roof + 1}L0 ${roof + 1}Z`, "#1d1f22");
+      liv += path(poly([[62.4, roof + 1], [62.4, 11.95], [57.6, sill], [57.6, 0], [L + 1, 0], [L + 1, roof + 1]]), "#1d1f22");
       break;
     }
     case "phase7": {
@@ -609,7 +651,7 @@ export function charger(c, { phase7 = false } = {}) {
   // SC-44 (flanked by white and red on Phase VII); the state-supported
   // liveries show the wraparound windshield only, with a narrow cab side
   // window in the body color behind it.
-  const wide = !["midwest", "california", "surfliner", "cascades", "marc"].includes(scheme);
+  const wide = !["midwest", "california", "surfliner", "cascades", "marc", "ace", "exo"].includes(scheme);
   if (phase7 && !via && !cone) {
     liv += path(poly([[2.0, 9.0], [4.95, 13.25], [10.8, 13.25], [10.8, 9.0]]), C.black);
     liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + win(6.3, 9.6, 3.8, 2.9, 0.25);
@@ -625,7 +667,7 @@ export function charger(c, { phase7 = false } = {}) {
     }
     liv += win(10.0, 8.9, 1.15, 2.4, 0.25) + rect(11.35, 10.2, 0.5, 1.5, "#c9cdd2", 0, 'rx="0.15"');
     liv += line(7.2, 12.9, L - 1.0, 12.9, "rgba(0,0,0,0.25)", 0.6);
-  } else if (!via && !cone) {
+  } else if (!via && !cone && scheme !== "ace") {
     liv += path(poly([[2.0, 9.0], [4.95, 13.25], [wide ? 10.8 : 7.3, 13.25], [wide ? 10.8 : 6.9, 9.0]]), C.black);
     if (p7) liv += rect(11.0, 8.6, 0.35, 5.2, "#ffffff") + rect(11.5, 8.6, 0.45, 5.2, AMTRAK.red);
     liv += path(poly([[2.6, 9.35], [4.85, 12.95], [5.6, 12.95], [5.6, 9.35]]), C.glass) + (wide ? win(6.3, 9.6, 3.8, 2.9, 0.25) : win(7.7, 9.5, 1.5, 2.6, 0.25));
@@ -661,7 +703,8 @@ export function charger(c, { phase7 = false } = {}) {
   // "Amtrak Midwest" mid-side; northern California: Caltrans' mark and name;
   // Surfliner: "Pacific Surfliner" on the gray panel; Cascades: its logo on
   // the cream. MARC: the big logo low on the silver between the louver and
-  // the grilles, the Maryland flag high at the rear.
+  // the grilles, the Maryland flag high at the rear. ACE: its logo over
+  // the stripe ahead of the grilles. exo: "allo" over its wordmark.
   const mark = {
     phase7: { x: 20.5, y: 8.2, h: 3.9, dark: true, logo: "amtrak-stack" },
     brightline: { x: 35.5, y: 9.6, h: 3.0 },
@@ -672,8 +715,9 @@ export function charger(c, { phase7 = false } = {}) {
     surfliner: { x: 42, y: 9.3, h: 1.9, logo: "surfliner" },
     cascades: { x: 33, y: 9.4, h: 3.6, logo: "cascades-dark" },
     marc: { x: 41.0, y: 8.1, h: 3.55 },
+    ace: { x: 42.1, y: 10.65, h: 2.6 },
   }[scheme] || { x: 40, y: 9.0, h: 1.7 };
-  s += badge(c, mark.x, mark.y, mark.h, mark);
+  s += scheme === "exo" ? badge(c, 41.2, 9.5, 3.0, { logo: "allo" }) + badge(c, 41.2, 6.75, 2.3, { logo: "exo" }) : badge(c, mark.x, mark.y, mark.h, mark);
   if (via) s += badge(c, 64.5, 7.7, 6.7, { logo: "via-leaf" });
   if (scheme === "marc") s += mdFlag(67.4, 11.4, 1.7);
   s += outlineOf(d);
@@ -994,6 +1038,7 @@ function bombPaint(c, g) {
   }
 }
 export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : c.agency === "sunrail" ? sunrailBilevel(c)
+  : c.agency === "ace" ? aceBilevel(c) : c.agency === "exo" ? exoBilevel(c)
   : bilevel(c, { ...BOMB, base: "#eef0f2", paint: bombPaint }));
 // Cab car: the mid-1990s full-width cab in the end section, a flat end with
 // two windows, the engineer's side window behind the corner in place of the
@@ -1001,14 +1046,68 @@ export const bombardierBilevel = (c) => (c.agency === "go" ? goBilevel(c) : c.ag
 // Sounder's cab end: white stripes slanting across the blue below the
 // windows; Rail Runner's red and yellow; both seen edge-on as a ladder.
 const BOMB_CAB_STRIPES = { sounder: [SOUNDER.blue, "#f4f4f2"], railrunner: [RR.red, RR.yellow] };
+const bombCabEnd = (c, { x0 }) => {
+  let s = "";
+  const st = BOMB_CAB_STRIPES[c.agency];
+  if (st) for (let k = 0; k < 5; k++) s += rect(x0, 4.3 + k * 0.5, 0.45, 0.5, st[k % 2]);
+  s += rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
+  return s;
+};
 export const bombardierCab = (c) => bilevel(c.agency === "railrunner" ? { ...c, rrCab: true } : c, { ...BOMB, base: "#eef0f2", paint: bombPaint, cabLen: 5,
-  cab: (c, { x0 }) => {
-    let s = "";
-    const st = BOMB_CAB_STRIPES[c.agency];
-    if (st) for (let k = 0; k < 5; k++) s += rect(x0, 4.3 + k * 0.5, 0.45, 0.5, st[k % 2]);
-    s += rect(x0, 6.8, 0.45, 2.8, C.black) + win(x0 + 0.8, 6.9, 3.0, 2.3, 0.3);
-    return s;
-  } });
+  cab: bombCabEnd });
+
+// The BiLevel's roofline from the left end to the full-height roof (path
+// data), and on from there to the right end.
+const BOMB_ROOF_L = "M-1 14.1L10.2 14.1Q13.45 14.1 13.45 15.01Q13.45 15.92 16.7 15.92";
+const bombRoofR = (L) => `L${L - 16.7} 15.92Q${L - 13.45} 15.92 ${L - 13.45} 15.01Q${L - 13.45} 14.1 ${L - 10.2} 14.1L${L + 1} 14.1`;
+
+// --- ACE's BiLevels (Bombardier Series VI, 1997-2001: coaches 3201-3222,
+// cab cars 3301-3308; Series IX, 2022 on: coaches 3223 on, cab cars
+// 3310-3314 with the crash-energy-management cab GO's cab cars have). The
+// 2020s scheme: silver, a blue roof edge, a dark gray skirt. Between the
+// decks a band, blue over magenta, from door to door; over each end section
+// a deeper one, magenta, blue and magenta, through the end windows, its top
+// corner cut on a slant by the door. "ACE" and its arrows big over the band
+// past the A-end door. d: how far the cab car's cab moves everything along.
+function aceBilevelPaint(c, g, { d = 0, left = BOMB_ROOF_L, cab = false } = {}) {
+  const L = g.L, X = (x) => x + d, M = ACE.magenta, B = ACE.blue;
+  let s = rect(0, 0, L, 17, ACE.silver);
+  s += between([[X(14), 4.2], [X(17.5), 3.35], [X(67.5), 3.35], [X(71), 4.2]], 0, ACE.skirt, -1, L + 1);
+  s += rect(X(24.0), 7.6, 31.6, 1.05, M) + rect(X(24.0), 8.65, 31.6, 1.05, B);
+  const end = (xa, xb) => rect(xa, 6.75, xb - xa, 1.2, M) + rect(xa, 7.95, xb - xa, 1.0, B);
+  s += end(-1, X(19.6)) + path(poly([[-1, 8.95], [-1, 9.5], [X(18.7), 9.5], [X(19.6), 8.95]]), M);
+  s += end(X(60.0), L + 1) + path(poly([[X(60.0), 8.95], [X(60.9), 9.5], [L + 1, 9.5], [L + 1, 8.95]]), M);
+  // The cab car's cab: blue over the front and the cab side down to the band.
+  if (cab) s += path(`M-1 7.4L0.9 7.4Q1.6 8.0 1.9 9.5L5.3 9.5L5.3 17L-1 17Z`, B);
+  return s + path(`${left}${bombRoofR(L)}`, "none", 0, `stroke="${B}" stroke-width="1.0"`);
+}
+const aceBilevel = (c) => bilevel(c, { ...BOMB, base: ACE.silver, paint: aceBilevelPaint, badge: { x: 35.5, y: 10.65, h: 1.75, logo: "ace-mark" } });
+
+// --- exo's BiLevels (Bombardier, 2004-05; cab cars 2000-2003, coaches
+// 2020-2037), on the Saint-Jérôme line. White under a light gray roof edge;
+// a light blue band between the decks that deepens over the end sections to
+// frame the end windows, then a white line and a navy band through the
+// lower windows. The "allo exo" panel on the navy beside each pair of
+// doors, toward the ends.
+function exoBilevelPaint(c, g) {
+  const L = g.L, at = (mid, end) => [[0, end], [14, end], [18, mid], [L - 18, mid], [L - 14, end], [L + 1, end]];
+  const low = at(7.95, 6.6), line = at(7.73, 6.38);
+  let s = rect(0, 0, L, 17, EXO.white) + path(`${BOMB_ROOF_L}${bombRoofR(L)}`, "none", 0, 'stroke="#c3c9cf" stroke-width="1.1"');
+  s += between(9.55, low, EXO.sky, -1, L + 1) + between(low, line, "#ffffff", -1, L + 1);
+  return s + between(line, at(4.25, 4.9), EXO.navy, -1, L + 1);
+}
+// exo's "allo exo" panel: "allo" in red over the wordmark, on white, w x h
+// ft, centered at (x, y).
+const exoPanel = (c, x, y, w, h, r = 0.15) => {
+  const tw = w * 0.6;
+  return rect(x - w / 2, y - h / 2, w, h, "#ffffff", 0, `rx="${r}"`) +
+    badge(c, x, y + h * 0.13, tw / 2.32, { logo: "allo-red" }) + badge(c, x, y - h * 0.22, tw / 2.32, { logo: "exo-word" });
+};
+const EXO_BL = { ...BOMB, base: EXO.white, paint: exoBilevelPaint, badge: false,
+  extra: (c, g) => exoPanel(c, 16.9, 5.9, 1.6, 1.6) + exoPanel(c, g.L - 16.9, 5.9, 1.6, 1.6) };
+const exoBilevel = (c) => bilevel(c, EXO_BL);
+// Cab cars: the older full-width cab, as on the Bombardier cab cars above.
+const exoCab = (c) => bilevel(c, { ...EXO_BL, cabLen: 5, cab: bombCabEnd });
 
 // A smooth curve through key points [[x, y], ...], eased between them: y at x.
 function eased(pts) {
@@ -1087,9 +1186,23 @@ const GO_CAB = 4.3;                                                  // the cab'
 const goShift = (x) => x + GO_CAB;
 const GO_CAB_NOSE = [[1.2, 3.7], [0.85, 4.4], [0.75, 9.2], ["q", 0.8, 12.9, 1.6, 14.0], ["q", 2.1, 14.6, 3.3, 14.6], [5.4, 14.6],
   ["q", 9.5, 14.6, 12.0, 15.25], ["q", 14.0, 15.92, 17.5, 15.92]];
-export const goCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", cabLen: 5, nose: GO_CAB_NOSE, noTrucks: true,
+// The cab car's body (GO's and ACE's): the coach's moved along by the cab,
+// its own trucks drawn under it (extra).
+const CEM = { ...BOMB, cabLen: 5, nose: GO_CAB_NOSE, noTrucks: true,
   rows: GO_BL_ROWS.map((r) => ({ ...r, xs: r.xs.map(goShift) })), doors: BOMB.doors.map((d) => ({ ...d, x: goShift(d.x) })),
-  drop: { ...BOMB.drop, a: goShift(BOMB.drop.a), b: goShift(BOMB.drop.b) }, roofItems: [[goShift(76.5), 5.5, 0.35, 14.1]],
+  drop: { ...BOMB.drop, a: goShift(BOMB.drop.a), b: goShift(BOMB.drop.b) }, roofItems: [[goShift(76.5), 5.5, 0.35, 14.1]] };
+const cemTrucks = () => [10.5, 74.5].map((x) => truck(goShift(x), { wb: BOMB.trucks.wb, d: BOMB.trucks.d, top: BOMB.sill })).join("");
+// The cab, from the side: the windshield seen edge-on round the front, the
+// trapezoid cab side window and its mirror; the horns on the cab roof; the
+// plow.
+const cemCab = () => {
+  let s = path(poly([[0.8, 9.6], ["q", 0.84, 12.6, 1.5, 13.7], [2.05, 13.7], ["q", 1.45, 12.3, 1.45, 9.6]]), C.glass);
+  s += path(poly([[2.1, 10.2], [2.6, 13.1], [4.4, 13.1], [4.4, 10.2]]), C.glass, 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"`);
+  s += rect(5.0, 10.7, 0.32, 1.7, C.steelDark, 0.4);
+  s += rect(2.6, 14.55, 2.2, 0.3, C.steelDark, 0.4) + [2.8, 3.5, 4.2].map((x) => path(`M${x} 14.85L${x + 0.55} 14.85L${x + 0.45} 15.4L${x + 0.1} 15.4Z`, "#cfc6b0", 0.4)).join("");
+  return s + pilot(1.0, 3.7);
+};
+export const goCab = (c) => bilevel(c, { ...CEM, base: "#eef0f2",
   badge: { x: goShift(41.8), y: 8.45, h: 2.3 },
   paint: (c, g) => {
     const L = g.L;
@@ -1099,16 +1212,15 @@ export const goCab = (c) => bilevel(c, { ...BOMB, base: "#eef0f2", cabLen: 5, no
       lower: path(`M${L + 1} 7.0L24 7.0C16 7.0 10.5 5.4 6.2 4.0L${L + 1} 4.0Z`, GO.lime) +
         path(`M${L + 1} 4.0L6.2 4.0C5.5 3.5 5.1 2.5 4.8 0L${L + 1} 0Z`, GO.skirt) });
   },
-  cab: () => {
-    // Windshield seen edge-on round the front, the trapezoid cab side
-    // window and its mirror; the horns on the cab roof; the plow.
-    let s = path(poly([[0.8, 9.6], ["q", 0.84, 12.6, 1.5, 13.7], [2.05, 13.7], ["q", 1.45, 12.3, 1.45, 9.6]]), C.glass);
-    s += path(poly([[2.1, 10.2], [2.6, 13.1], [4.4, 13.1], [4.4, 10.2]]), C.glass, 0, `stroke="${C.gasket}" stroke-width="0.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"`);
-    s += rect(5.0, 10.7, 0.32, 1.7, C.steelDark, 0.4);
-    s += rect(2.6, 14.55, 2.2, 0.3, C.steelDark, 0.4) + [2.8, 3.5, 4.2].map((x) => path(`M${x} 14.85L${x + 0.55} 14.85L${x + 0.45} 15.4L${x + 0.1} 15.4Z`, "#cfc6b0", 0.4)).join("");
-    return s + pilot(1.0, 3.7);
-  },
-  extra: (c) => [10.5, 74.5].map((x) => truck(goShift(x), { wb: BOMB.trucks.wb, d: BOMB.trucks.d, top: BOMB.sill })).join("") + goMetrolinx(c) });
+  cab: cemCab,
+  extra: (c) => cemTrucks() + goMetrolinx(c) });
+// ACE's Series IX cab cars (3310-3314): the same cab, blue down to the band;
+// behind it a small window with the mirror ahead of it.
+const aceCab = (c) => bilevel(c, { ...CEM, base: ACE.silver,
+  badge: { x: goShift(35.5), y: 10.65, h: 1.75, logo: "ace-mark" },
+  paint: (c, g) => aceBilevelPaint(c, g, { d: GO_CAB, ...(c.cabL ? { cab: true, left: "M-1 14.6L5.4 14.6Q9.5 14.6 12.0 15.25Q14.0 15.92 17.5 15.92" } : {}) }),
+  cab: (c) => cemCab() + win(5.5, 10.4, 1.6, 2.3, 0.25),
+  extra: cemTrucks });
 
 // --- Hyundai Rotem "Guardian" cab car (Metrolink 638-695, Tri-Rail 512-521):
 // same 85 ft and 64 ft truck centers, but flat-topped at 15 ft 10 in with
@@ -1275,9 +1387,44 @@ function marcMlPaint(c, g) {
   return s + mdFlag(75.35, 10.3, 1.2);
 }
 const marcMlBadge = (x) => ({ x, y: 8.35, h: 0.95, dark: true });
-export const multilevel = (c) => bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(78.7) } : { paint: njtPaint }) });
-export const multilevelCab = (c) => bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(6.3), cab: marcCabEnd(5.55, 6.5) } : { paint: njtPaint,
-  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") }) });
+// exo's MultiLevels (2009-11; cab cars 3000-3025, coaches 3026-3159), still
+// in the AMT scheme. Stainless. Each end section: light blue around the end
+// window, a cream band, navy down to the bottom; the end window sits nearer
+// the end door than on NJ Transit's, the "allo exo" panel between it and
+// the inner door. Along the middle: navy through the lower windows under a
+// cream line and a light blue band, and a wave rising out of the navy, a
+// third of the way along, nearly to the upper windows: its crest edged in
+// white over a pale arc, a dark half-disc in its hollow, a long tail
+// running back down to the far door. The cab cars have the engineer's
+// window where the end door would be at the cab end.
+const EXO_ML_BLUE = "#7fa7dc";
+function exoMlPaint(c, g) {
+  const L = g.L, cab = c.cabL;
+  let s = rect(0, 0, L, 17, C.steel);
+  const end = (a, b) => rect(a, 7.35, b - a, 2.45, EXO_ML_BLUE) + rect(a, 6.65, b - a, 0.7, EXO.cream) + rect(a, -1, b - a, 7.65, EXO.navy);
+  s += (cab ? end(-1, 11.8) : end(-1, 1.3) + end(4.05, 11.8)) + end(73.2, 80.95) + end(83.7, L + 1);
+  s += rect(14.55, 6.0, 55.9, 2.65, EXO_ML_BLUE) + rect(14.55, 5.75, 55.9, 0.25, EXO.cream) + rect(14.55, 2.75, 55.9, 3.0, EXO.navy);
+  const crest = [[16.5, 5.9], [24, 7.4], [32, 8.9], [40, 9.35], [48, 9.0], [56, 7.9], [63, 6.7], [70.45, 6.05]];
+  s += between(crest, 5.0, EXO.navy, 16.5, 70.45);
+  s += ribbon([[21, 5.6], [27, 7.5], [33, 8.5], [40, 8.85], [46, 8.5], [51, 7.6], [54, 6.6]], 0.7, "#c9d6ea", 21, 54);
+  s += ribbon(crest, 0.3, "#f4f5f2", 16.5, 70.45);
+  s += path(poly(Array.from({ length: 19 }, (_, k) => [41.5 - 4.2 * Math.cos((k * Math.PI) / 18), 5.9 + 2.6 * Math.sin((k * Math.PI) / 18)])), EXO.deep) + ribbon([[45.9, 8.1], [46.7, 7.3], [47.0, 6.0]], 0.35, "#e6ebf2", 45.9, 47.0);
+  return s;
+}
+const EXO_ML = { ...ML, paint: exoMlPaint, badge: false,
+  rows: [ML.rows[0], ML.rows[1], { ...ML.rows[2], xs: [7.1, 75.8] }],
+  extra: (c, g) => (c.cabL ? "" : exoPanel(c, 10.45, 8.55, 2.1, 1.67, 0.05)) + exoPanel(c, g.L - 10.45, 8.55, 2.1, 1.67, 0.05) };
+const exoMultilevel = (c) => bilevel(c, EXO_ML);
+const exoMultilevelCab = (c) => bilevel(c, { ...EXO_ML,
+  rows: c.cabL ? [ML.rows[0], ML.rows[1], { ...ML.rows[2], xs: [75.8] }] : EXO_ML.rows,
+  doors: c.cabL ? ML.doors.slice(1) : ML.doors,
+  extra: (c, g) => EXO_ML.extra(c, g) + (c.cabL ? exoPanel(c, 10.65, 8.55, 2.1, 1.67, 0.05) + win(2.9, 7.2, 2.3, 3.1, 0.35) : ""),
+  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") });
+export const multilevel = (c) => (c.agency === "exo" ? exoMultilevel(c)
+  : bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(78.7) } : { paint: njtPaint }) }));
+export const multilevelCab = (c) => (c.agency === "exo" ? exoMultilevelCab(c)
+  : bilevel(c, { ...ML, ...(c.agency === "marc" ? { paint: marcMlPaint, badge: marcMlBadge(6.3), cab: marcCabEnd(5.55, 6.5) } : { paint: njtPaint,
+  cab: (c, { x0 }) => rect(x0, 4.3, 0.4, 9, "rgba(0,0,0,0.25)") }) }));
 
 // --- Gallery cars (Metra: Nippon Sharyo 2002-05 and Amerail 1994-96 design):
 // 85 ft, 15 ft 10 in, fluted stainless, the upper level a pair of balconies
@@ -2759,7 +2906,7 @@ function f40(c, { mbta = false } = {}) {
   const roof = 15.62, sill = 4.65, hood = 15.05;
   return cabUnit(c, {
     // VIA: a big logo at the rear end of the silver.
-    badge: (c) => (c.agency === "via" ? { x: 51.3, y: 8.45, h: 3.0 } : { x: 48, y: 8.75, h: 2.0, skip: ["mbta"] }),
+    badge: (c) => (c.agency === "via" ? { x: 51.3, y: 8.45, h: 3.0 } : c.agency === "ace" ? null : { x: 48, y: 8.75, h: 2.0, skip: ["mbta"] }),
     roof: hood, sill, rearR: 0.9,
     nose: [[2.45, sill], [2.45, 8.3], ["q", 2.5, 8.85, 3.1, 8.95], [6.0, 9.45], [6.3, 9.75], [7.55, 14.75], ["q", 7.75, roof, 8.7, roof], [13.6, roof], [13.75, hood]],
     glass: [[[6.55, 10.35], [7.45, 14.2], [8.0, 14.2], [8.0, 10.35]]],
@@ -2774,8 +2921,10 @@ function f40(c, { mbta = false } = {}) {
     tank: [17.5, c.L - 17.5, 1.5], reservoir: [c.L / 2 - 4, c.L / 2 + 6],
     trucks: { centers: c.L - 23.2, wb: 9.0, d: 40 },
     roofItems: [[c.L - 26, 1.6, 0.45]], fans: [c.L - 13.5, c.L - 8.3, c.L - 3.6], horn: 9.6,
+    extra: (c) => (c.agency === "ace" ? aceOldEmblem(c, 43.5, 9.0) : ""),
     paint: (c, sp) => {
       const L = sp.L;
+      if (c.agency === "ace") return aceF40Paint(c, sp);
       if (mbta || c.agency === "mbta") return mbtaPaint(c, { L, roof: sp.roof, diag: [16.6, 24.0], skirt: 5.0, band: 7.7, cabLine: 8.1, nose: [2.5, 6.4],
         hood: 13.4, rear: { up: 43.0, low: 47.0, top: 8.9, bot: 5.75 }, T: [30.6, 8.3, 2.7] });
       if (c.agency === "via") {
@@ -2796,6 +2945,25 @@ function f40(c, { mbta = false } = {}) {
     },
   });
 }
+// ACE's F40PH-3Cs (3101-3106) keep the original scheme: a blue cab, its
+// blue sweeping up behind the cab to the top of the hood; under it a white
+// band that rises to the roofline at the rear; magenta below, from a band
+// under the cab windows (on the nose too) widening behind the cab to most
+// of the side; a white line and a blue band along the bottom from behind
+// the cab. The old emblem, white, mid-hood.
+function aceF40Paint(c, { L }) {
+  let s = rect(0, 0, L, 17, "#f2f3f1");
+  s += between([[0, 7.74], [14, 7.74], [26, 11.9]], [[0, 5.2], [13, 5.2], [16.5, 6.35]], ACE.plum, -1, L + 1);
+  s += between([[12, 4.65], [16.5, 6.1]], 0, ACE.oldBlue, 12, L + 1);
+  return s + between(17, [[0, 11.2], [14, 11.2], [24.5, 15.2]], ACE.oldBlue, -1, 25);
+}
+// The original ACE emblem: "ACE" in serif capitals between pairs of bars,
+// ALTAMONT COMMUTER EXPRESS under it.
+function aceOldEmblem(c, x, y) {
+  let s = goLetters(c, x, y, 2.0, "ACE", "#ffffff", { weight: 400, family: "Times New Roman, Times, Georgia, serif" });
+  for (const [a, b, yb] of [[1.8, 4.4, 0.55], [1.8, 3.9, 0.12]]) s += rect(x - b, y + yb, b - a, 0.2, "#ffffff") + rect(x + a, y + yb, b - a, 0.2, "#ffffff");
+  return s + goLetters(c, x, y - 1.2, 0.42, "ALTAMONT COMMUTER EXPRESS", "#ffffff", { weight: 700, spacing: 0.02 });
+}
 export const f40ph = (c) => f40(c);
 export const f40c = (c) => f40(c, { mbta: true });
 
@@ -2815,6 +2983,7 @@ export const f59 = (c) => cabUnit(c, {
   // Piedmont's carry "North Carolina" in a big upright serif mid-side.
   badge: (c) => (c.route === "Piedmont" ? { x: 37.0, y: 8.7, h: 1.6, logo: "north-carolina" }
     : c.agency === "sounder" ? [{ x: 38.4, y: 6.7, h: 2.6, logo: "sounder-word" }, { x: 51.5, y: 6.7, h: 0.95, dark: true }]
+    : c.agency === "exo" ? null                                   // only a small sticker on the nose
     : { x: 38.5, y: 9.6, h: 1.3 }),
   roof: 15.0, sill: 4.6, rearR: 0.9,
   nose: [[2.4, 4.6], ["q", 1.5, 4.9, 1.45, 6.4], ["q", 1.5, 8.6, 2.6, 10.0], [5.2, 14.4], ["q", 5.8, 15.55, 7.4, 15.55], [12.4, 15.55], ["q", 13.2, 15.55, 13.4, 15.0]],
@@ -2834,6 +3003,17 @@ export const f59 = (c) => cabUnit(c, {
   paint: (c, sp) => {
     const L = sp.L;
     if (c.agency === "sounder") return sounderWave(L, SOUNDER_F59_WAVE);
+    if (c.agency === "exo") {
+      // exo's F59PHIs (1320-1330), still in the AMT scheme: silver; the cab
+      // and the top of the nose royal blue, the blue sweeping up behind the
+      // cab to the roof two-thirds of the way back; a light blue, white and
+      // navy stripe low along the nose and the cab that rises in a long
+      // wave along the hood, cresting ahead of the radiators.
+      const mid = [[0, 6.3], [11, 6.3], [18, 7.3], [28, 9.2], [38, 10.3], [44, 10.4], [52, 9.3], [L + 1, 8.7]];
+      const at = (o) => mid.map(([x, y]) => [x, y + o]);
+      return rect(0, 0, L, 17, "#bfc3c8") + between(17, [[0, 9.3], [12.5, 9.3], [26, 12.0], [40, 15.3]], EXO.royal, -1, 41) +
+        between(at(0.85), at(0.3), "#79a9ea", -1, L + 1) + between(at(0.3), at(0.1), "#f4f6f8", -1, L + 1) + between(at(0.1), at(-0.5), "#1f3591", -1, L + 1);
+    }
     if (c.agency === "amtrak" && c.route === "Piedmont") {
       // Piedmont (NCDOT): silver; a blue cab and roof sweeping down in a
       // white-edged curve to the sill behind the cab; dark gray along the top
@@ -3187,8 +3367,8 @@ export const MODELS = {
   viewlinerBaggage: M(viewlinerBaggage, 85.33),
   bilevel: M((c) => (c.agency === "mbta" ? mbtaBilevel(c) : c.agency === "marc" ? marcKawasaki(c) : bombardierBilevel(c)), (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : 85)),
   bilevelCab: M((c) => (c.agency === "mbta" ? mbtaCab(c) : c.agency === "marc" ? marcKawasakiCab(c) : c.agency === "go" ? goCab(c) : ["metrolink", "trirail"].includes(c.agency) ? rotemCabCar(c)
-    : c.agency === "sunrail" ? sunrailCab(c) : bombardierCab(c)),
-    (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : ag === "go" ? 85 + GO_CAB : 85), true),
+    : c.agency === "sunrail" ? sunrailCab(c) : c.agency === "ace" ? aceCab(c) : c.agency === "exo" ? exoCab(c) : bombardierCab(c)),
+    (ag) => (ag === "mbta" || ag === "marc" ? 85.33 : ag === "go" || ag === "ace" ? 85 + GO_CAB : 85), true),
   kawasakiCab: M((c) => (c.agency === "marc" ? marcKawasakiCab(c) : mbtaCab(c)), 85.33, true),
   rotemCab: M(mbtaCab, 85.33, true),
   multilevel: M(multilevel, 85),
