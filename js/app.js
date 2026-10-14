@@ -6,7 +6,6 @@ import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
-import { shareTrain } from "./share.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -2855,23 +2854,27 @@ on("follow-btn", "click", () => {
   if (state.follow && t) map.easeTo({ center: [t.lon, t.lat], padding: panelPadding() });
 });
 
-on("share-btn", "click", () => {
+// Share a train's link: the system share sheet where there is one, else
+// the link is copied.
+on("share-btn", "click", async () => {
   const t = state.trains.get(state.selected);
   if (!t) return;
-  const a = AGENCIES[t.agency], c = consistOf(t), late = lateText(t.delayMin);
-  const cars = [];
-  for (let i = 0; c && i < 14; i++) {
-    const svg = carSvg(c, i, a.color, 400);
-    if (!svg) break;
-    cars.push(svg);
-  }
+  const a = AGENCIES[t.agency];
   const url = `${location.origin}${location.pathname}?train=${encodeURIComponent(t.id)}`;
-  shareTrain({
-    title: trainTitle(t), number: t.number ? String(t.number) : "", color: t.routeColor || a.color, railroad: a.short,
-    route: [t.origin, t.destination].filter(Boolean).join(" → "),
-    where: t.nextStop ? `Next stop ${t.nextStop}` : t.destination ? `To ${t.destination}` : "",
-    status: late.text, statusColor: { good: "#248a3d", warn: "#c45c00", bad: "#d70015" }[late.cls], cars, url,
-  }, toast);
+  const title = `${t.number ? `${a.short} ${t.number} ` : ""}${trainTitle(t)}`;
+  if (navigator.share) {
+    try {
+      return await navigator.share({ title, text: title, url });
+    } catch (err) {
+      if (err.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link copied.");
+  } catch {
+    toast(url);
+  }
 });
 
 on("search", "input", (e) => {

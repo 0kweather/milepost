@@ -463,16 +463,3 @@ html, body {
 
 .detail-actions { display: flex; gap: 8px; }
 .detail-actions [hidden] { display: none; }
-.share-sheet {
-  position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; padding: 16px;
-  background: rgba(0, 0, 0, 0.42);
-}
-.share-card {
-  width: min(560px, 100%); padding: 14px; border-radius: 24px; background: var(--panel-solid); box-shadow: var(--shadow);
-  animation: share-in 0.3s cubic-bezier(0.32, 1.2, 0.5, 1);
-}
-.share-card img { display: block; width: 100%; border-radius: 14px; box-shadow: 0 0 0 0.5px var(--line); }
-.share-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-.share-actions a.btn { text-decoration: none; }
-@keyframes share-in { from { transform: scale(0.94); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .share-card { animation: none; } }
