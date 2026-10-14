@@ -290,7 +290,7 @@ html, body {
 .la-where .status.warn { color: #ff9f0a; }
 .la-where .status.bad { color: #ff453a; }
 .la-where .stale { color: #ff9f0a; font-weight: 600; }
-.la-track { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.16); }
+.la-track { position: relative; height: 6px; margin: 2px 12px 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.16); } /* the dots kept clear of the rounded corners */
 .la-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent); }
 .la-dot {
   position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
