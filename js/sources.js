@@ -9,6 +9,7 @@
 // site. "relay" sources don't (or need an API key), so they go through the
 // small Cloudflare Worker in /relay when one is configured.
 
+import { locale } from "./i18n.js?v=dev";
 import { decodeFeed } from "./gtfsrt.js?v=dev";
 
 export const AGENCIES = {
@@ -80,8 +81,8 @@ function departureDay(first) {
   if (!iso) return null;
   try {
     const opts = { weekday: "short", month: "short", day: "numeric", timeZone: first.tz };
-    const day = new Date(iso).toLocaleDateString([], opts);
-    return day === new Date().toLocaleDateString([], opts) ? null : day; // only worth showing for multi-day trips
+    const day = new Date(iso).toLocaleDateString(locale, opts);
+    return day === new Date().toLocaleDateString(locale, opts) ? null : day; // only worth showing for multi-day trips
   } catch {
     return null;
   }

@@ -3,6 +3,8 @@
 // train and one of its stations along the way. Started from Settings
 // (Help); Escape or × ends it, the arrow keys step through.
 
+import { t as T } from "./i18n.js?v=dev";
+
 let tour = null; // { steps, i, demo, frame, el: { shade, ring, card } }
 
 // app: { state, map, select, selectStation, closeDetail, setSheet, isPhone, targetOf, visible, padding }
@@ -12,13 +14,13 @@ export function startTour(app) {
   const stopStation = demo && nextStation(app, demo);
   const steps = [
     {
-      title: "Welcome to Trainsheet",
-      text: "Passenger trains across the US and Canada, live on one map. This tour takes about a minute; you can leave it any time.",
+      title: T("Welcome to Trainsheet"),
+      text: T("Passenger trains across the US and Canada, live on one map. This tour takes about a minute; you can leave it any time."),
       enter: () => app.closeDetail(),
     },
     demo && {
-      title: "Trains on the map",
-      text: "Each arrow is a train, pointing the way it's heading, in its railroad's color. Trains placed from their timetable rather than GPS are marked estimated. Tap one to open it.",
+      title: T("Trains on the map"),
+      text: T("Each arrow is a train, pointing the way it's heading, in its railroad's color. Trains placed from their timetable rather than GPS are marked estimated. Tap one to open it."),
       enter: () => {
         app.closeDetail();
         const p = app.targetOf(demo);
@@ -31,58 +33,58 @@ export function startTour(app) {
       },
     },
     {
-      title: "Search",
-      text: "Find a train by its number, or a station, a line or a city.",
+      title: T("Search"),
+      text: T("Find a train by its number, or a station, a line or a city."),
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet(""); },
       target: "#search",
     },
     {
-      title: "Railroads",
-      text: "Every railroad on the map, with how many of its trains are running. Tap one for its page: what's running, its lines, its fleet and its stations. Its checkbox hides or shows its trains.",
+      title: T("Railroads"),
+      text: T("Every railroad on the map, with how many of its trains are running. Tap one for its page: what's running, its lines, its fleet and its stations. Its checkbox hides or shows its trains."),
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet("expanded"); },
       target: "#agencies",
     },
     {
-      title: "Settings",
-      text: "Dark mode, units, train labels, your time zone, and which trains show on the map. You can restart this tour from here too.",
+      title: T("Settings"),
+      text: T("Dark mode, units, train labels, your time zone, and which trains show on the map. You can restart this tour from here too."),
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet(""); },
       target: "#settings-btn",
     },
     demo && {
-      title: "A train's page",
-      text: "Where it's going, whether it's on time, and its cars, drawn as they run on this train (or as they usually do on this line).",
+      title: T("A train's page"),
+      text: T("Where it's going, whether it's on time, and its cars, drawn as they run on this train (or as they usually do on this line)."),
       enter: () => { if (app.state.selected !== demo.id) app.select(demo.id); if (app.isPhone) app.setSheet("expanded"); },
       target: "#train-detail .hero",
     },
     demo && {
-      title: "The cars",
-      text: "Tap a car or locomotive to read about that model: who built it, how fast it goes, and its history.",
+      title: T("The cars"),
+      text: T("Tap a car or locomotive to read about that model: who built it, how fast it goes, and its history."),
       enter: () => { if (app.state.selected !== demo.id) app.select(demo.id); if (app.isPhone) app.setSheet("expanded"); },
       target: "#train-detail .consist-strip",
       optional: true,
     },
     demo && {
-      title: "Stops and tracking",
-      text: "Every stop with its live time. Tap a station's name to open it. To track it, tap the circle of the stop you got on at, then the one you're getting off at: it stays pinned at the top, and you're told when it arrives.",
+      title: T("Stops and tracking"),
+      text: T("Every stop with its live time. Tap a station's name to open it. To track it, tap the circle of the stop you got on at, then the one you're getting off at: it stays pinned at the top, and you're told when it arrives."),
       enter: () => { if (app.state.selected !== demo.id) app.select(demo.id); if (app.isPhone) app.setSheet("expanded"); },
       target: "#train-detail .stops-scroll",
       optional: true,
     },
     demo && {
-      title: "Follow the train",
-      text: "Keeps the train in the middle of the map as it moves.",
+      title: T("Follow the train"),
+      text: T("Keeps the train in the middle of the map as it moves."),
       enter: () => { if (app.state.selected !== demo.id) app.select(demo.id); if (app.isPhone) app.setSheet(""); },
       target: "#follow-btn",
     },
     stopStation && {
-      title: "Stations",
-      text: "A station's page lists the next departures and arrivals from every railroad that stops there, with tracks, service notices and step-free access where the railroads publish them.",
+      title: T("Stations"),
+      text: T("A station's page lists the next departures and arrivals from every railroad that stops there, with tracks, service notices and step-free access where the railroads publish them."),
       enter: () => { if (app.state.station !== stopStation) app.selectStation(stopStation); if (app.isPhone) app.setSheet("expanded"); },
       target: "#train-detail",
     },
     {
-      title: "That's the tour",
-      text: "Enjoy the trains. You can take the tour again from Settings.",
+      title: T("That's the tour"),
+      text: T("Enjoy the trains. You can take the tour again from Settings."),
       enter: () => { app.closeDetail(); if (app.isPhone) app.setSheet(""); },
       last: true,
     },
@@ -96,7 +98,7 @@ export function startTour(app) {
   card.className = "tour-card";
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-live", "polite");
-  card.setAttribute("aria-label", "Tour");
+  card.setAttribute("aria-label", T("Tour"));
   document.body.append(shade, ring, card);
   tour = { steps, i: 0, el: { shade, ring, card } };
   card.addEventListener("click", (e) => {
@@ -143,13 +145,13 @@ function go(i) {
   if (step.optional && !findTarget(step)) return go(back ? i - 1 : i + 1);
   const n = tour.steps.length;
   tour.el.card.innerHTML = `
-    <div class="tour-head"><span class="tour-count">${i + 1} of ${n}</span>
-      <button type="button" class="tour-x" data-tour-close aria-label="End the tour">×</button></div>
+    <div class="tour-head"><span class="tour-count">${T("{i} of {n}", { i: i + 1, n })}</span>
+      <button type="button" class="tour-x" data-tour-close aria-label="${T("End the tour")}">×</button></div>
     <h3>${step.title}</h3>
     <p>${step.text}</p>
     <div class="tour-actions">
-      ${i > 0 ? '<button type="button" class="btn small" data-tour-back>Back</button>' : ""}
-      <button type="button" class="btn small primary" data-tour-next>${step.last ? "Done" : i === 0 ? "Start" : "Next"}</button>
+      ${i > 0 ? '<button type="button" class="btn small" data-tour-back>${T("Back")}</button>' : ""}
+      <button type="button" class="btn small primary" data-tour-next>${T(step.last ? "Done" : i === 0 ? "Start" : "Next")}</button>
     </div>`;
   const el = typeof step.target === "string" && document.querySelector(step.target);
   el?.scrollIntoView?.({ block: "nearest" });

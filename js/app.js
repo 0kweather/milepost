@@ -6,6 +6,7 @@ import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
+import { t as T, tn as Tn, lang, langPref, locale, translatePage } from "./i18n.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -21,6 +22,8 @@ const $ = (id) => document.getElementById(id);
 // Attach a listener if the element exists. A missing element (say, a stale
 // cached page) must never stop the trains from loading.
 const on = (id, type, fn) => $(id)?.addEventListener(type, fn);
+// The back button's label: where it goes.
+const setBack = (label) => { const el = $("back-btn")?.querySelector("span"); if (el) el.textContent = label; };
 const setChecked = (id, value) => { const el = $(id); if (el) el.checked = value; };
 // Number plate: a train's number on a white sign, railroad color on top.
 const plate = (text, color, size = "") => `<span class="plate ${size}" style="--c:${color}"><span>${esc(text)}</span></span>`;
@@ -29,6 +32,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+
+translatePage(); // index.html's own text, in French when that's the language
 
 // ---------- State ----------
 
@@ -945,9 +950,9 @@ function applyInference() {
 
 function sourceAvailability(src) {
   if (!src.relay || (window.TRAINSHEET_FEEDS || {})[src.id]) return { ok: true };
-  if (!RELAY) return { ok: false, reason: "Needs the relay (see README)" };
+  if (!RELAY) return { ok: false, reason: T("Needs the relay (see README)") };
   if (state.relayFeeds && !state.relayFeeds[src.id]) {
-    return { ok: false, reason: src.needsKey ? "Needs a free API key" : "Not enabled on relay" };
+    return { ok: false, reason: src.needsKey ? T("Needs a free API key") : T("Not enabled on relay") };
   }
   return { ok: true };
 }
@@ -1019,7 +1024,7 @@ async function start() {
       redrawStations();
     } catch {
       state.relayFeeds = {};
-      toast("Couldn't reach the relay — showing directly available railroads only.");
+      toast(T("Couldn't reach the relay — showing directly available railroads only."));
     }
   }
   for (const src of SOURCES) {
@@ -1085,31 +1090,31 @@ function renderAgencies() {
         rows.off.push(`
           <div class="agency unavailable" style="--swatch:${a.color}" title="${esc(avail.reason)}">
             <span class="check-hit"><span class="check"></span></span>
-            <span class="agency-open"><span class="name">${esc(a.name)}<span class="sub">${esc(a.region)} · ${esc(avail.reason)}</span></span></span>
+            <span class="agency-open"><span class="name">${esc(a.name)}<span class="sub">${esc(T(a.region))} · ${esc(avail.reason)}</span></span></span>
           </div>`);
         continue;
       }
       // The checkbox shows or hides its trains; the rest of the row opens its page.
       const off = state.hidden.has(id);
-      let count = `<span class="count">${counts[id] || 0} running ›</span>`;
-      if (st?.status === "loading") count = '<span class="count"><span class="sk sk-count" aria-label="Loading"></span></span>';
-      else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline ›</span>`;
+      let count = `<span class="count">${T("{n} running", { n: counts[id] || 0 })} ›</span>`;
+      if (st?.status === "loading") count = `<span class="count"><span class="sk sk-count" aria-label="${T("Loading")}"></span></span>`;
+      else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">${T("offline")} ›</span>`;
       rows[a.kind].push(`
         <div class="agency ${off ? "off" : ""}" style="--swatch:${a.color}">
-          <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${off ? "Show" : "Hide"} ${esc(a.name)} trains" title="${off ? "Show" : "Hide"} its trains"><span class="check">${CHECK}</span></button>
-          <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(a.name)}: what's running, its lines and fleet">
-            <span class="name">${esc(a.name)}<span class="sub">${esc(a.region)}</span></span>
+          <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${esc(T(off ? "Show {name} trains" : "Hide {name} trains", { name: a.name }))}" title="${T(off ? "Show its trains" : "Hide its trains")}"><span class="check">${CHECK}</span></button>
+          <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(T("{name}: what's running, its lines and fleet", { name: a.name }))}">
+            <span class="name">${esc(a.name)}<span class="sub">${esc(T(a.region))}</span></span>
             ${count}
           </button>
         </div>`);
     }
   }
   $("agencies").innerHTML =
-    `<div class="group-title">Intercity</div>${rows.intercity.join("")}` +
-    `<div class="group-title">Commuter &amp; regional</div>${rows.commuter.join("")}` +
+    `<div class="group-title">${T("Intercity")}</div>${rows.intercity.join("")}` +
+    `<div class="group-title">${T("Commuter & regional")}</div>${rows.commuter.join("")}` +
     (rows.off.length
-      ? `<div class="group-title">Not connected yet</div>${rows.off.join("")}
-         <p class="note">These railroads publish live data, but it has to be fetched through a small relay server${RELAY ? " or with a free developer key" : ""}. See the README to switch them on.</p>`
+      ? `<div class="group-title">${T("Not connected yet")}</div>${rows.off.join("")}
+         <p class="note">${T(RELAY ? "These railroads publish live data, but it has to be fetched through a small relay server or with a free developer key. See the README to switch them on." : "These railroads publish live data, but it has to be fetched through a small relay server. See the README to switch them on.")}</p>`
       : "");
 }
 
@@ -1117,8 +1122,8 @@ function renderAgencies() {
 function renderCredits() {
   const seen = new Map();
   for (const s of SOURCES) if (sourceAvailability(s).ok) seen.set(s.credit.label, s.credit.href);
-  $("credits").innerHTML = "Data: " + [...seen].map(([l, h]) => `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(", ") +
-    '. Map © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.';
+  $("credits").innerHTML = T("Data:") + " " + [...seen].map(([l, h]) => `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(", ") +
+    `. ${T("Map")} © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.`;
 }
 
 function statusClass(t) {
@@ -1137,24 +1142,24 @@ function factTiles(t) {
   const nextName = next?.name || t.nextStop;
   if (nextName) {
     const at = next && Date.parse(next.time);
-    tiles.push(tile("Next stop", `<span class="ft-name">${esc(nextName)}</span>`,
-      at ? `${at > Date.now() ? `in ${esc(fmtIn(at))} · ` : ""}${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
+    tiles.push(tile(T("Next stop"), `<span class="ft-name">${esc(nextName)}</span>`,
+      at ? `${at > Date.now() ? `${esc(T("in {time}", { time: fmtIn(at) }))} · ` : ""}${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
   }
   if (t.speedMph != null && !t.estimated) {
     const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
-    tiles.push(tile("Speed", `${v}<small>${km ? "km/h" : "mph"}</small>`,
+    tiles.push(tile(T("Speed"), `${v}<small>${km ? "km/h" : T("mph")}</small>`,
       `<span class="ft-bar"><span style="transform:scaleX(${Math.min(1, t.speedMph / 125).toFixed(3)})"></span></span>`));
   }
   const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
   if (b != null) {
     const inferred = t.bearing == null && est?.inferred;
-    tiles.push(tile("Heading", `<span${inferred ? ` class="inferred" title="Worked out from the train's next stop; its railroad doesn't report a heading"` : ""}>${HEADINGS[Math.round(b / 45) % 8]}</span>`,
+    tiles.push(tile(T("Heading"), `<span${inferred ? ` class="inferred" title="${T("Worked out from the train's next stop; its railroad doesn't report a heading")}"` : ""}>${T(HEADINGS[Math.round(b / 45) % 8])}</span>`,
       "", "", compassSvg(b)));
   }
-  if (t.departedOn) tiles.push(tile("Left", `<span class="ft-name">${esc(t.departedOn)}</span>`));
+  if (t.departedOn) tiles.push(tile(T("Left"), `<span class="ft-name">${esc(t.departedOn)}</span>`));
   tiles.push(t.estimated
-    ? tile("Position", '<span class="ft-name">Estimated</span>', `from predicted times · ${esc(fmtAgo(t.updated))}`)
-    : tile("GPS", `<span class="ft-name ft-gps">${SIGNAL_ICON}${esc(fmtAgo(t.updated))}</span>`));
+    ? tile(T("Position"), `<span class="ft-name">${T("Estimated")}</span>`, `${T("from predicted times")} · ${esc(fmtAgo(t.updated))}`)
+    : tile(T("GPS"), `<span class="ft-name ft-gps">${SIGNAL_ICON}${esc(fmtAgo(t.updated))}</span>`));
   return `<div class="facts">${tiles.join("")}</div>`;
 }
 // A small compass: a dial with ticks at the quarters and N marked, and a
@@ -1195,7 +1200,7 @@ function renderRecents() {
     && (r.kind !== "station" || state.stations.has(r.id))).slice(0, MAX_RECENTS);
   el.hidden = !shown.length;
   if (!shown.length) return;
-  el.innerHTML = `<div class="recents-head"><span class="group-title">Recent</span><button type="button" class="link-btn" data-recents-clear>Clear</button></div>
+  el.innerHTML = `<div class="recents-head"><span class="group-title">${T("Recent")}</span><button type="button" class="link-btn" data-recents-clear>${T("Clear")}</button></div>
     <div class="recents-row">${shown.map((r) => {
       const a = AGENCIES[r.agency];
       const icon = r.kind === "train" ? plate(r.number || a.short, a.color, "xs")
@@ -1241,42 +1246,42 @@ function renderResults() {
       <span><span class="title">${esc(st.name)}</span><br><span class="sub">${esc([st.place, stationLinesText(st)].filter(Boolean).join(" · "))}</span></span>
       <span></span>
     </button>`).join("");
-  const stationBlock = stationHtml ? `<div class="group-title">Stations</div>${stationHtml}` : "";
+  const stationBlock = stationHtml ? `<div class="group-title">${T("Stations")}</div>${stationHtml}` : "";
 
   // Railroads and lines, opening their pages.
   const has = (hay) => terms.every((w) => hay.toLowerCase().includes(w));
   const railroads = Object.entries(AGENCIES).filter(([, a]) => has(`${a.name} ${a.short} ${a.region}`));
-  const railroadBlock = railroads.length ? `<div class="group-title">Railroads</div>` + railroads.slice(0, 4).map(([id, a]) => {
+  const railroadBlock = railroads.length ? `<div class="group-title">${T("Railroads")}</div>` + railroads.slice(0, 4).map(([id, a]) => {
     const n = [...state.trains.values()].filter((t) => t.agency === id).length;
     return `<button class="result" data-railroad="${id}">
       <span class="rr-icon" style="--c:${a.color}"></span>
-      <span><span class="title">${esc(a.name)}</span><br><span class="sub">${esc(a.region)}</span></span>
-      <span class="count">${n} running ›</span>
+      <span><span class="title">${esc(a.name)}</span><br><span class="sub">${esc(T(a.region))}</span></span>
+      <span class="count">${T("{n} running", { n })} ›</span>
     </button>`;
   }).join("") : "";
   const lines = allLines().filter((l) => has(`${l.name} ${AGENCIES[l.agency].name} ${AGENCIES[l.agency].short}`))
     .sort((x, y) => Number(!x.name.toLowerCase().startsWith(q)) - Number(!y.name.toLowerCase().startsWith(q)) || y.running - x.running);
-  const lineBlock = lines.length ? `<div class="group-title">Lines</div>` + lines.slice(0, 6).map((l) => {
+  const lineBlock = lines.length ? `<div class="group-title">${T("Lines")}</div>` + lines.slice(0, 6).map((l) => {
     const a = AGENCIES[l.agency];
     return `<button class="result" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}">
       <span class="line-icon" style="--c:${a.color}"></span>
       <span><span class="title">${esc(l.name)}</span><br><span class="sub">${esc(a.short)}</span></span>
-      <span class="count">${l.running} running ›</span>
+      <span class="count">${T("{n} running", { n: l.running })} ›</span>
     </button>`;
   }).join("") : "";
   const before = railroadBlock + lineBlock + stationBlock;
   if (!matches.length) {
-    el.innerHTML = before || `<div class="empty">Nothing matches “${esc(state.query)}”.</div>`;
+    el.innerHTML = before || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`;
     return;
   }
-  el.innerHTML = before + (before ? '<div class="group-title">Trains</div>' : "") + matches.slice(0, 60).map(({ t }) => {
+  el.innerHTML = before + (before ? `<div class="group-title">${T("Trains")}</div>` : "") + matches.slice(0, 60).map(({ t }) => {
     const a = AGENCIES[t.agency];
-    const sub = [t.destination && `to ${t.destination}`, t.nextStop && !t.destination && `next ${t.nextStop}`, t.departedOn && `left ${t.departedOn}`]
-      .filter(Boolean).join(" · ") || a.region;
+    const sub = [t.destination && T("to {place}", { place: t.destination }), t.nextStop && !t.destination && T("next {place}", { place: t.nextStop }), t.departedOn && T("left {day}", { day: t.departedOn })]
+      .filter(Boolean).join(" · ") || T(a.region);
     return `<button class="result" data-select="${esc(t.id)}">
       ${plate(t.number || a.short, a.color, "sm")}
       <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc(a.short)} · ${esc(sub)}</span></span>
-      ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : ""}
+      ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : ""}
     </button>`;
   }).join("");
 }
@@ -1293,17 +1298,17 @@ function fmtTime(iso, tz) {
   if (Number.isNaN(+d)) return "";
   const zone = state.timeZone === "station" ? tz : state.timeZone;
   try {
-    return d.toLocaleTimeString([], { ...clockOptions(), timeZone: zone || undefined });
+    return d.toLocaleTimeString(locale, { ...clockOptions(), timeZone: zone || undefined });
   } catch {
-    return d.toLocaleTimeString([], clockOptions());
+    return d.toLocaleTimeString(locale, clockOptions());
   }
 }
 
 function fmtAgo(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  return `${Math.round(s / 3600)} h ago`;
+  if (s < 60) return T("{n}s ago", { n: s });
+  if (s < 3600) return T("{n} min ago", { n: Math.round(s / 60) });
+  return T("{n} h ago", { n: Math.round(s / 3600) });
 }
 
 const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -1331,7 +1336,7 @@ function noticesHtml(t) {
   return noticesBlock(state.notices.id === t.id ? state.notices.list : [], t.route);
 }
 // A foldable list of notices (folded or not as the viewer last left it).
-function noticesBlock(list, route = null, title = "Service notices") {
+function noticesBlock(list, route = null, title = T("Service notices")) {
   if (!list.length) return "";
   const open = !state.noticesCollapsed;
   return `<div class="notices${open ? "" : " collapsed"}">
@@ -1344,8 +1349,8 @@ function noticesBlock(list, route = null, title = "Service notices") {
       <div class="notice-body">
         <p class="notice-head">${esc(n.header)}</p>
         ${n.description && n.description !== n.header
-          ? `<details><summary>More</summary><p>${esc(n.description).replace(/\n+/g, "<br>")}</p></details>` : ""}
-        ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">Details</a>` : ""}
+          ? `<details><summary>${T("More")}</summary><p>${esc(n.description).replace(/\n+/g, "<br>")}</p></details>` : ""}
+        ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">${T("Details")}</a>` : ""}
         ${n.scope === "line" && route ? `<span class="notice-scope">${esc(route)}</span>` : ""}
       </div>
     </div>`).join("") : ""}
@@ -1373,7 +1378,7 @@ function renderDetail() {
   const t = state.trains.get(state.selected);
   const el = $("train-detail");
   if (!t) {
-    el.innerHTML = '<p class="empty">This train isn’t reporting right now. It may have finished its trip.</p>';
+    el.innerHTML = `<p class="empty">${T("This train isn’t reporting right now. It may have finished its trip.")}</p>`;
     return;
   }
   // How far the cars strip is scrolled, kept per train across re-renders
@@ -1401,17 +1406,17 @@ function renderDetail() {
   const leg = (i) => pick ? (i === pickFrom ? " pick-from" : "")
     : dest < 0 ? ""
     : i === dest ? " dest" : i > dest ? " beyond" : i === from ? " ride-from" : i < from ? " before" : " ride";
-  const hint = pick ? "Now tap the stop where you’re getting off."
-    : !rec && t.stops?.length ? "Tap the stop you got on at, then the one you’re getting off at." : "";
+  const hint = pick ? T("Now tap the stop where you’re getting off.")
+    : !rec && t.stops?.length ? T("Tap the stop you got on at, then the one you’re getting off at.") : "";
   const stops = t.stops?.length
-    ? rrSection("stops", "Stops", t.stops.length, `${hint ? `<p class="stops-hint">${hint}</p>` : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
+    ? rrSection("stops", T("Stops"), t.stops.length, `${hint ? `<p class="stops-hint">${hint}</p>` : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
         const late = lateMin > 1
           ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
           : "";
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
-        const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
+        const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(T("{name} station", { name: s.name }))}"` : "";
         return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, { isDest: !pick && i === dest, isFrom: i === pickFrom, picking: Boolean(pick) })}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`)
     : "";
@@ -1429,9 +1434,9 @@ function renderDetail() {
         // no line or just the one, the railroad's).
         ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
         : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
-      ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
+      ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : `${T("to")} `}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
-        ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(t.statusText)}</span>` : ""}
+        ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(statusLabel(t.statusText))}</span>` : ""}
         ${trackButton(t)}
       </div>
       ${consistSection(t)}
@@ -1439,7 +1444,7 @@ function renderDetail() {
     ${onBoardFor(t)}
     ${noticesHtml(t)}
     ${tiles}
-    ${t.estimated ? '<p class="estimate-note">This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.</p>' : ""}
+    ${t.estimated ? `<p class="estimate-note">${T("This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.")}</p>` : ""}
     ${stops}`;
   el.scrollTop = keepScroll;
   const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
@@ -1452,7 +1457,7 @@ const SIGNAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-label=
 
 const CLOSE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 
-const INFERRED_TITLE = "Worked out by Trainsheet from GPS; not yet reported by the railroad";
+const INFERRED_TITLE = T("Worked out by Trainsheet from GPS; not yet reported by the railroad");
 
 // The train's cars, drawn right under its status: live where the railroad
 // reports them, otherwise what typically runs on the route. Tapping a car
@@ -1493,9 +1498,10 @@ function onBoard(c) {
   const keys = new Set(c.cars.map((car) => car.type?.key).filter(Boolean));
   const has = AMENITIES.filter(([, , types]) => types.some((k) => keys.has(k)));
   if (!has.length) return "";
-  return `<section class="on-board" aria-label="${c.typical ? "Usually on board" : "On board"}">
-    <h3 class="on-board-title">${c.typical ? "Usually on board" : "On board"}</h3>
-    <ul class="chips">${has.map(([id, label]) => `<li class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg><span>${label}</span></li>`).join("")}</ul>
+  const title = T(c.typical ? "Usually on board" : "On board");
+  return `<section class="on-board" aria-label="${title}">
+    <h3 class="on-board-title">${title}</h3>
+    <ul class="chips">${has.map(([id, label]) => `<li class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg><span>${T(label)}</span></li>`).join("")}</ul>
   </section>`;
 }
 
@@ -1519,30 +1525,30 @@ function modelOf(c, i) {
 }
 
 const factText = {
-  topSpeedMph: (v) => (state.units === "km" ? `${Math.round(v * KM_PER_MI)} km/h` : `${v} mph`),
-  powerHp: (v) => (state.units === "km" ? `${Math.round(v * 0.7457).toLocaleString()} kW` : `${v.toLocaleString()} hp`),
+  topSpeedMph: (v) => (state.units === "km" ? `${Math.round(v * KM_PER_MI)} km/h` : `${v} ${T("mph")}`),
+  powerHp: (v) => (state.units === "km" ? `${Math.round(v * 0.7457).toLocaleString(locale)} kW` : `${v.toLocaleString(locale)} ${T("hp")}`),
   seats: (v) => `${v}`,
-  lengthFt: (v) => (state.units === "km" ? `${(v * 0.3048).toFixed(1)} m` : `${Math.round(v)} ft`),
+  lengthFt: (v) => (state.units === "km" ? `${(v * 0.3048).toFixed(1)} m` : `${Math.round(v)} ${T("ft")}`),
 };
 const FACT_LABELS = { built: "Built", fleet: "Fleet", topSpeedMph: "Top speed", powerHp: "Power", seats: "Seats", lengthFt: "Length" };
 function facts(m, keys) {
   return keys.filter((k) => m[k] != null && m[k] !== "")
-    .map((k) => `<div><dt>${FACT_LABELS[k]}</dt><dd>${esc(factText[k] ? factText[k](m[k]) : m[k])}</dd></div>`).join("");
+    .map((k) => `<div><dt>${T(FACT_LABELS[k])}</dt><dd>${esc(factText[k] ? factText[k](m[k]) : m[k])}</dd></div>`).join("");
 }
 
 // The card under the drawing: what the car is, and a few numbers.
 function modelCard(t, c, i) {
   const m = modelOf(c, i), car = c.cars[i];
-  const name = m?.model || car?.type?.name || "This car";
+  const name = m?.model || car?.type?.name || T("This car");
   const sub = m ? [m.type, m.built].filter(Boolean).join(" · ") : "";
   const keys = m?.powerHp ? ["topSpeedMph", "powerHp", "fleet"] : ["seats", "topSpeedMph", "fleet"];
   return `<div class="model-card">
     <div class="model-card-head">
       <div><strong>${esc(name)}</strong>${car?.number ? ` <span class="model-num">${esc(car.number)}</span>` : ""}${sub ? `<span>${esc(sub)}</span>` : ""}</div>
-      <button type="button" class="icon-btn sm" data-car-close aria-label="Close">${CLOSE_ICON}</button>
+      <button type="button" class="icon-btn sm" data-car-close aria-label="${T("Close")}">${CLOSE_ICON}</button>
     </div>
     ${m ? `<dl class="facts">${facts(m, keys)}</dl>` : ""}
-    <button type="button" class="link-btn" data-model-more>More about the ${esc(m?.model || car?.type?.name || "car")} ›</button>
+    <button type="button" class="link-btn" data-model-more>${esc(T("More about the {model}", { model: m?.model || car?.type?.name || T("car") }))} ›</button>
   </div>`;
 }
 
@@ -1556,33 +1562,47 @@ function renderModelPage(t, el) {
   const a = AGENCIES[t.agency];
   const width = Math.min(560, Math.max(240, el.clientWidth - 8));
   const why = !c.typical ? ""
-    : c.reported ? `${a.short}’s feed names one car, ${c.reported.number} (${c.reported.name}); the rest is what typically runs on this line.`
-    : `${a.short} doesn’t report this train’s cars; this is what typically runs on this route.`;
-  const source = m?.source ? (() => { try { const h = new URL(m.source).hostname.replace(/^www\./, ""); return /wikipedia/.test(h) ? "Wikipedia" : h; } catch { return "Source"; } })() : null;
+    : c.reported ? T("{rr}’s feed names one car, {number} ({name}); the rest is what typically runs on this line.", { rr: a.short, number: c.reported.number, name: c.reported.name })
+    : T("{rr} doesn’t report this train’s cars; this is what typically runs on this route.", { rr: a.short });
+  const source = m?.source ? (() => { try { const h = new URL(m.source).hostname.replace(/^www\./, ""); return /wikipedia/.test(h) ? "Wikipedia" : h; } catch { return T("Source"); } })() : null;
   el.innerHTML = `
-    <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.backLabel || (t.number ? `Train ${t.number}` : trainTitle(t)))}</button>
+    <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.backLabel || (t.number ? T("Train {n}", { n: t.number }) : trainTitle(t)))}</button>
     <div class="model-page">
       <div class="model-art">${carSvg(c, i, a.color, width)}</div>
-      <h2>${esc(m?.model || car.type?.name || "This car")}</h2>
-      <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number && !t.fleet ? ` · No. ${esc(car.number)}` : ""}</p>
+      <h2>${esc(m?.model || car.type?.name || T("This car"))}</h2>
+      <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number && !t.fleet ? ` · ${T("No.")} ${esc(car.number)}` : ""}</p>
       ${m ? `<dl class="facts wide">${facts(m, ["built", "fleet", "topSpeedMph", "powerHp", "seats", "lengthFt"])}</dl>` : ""}
       ${m?.about ? `<p class="model-about">${esc(m.about)}</p>` : ""}
-      ${source ? `<p class="model-source">Source: <a href="${esc(m.source)}" target="_blank" rel="noopener">${esc(source)}</a></p>` : ""}
-      ${c.typical && !t.fleet ? `<div class="model-note"><strong>Car count and type may not be accurate.</strong> ${esc(why)}${c.summary ? ` Typical for this route: ${esc(c.summary)}.` : ""}</div>` : ""}
+      ${source ? `<p class="model-source">${T("Source:")} <a href="${esc(m.source)}" target="_blank" rel="noopener">${esc(source)}</a></p>` : ""}
+      ${c.typical && !t.fleet ? `<div class="model-note"><strong>${T("Car count and type may not be accurate.")}</strong> ${esc(why)}${c.summary ? ` ${esc(T("Typical for this route: {summary}.", { summary: c.summary }))}` : ""}</div>` : ""}
     </div>`;
 }
 
 function fmtIn(ms) {
   const min = Math.round((ms - Date.now()) / 60000);
-  if (min <= 0) return "now";
+  if (min <= 0) return T("now");
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
 function lateText(min) {
   if (min == null) return { text: "", cls: "neutral" };
-  if (min <= 1) return { text: "On time", cls: "good" };
-  return { text: `${Math.round(min)} min late`, cls: min <= 20 ? "warn" : "bad" };
+  if (min <= 1) return { text: T("On time"), cls: "good" };
+  const text = min < 60 ? T("{n} min late", { n: Math.round(min) }) : T("{h} h {m} min late", { h: Math.floor(min / 60), m: Math.round(min % 60) });
+  return { text, cls: min <= 20 ? "warn" : "bad" };
+}
+
+// A train's status as its feed parser wrote it ("On time", "12 min late",
+// "At Yuma"), in the page's language.
+function statusLabel(text) {
+  if (!text || lang === "en") return text || "";
+  let m;
+  if ((m = text.match(/^(\d+) min late$/))) return T("{n} min late", { n: m[1] });
+  if ((m = text.match(/^(\d+) h (\d+) min late$/))) return T("{h} h {m} min late", { h: m[1], m: m[2] });
+  if ((m = text.match(/^Stopped at (.+)$/))) return T("Stopped at {place}", { place: m[1] });
+  if ((m = text.match(/^Held at (.+)$/))) return T("Held at {place}", { place: m[1] });
+  if ((m = text.match(/^At (.+)$/))) return T("At {place}", { place: m[1] });
+  return T(text);
 }
 
 // A station's next train: its plate, where it's going, the track as a
@@ -1590,12 +1610,12 @@ function lateText(min) {
 function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred, track }) {
   const min = time ? Math.round((time - Date.now()) / 60000) : null;
   const clock = time ? fmtTime(new Date(time).toISOString(), tz) : "";
-  const big = min == null ? "—" : min <= 0 ? "Now" : min < 60 ? `${min}<small>min</small>` : esc(clock);
-  const small = min == null ? "" : min < 60 ? clock : `in ${fmtIn(time)}`;
+  const big = min == null ? "—" : min <= 0 ? T("Now") : min < 60 ? `${min}<small>min</small>` : esc(clock);
+  const small = min == null ? "" : min < 60 ? clock : T("in {time}", { time: fmtIn(time) });
   const statusHtml = status ? `<span class="status-t ${statusCls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(status)}</span>` : "";
   const inner = `${plate(badge, color, "sm")}
     <span class="what"><span class="title">${esc(title)}</span><span class="sub">${[statusHtml, esc(sub || "")].filter(Boolean).join(" · ")}</span></span>
-    ${track ? `<span class="trk" title="Track ${esc(track)}" aria-label="Track ${esc(track)}">${esc(track)}</span>` : "<span></span>"}
+    ${track ? `<span class="trk" title="${esc(T("Track {n}", { n: track }))}" aria-label="${esc(T("Track {n}", { n: track }))}">${esc(track)}</span>` : "<span></span>"}
     <span class="cd${statusCls === "warn" || statusCls === "bad" ? ` ${statusCls}` : ""}${min >= 60 ? " far" : ""}"><strong>${big}</strong>${small ? `<span>${esc(small)}</span>` : ""}</span>`;
   return id
     ? `<button class="dep" data-select="${esc(id)}">${inner}</button>`
@@ -1606,13 +1626,13 @@ const WHEELCHAIR_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hi
 
 // A clock time in a given zone, in the chosen 12- or 24-hour style.
 const clockIn = (ms, tz) => {
-  try { return new Date(ms).toLocaleTimeString([], { ...clockOptions(), timeZone: tz }); } catch { return ""; }
+  try { return new Date(ms).toLocaleTimeString(locale, { ...clockOptions(), timeZone: tz }); } catch { return ""; }
 };
 // The station's local time, when it isn't what the page's times are shown in.
 function localTimeNote(st) {
   if (!st.tz || state.timeZone === "station") return "";
   const now = Date.now(), shown = clockIn(now, state.timeZone || undefined), there = clockIn(now, st.tz);
-  return there && there !== shown ? `Local time ${there}` : "";
+  return there && there !== shown ? T("Local time {time}", { time: there }) : "";
 }
 
 function renderStation() {
@@ -1637,7 +1657,7 @@ function renderStation() {
       sort: time,
       html: departureRow({
         id: t?.id, color: AGENCIES.mbta.color, badge: p.number || "MBTA",
-        title: arrivals && t?.origin ? `from ${t.origin}` : p.headsign ? `to ${p.headsign}` : p.route,
+        title: arrivals && t?.origin ? T("from {place}", { place: t.origin }) : p.headsign ? T("to {place}", { place: p.headsign }) : p.route,
         sub: p.route, time, tz: p.tz, status: p.status || "", statusCls: "neutral", track: p.track,
       }),
     });
@@ -1648,12 +1668,12 @@ function renderStation() {
     listed.add(d.train.id);
     const t = d.train, a = AGENCIES[t.agency];
     const time = (arrivals ? d.arr : d.dep) ?? d.time;
-    const late = d.here ? { text: "At station", cls: "good" } : lateText(d.lateMin);
+    const late = d.here ? { text: T("At station"), cls: "good" } : lateText(d.lateMin);
     rows.push({
       sort: time ?? Date.now(),
       html: departureRow({
         id: t.id, color: a.color, badge: t.number || a.short,
-        title: arrivals ? (t.origin ? `from ${t.origin}` : trainTitle(t)) : t.destination ? `to ${t.destination}` : trainTitle(t),
+        title: arrivals ? (t.origin ? T("from {place}", { place: t.origin }) : trainTitle(t)) : t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t),
         sub: [a.short, t.route].filter(Boolean).join(" · "),
         time, tz: d.tz, status: late.text, statusCls: late.cls, inferred: Boolean(t.inferred) && !d.here,
         track: d.track || (t.agency === "njt" && extras?.tracks?.get(String(t.number))) || null,
@@ -1680,14 +1700,14 @@ function renderStation() {
     const a = AGENCIES[l.agency], k = lineKey(l.name);
     // The line's own color where its trains carry one (GO's, MBTA's).
     const color = [...state.trains.values()].find((t) => t.agency === l.agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor || a.color;
-    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name"><span class="line-swatch" style="background:${color}"></span><span>${esc(l.name)}</span></span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`;
+    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name"><span class="line-swatch" style="background:${color}"></span><span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`;
   };
   const servedBy = st.members.map((m) => {
     const a = AGENCIES[m.agency];
     const lines = [...onLines.values()].filter((l) => l.agency === m.agency).sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
     const open = state.servedOpen.has(m.agency);
-    const sub = [m.daily ? `${m.daily} train${m.daily === 1 ? "" : "s"} a weekday` : a.kind === "intercity" ? "Intercity trains" : "",
-      lines.length ? `${lines.length} line${lines.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+    const sub = [m.daily ? Tn(m.daily, "{n} train a weekday", "{n} trains a weekday") : a.kind === "intercity" ? T("Intercity trains") : "",
+      lines.length ? Tn(lines.length, "{n} line", "{n} lines") : ""].filter(Boolean).join(" · ");
     const name = `<span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>`;
     return `<li class="sb${open ? " open" : ""}">
       <div class="sb-row">
@@ -1695,24 +1715,24 @@ function renderStation() {
           ? `<button type="button" class="sb-toggle" data-served-toggle="${m.agency}" aria-expanded="${open}">${name}<svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
           : `<button type="button" class="sb-toggle" data-railroad="${m.agency}">${name}<span class="sb-go">›</span></button>`}
       </div>
-      ${open ? `<ul class="sb-lines"><li><button type="button" class="rr-line" data-railroad="${m.agency}"><span class="served-name"><span>All of ${esc(a.short)}</span></span><span class="sub">›</span></button></li>${lines.map(lineRow).join("")}</ul>` : ""}
+      ${open ? `<ul class="sb-lines"><li><button type="button" class="rr-line" data-railroad="${m.agency}"><span class="served-name"><span>${esc(T("All of {rr}", { rr: a.short }))}</span></span><span class="sub">›</span></button></li>${lines.map(lineRow).join("")}</ul>` : ""}
     </li>`;
   }).join("");
   const local = localTimeNote(st);
-  const access = st.access === 1 ? `<span class="access yes">${WHEELCHAIR_ICON}Step-free access</span>`
-    : st.access === 0 ? `<span class="access no">${WHEELCHAIR_ICON}Not step-free</span>` : "";
+  const access = st.access === 1 ? `<span class="access yes">${WHEELCHAIR_ICON}${T("Step-free access")}</span>`
+    : st.access === 0 ? `<span class="access no">${WHEELCHAIR_ICON}${T("Not step-free")}</span>` : "";
 
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:var(--muted)">
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2c4 0 8 .5 8 4v9.5a3.5 3.5 0 0 1-3.5 3.5l1.5 1.5v.5h-2l-2-2h-4l-2 2H6v-.5L7.5 19A3.5 3.5 0 0 1 4 15.5V6c0-3.5 4-4 8-4Zm0 2c-3.5 0-5.5.5-6 1.5V10h12V5.5C17.5 4.5 15.5 4 12 4ZM7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
-        Station${st.place ? ` · ${esc(st.place)}` : ""}
+        ${T("Station")}${st.place ? ` · ${esc(st.place)}` : ""}
       </div>
       <h2>${esc(st.name)}</h2>
       ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
     </div>
-    ${rrSection("served", "Served by", st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
-    ${noticesBlock(extras?.notices || [], null, "Station notices")}
+    ${rrSection("served", T("Served by"), st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
+    ${noticesBlock(extras?.notices || [], null, T("Station notices"))}
     ${nextTrainsSection(rows, arrivals, loading)}
     ${atStation(st, extras)}`;
 }
@@ -1796,7 +1816,7 @@ function openRailroad(id, { fly = true, line = null } = {}) {
   clearInterval(predictionTimer);
   Object.assign(state, { selected: null, station: null, predictions: null, car: null, returnTo: null, railroad: id, line });
   focusCache.key = null;
-  $("back-btn").lastChild.textContent = line ? ` ${AGENCIES[id].short}` : " All trains";
+  setBack(line ? AGENCIES[id].short : T("All trains"));
   setFollow(false);
   setUrlSelection();
   applySelectionFilter();
@@ -2058,7 +2078,7 @@ function equipmentList(id, lineNames, trains, roster) {
     const sub = [m?.type, m?.fleet].filter(Boolean).join(" · ");
     return `<button class="rr-car" data-fleet-car data-route="${esc(route || "")}" data-number="${esc(number || "")}" data-train="${esc(trainId || "")}" data-i="${i}">
       ${carSvg(c, i, a.color, 128)}
-      <span><span class="title">${esc(m?.model || car.type?.name || "Car")}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
+      <span><span class="title">${esc(m?.model || car.type?.name || T("Car"))}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
     </button>`;
   }).join("");
   return { html, count: kinds.size };
@@ -2069,9 +2089,9 @@ function trainStats(trains) {
   const late = trains.filter((t) => t.delayMin > 5).length;
   const onTime = trains.filter((t) => t.delayMin != null && t.delayMin <= 5).length;
   return `<div class="rr-stats">
-      ${statTile(trains.length, trains.length === 1 ? "train running" : "trains running")}
-      ${statTile(onTime, "on time", "good")}
-      ${statTile(late, "over 5 min late", late ? "warn" : "")}
+      ${statTile(trains.length, T(trains.length === 1 ? "train running" : "trains running"))}
+      ${statTile(onTime, T("on time"), "good")}
+      ${statTile(late, T("over 5 min late"), late ? "warn" : "")}
     </div>`;
 }
 // Placeholder rows, shimmering while a railroad's feed is still loading.
@@ -2084,19 +2104,19 @@ function runningList(a, trains, withLine) {
     String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
   return `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
         ${plate(t.number || a.short, a.color, "sm")}
-        <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([withLine && t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
-        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
-      </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
+        <span><span class="title">${esc(t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t))}</span><br><span class="sub">${esc([withLine && t.route, t.nextStop && T("next {place}", { place: t.nextStop })].filter(Boolean).join(" · "))}</span></span>
+        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "<span></span>"}
+      </button>`).join("") + (running.length > 40 ? `<p class="sub">${T("and {n} more", { n: running.length - 40 })}</p>` : "")
       : isLoading(Object.keys(AGENCIES).find((k) => AGENCIES[k] === a)) ? skeletonRows()
-      : `<p class="empty">No ${esc(a.short)} trains are reporting here right now.</p>`}</div>`;
+      : `<p class="empty">${esc(T("No {rr} trains are reporting here right now.", { rr: a.short }))}</p>`}</div>`;
 }
 // A line's stations joined by a line in its color, like a train's stops.
 function lineDiagram(id, list, color) {
   const a = AGENCIES[id];
   return `<ol class="stops line-stops" style="--line-color:${color}">${list.map((st) => {
     const d = st.members.find((m) => m.agency === id)?.daily;
-    return `<li class="link" data-station="${esc(st.id)}" role="button" tabindex="0" title="${esc(st.name)} station">
-      <span class="stop-dot" aria-hidden="true"></span><span>${esc(st.name)}</span><span class="time">${d ? `${d} a weekday` : ""}</span></li>`;
+    return `<li class="link" data-station="${esc(st.id)}" role="button" tabindex="0" title="${esc(T("{name} station", { name: st.name }))}">
+      <span class="stop-dot" aria-hidden="true"></span><span>${esc(st.name)}</span><span class="time">${d ? esc(T("{n} a weekday", { n: d })) : ""}</span></li>`;
   }).join("")}</ol>`;
 }
 
@@ -2131,24 +2151,24 @@ function renderRailroad() {
   const lineList = [...lines.values()].sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
   const fleet = equipmentList(id, lineList.map((l) => l.name), trains, true);
 
-  const source = !avail.ok ? avail.reason || "Not connected"
-    : estimated && estimated === trains.length ? "Positions estimated from predicted times"
-    : trains.length ? "Live GPS positions" : "No trains reporting right now";
-  const updated = status?.at ? ` · updated ${fmtAgo(status.at)}` : "";
+  const source = !avail.ok ? avail.reason || T("Not connected")
+    : estimated && estimated === trains.length ? T("Positions estimated from predicted times")
+    : trains.length ? T("Live GPS positions") : T("No trains reporting right now");
+  const updated = status?.at ? ` · ${T("updated {ago}", { ago: fmtAgo(status.at) })}` : "";
 
   el.innerHTML = `
     <div class="hero">
-      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${a.kind === "intercity" ? "Intercity" : "Commuter rail"} · ${esc(a.region)}</div>
+      <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${T(a.kind === "intercity" ? "Intercity" : "Commuter rail")} · ${esc(T(a.region))}</div>
       <h2>${esc(a.name)}</h2>
       <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
     </div>
     ${!trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : ""}
     ${trainStats(trains)}
-    ${lineList.length > 1 ? rrSection("lines", "Lines", lineList.length,
-      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
-    ${rrSection("running", "Running now", trains.length, runningList(a, trains, true))}
-    ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}
-    ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
+    ${lineList.length > 1 ? rrSection("lines", T("Lines"), lineList.length,
+      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : ""}
+    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains, true))}
+    ${fleet.count ? rrSection("fleet", T("Fleet"), fleet.count, `<p class="rr-hint">${T("Tap one to read about it.")}</p><div class="rr-cars">${fleet.html}</div>`) : ""}
+    ${src ? `<p class="estimate-note">${T("Data:")} <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
 
 // Quiet hours: nothing of a railroad's is running, so its page says when
@@ -2188,12 +2208,12 @@ function nextFirstTrain(id) {
 function quietCard(id) {
   const a = AGENCIES[id], f = nextFirstTrain(id);
   const when = f && (f.at - Date.now() > 20 * 3600 * 1000
-    ? `${new Date(f.at).toLocaleDateString([], { weekday: "long", timeZone: (state.timeZone === "station" ? f.tz : state.timeZone) || undefined })} at ${fmtTime(new Date(f.at).toISOString(), f.tz)}`
-    : `at ${fmtTime(new Date(f.at).toISOString(), f.tz)}`);
+    ? T("{day} at {time}", { day: new Date(f.at).toLocaleDateString(locale, { weekday: "long", timeZone: (state.timeZone === "station" ? f.tz : state.timeZone) || undefined }), time: fmtTime(new Date(f.at).toISOString(), f.tz) })
+    : T("at {time}", { time: fmtTime(new Date(f.at).toISOString(), f.tz) }));
   return `<div class="quiet">
     <svg class="quiet-moon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M20.4 14.6A8.5 8.5 0 0 1 9.4 3.6a8.5 8.5 0 1 0 11 11Z"/></svg>
-    <h3>${esc(a.short)} is asleep</h3>
-    <p>${f ? `The first train leaves ${esc(f.origin)} ${esc(when)}, in ${esc(fmtIn(f.at))}.` : "None of its trains are running right now."}</p>
+    <h3>${esc(T("{rr} is asleep", { rr: a.short }))}</h3>
+    <p>${esc(f ? T("The first train leaves {place} {when}, in {time}.", { place: f.origin, when, time: fmtIn(f.at) }) : T("None of its trains are running right now."))}</p>
     ${f ? `<span class="quiet-first">${f.number ? plate(f.number, a.color, "xs") : `<span class="rc-rr" style="--c:${a.color}"></span>`}${esc(f.line)}</span>` : ""}
   </div>`;
 }
@@ -2215,12 +2235,12 @@ function renderLine() {
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
       <h2>${esc(name)}</h2>
-      ${stations.length ? `<p class="station-facts"><span>${stations.length} stations · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
+      ${stations.length ? `<p class="station-facts"><span>${esc(T("{n} stations", { n: stations.length }))} · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
       ${consistSection(typical)}
     </div>
     ${trainStats(trains)}
-    ${rrSection("running", "Running now", trains.length, runningList(a, trains, false))}
-    ${stations.length ? rrSection("line-stations", "Stations", stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
+    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains, false))}
+    ${stations.length ? rrSection("line-stations", T("Stations"), stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
   const shown = el.querySelector(".consist-strip");
   if (shown) shown.scrollLeft = keepStrip;
 }
@@ -2232,19 +2252,19 @@ function nextTrainsSection(rows, arrivals, loading) {
   return `<section class="rr-sec${open ? "" : " collapsed"}">
     <div class="deps-head">
       <h3 class="section-title"><button type="button" class="notices-toggle" data-rr-section="next" aria-expanded="${open}">
-        Next trains <span class="rr-count">${Math.min(rows.length, 14)}</span>
+        ${T("Next trains")} <span class="rr-count">${Math.min(rows.length, 14)}</span>
         <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button></h3>
       ${open ? `<div class="segmented two sm" id="station-view">
-        <button data-station-view="dep" aria-pressed="${!arrivals}">Departures</button>
-        <button data-station-view="arr" aria-pressed="${arrivals}">Arrivals</button>
+        <button data-station-view="dep" aria-pressed="${!arrivals}">${T("Departures")}</button>
+        <button data-station-view="arr" aria-pressed="${arrivals}">${T("Arrivals")}</button>
       </div>` : ""}
     </div>
     ${open ? `<div class="deps">
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
-        : loading ? skeletonRows() : `<p class="empty">No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.</p>`}
+        : loading ? skeletonRows() : `<p class="empty">${T(arrivals ? "No live trains are reporting an arrival here right now." : "No live trains are reporting a departure here right now.")}</p>`}
     </div>
-    <p class="estimate-note">Times are live predictions from each railroad.</p>` : ""}
+    <p class="estimate-note">${T("Times are live predictions from each railroad.")}</p>` : ""}
   </section>`;
 }
 
@@ -2295,16 +2315,16 @@ function checkTracked() {
         rec.stopName = stop.name;
       }
       if (stop && hasArrived(t, stop)) {
-        untrack(rec.id, `${trainLabel(rec)} arrived at ${stop.name}.`);
+        untrack(rec.id, T("{train} arrived at {place}.", { train: trainLabel(rec), place: stop.name }));
         continue;
       }
       changed = true;
     } else if (rec.eta && rec.eta < now) {
       // Vanished after its arrival time: it got there and the trip ended.
-      untrack(rec.id, rec.lastSeen < PAGE_OPENED ? null : `${trainLabel(rec)} arrived at ${rec.stopName}.`);
+      untrack(rec.id, rec.lastSeen < PAGE_OPENED ? null : T("{train} arrived at {place}.", { train: trainLabel(rec), place: rec.stopName }));
     } else if (now - (rec.lastSeen || 0) > LOST_MS) {
       untrack(rec.id, rec.lastSeen < PAGE_OPENED ? null
-        : `Stopped tracking ${trainLabel(rec)}: it hasn't reported for 30 minutes, so its trip may have finished or been cancelled.`);
+        : T("Stopped tracking {train}: it hasn't reported for 30 minutes, so its trip may have finished or been cancelled.", { train: trainLabel(rec) }));
     }
   }
   if (changed) saveTracked();
@@ -2312,7 +2332,7 @@ function checkTracked() {
 
 function startTracking(t, stopKey, fromKey = null) {
   if (state.tracked.some((r) => r.id === t.id)) return;
-  if (state.tracked.length >= MAX_TRACKED) return toast("You can track up to three trains at once.");
+  if (state.tracked.length >= MAX_TRACKED) return toast(T("You can track up to three trains at once."));
   const stop = stopKey ? t.stops?.find((s) => s.key === stopKey) : null;
   state.tracked.push({
     id: t.id, agency: t.agency, number: t.number, route: t.route,
@@ -2340,9 +2360,10 @@ function untrack(id, message) {
 // tracks without a destination.
 function trackButton(t) {
   const rec = state.tracked.find((r) => r.id === t.id);
-  if (rec) return `<span class="tracking-note">Tracking${rec.fromName ? ` from ${esc(rec.fromName)}` : ""}${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>`;
+  if (rec) return `<span class="tracking-note">${esc(rec.fromName && rec.stopName ? T("Tracking from {from} to {to}", { from: rec.fromName, to: rec.stopName })
+    : rec.stopName ? T("Tracking to {to}", { to: rec.stopName }) : rec.fromName ? T("Tracking from {from}", { from: rec.fromName }) : T("Tracking"))}</span>`;
   if (t.stops?.some((s) => s.status !== "past")) return "";
-  return `<button class="btn primary small" data-track="${esc(t.id)}">Track this train</button>`;
+  return `<button class="btn primary small" data-track="${esc(t.id)}">${T("Track this train")}</button>`;
 }
 
 // Each stop's circle on the stop list. On a stop still ahead it's a button
@@ -2354,8 +2375,8 @@ function trackButton(t) {
 // stops tracking.
 function stopDot(s, { isDest, isFrom, picking }) {
   if (!s.key) return '<span class="stop-dot" aria-hidden="true"></span>';
-  const label = isDest ? `Stop tracking to ${s.name}` : isFrom ? `Not from ${s.name}`
-    : picking ? `Getting off at ${s.name}` : `Got on at ${s.name}`;
+  const label = T(isDest ? "Stop tracking to {place}" : isFrom ? "Not from {place}"
+    : picking ? "Getting off at {place}" : "Got on at {place}", { place: s.name });
   return `<button type="button" class="stop-dot" data-track-to="${esc(s.key)}" aria-pressed="${Boolean(isDest || isFrom)}" aria-label="${esc(label)}" title="${esc(label)}"></button>`;
 }
 
@@ -2395,18 +2416,18 @@ function renderTracked() {
       const stop = chosen || next;
       if (stop) {
         const time = Date.parse(stop.time);
-        where = `${chosen ? "" : "Next: "}<strong>${esc(stop.name)}</strong>${time ? ` · ${fmtTime(stop.time, stop.tz)} · ${time > Date.now() ? `in ${fmtIn(time)}` : "now"}` : ""}`;
+        where = `${chosen ? "" : `${T("Next:")} `}<strong>${esc(stop.name)}</strong>${time ? ` · ${fmtTime(stop.time, stop.tz)} · ${time > Date.now() ? T("in {time}", { time: fmtIn(time) }) : T("now")}` : ""}`;
       } else if (t.nextStop) {
-        where = `Next: <strong>${esc(t.nextStop)}</strong>`;
+        where = `${T("Next:")} <strong>${esc(t.nextStop)}</strong>`;
       } else if (t.destination) {
-        where = `to <strong>${esc(t.destination)}</strong>`;
+        where = `${T("to")} <strong>${esc(t.destination)}</strong>`;
       }
       const late = lateText(t.delayMin);
       if (late.text) status = `<span class="status ${late.cls}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${late.text}</span>`;
-      if (Date.now() - t.updated > STALE_MS && !t.estimated) warn = `<span class="stale">⚠ Position ${fmtAgo(t.updated)}</span>`;
+      if (Date.now() - t.updated > STALE_MS && !t.estimated) warn = `<span class="stale">⚠ ${T("Position {ago}", { ago: fmtAgo(t.updated) })}</span>`;
     } else {
-      where = rec.stopName ? `to <strong>${esc(rec.stopName)}</strong>` : "";
-      warn = `<span class="stale">Not reporting · last seen ${fmtAgo(rec.lastSeen)}</span>`;
+      where = rec.stopName ? `${T("to")} <strong>${esc(rec.stopName)}</strong>` : "";
+      warn = `<span class="stale">${T("Not reporting · last seen {ago}", { ago: fmtAgo(rec.lastSeen) })}</span>`;
     }
     // Live Activity: a countdown to the stop it's tracked to, and how far
     // along the ride it is (from where they got on to that stop, by time).
@@ -2417,12 +2438,12 @@ function renderTracked() {
       const start = Date.parse(board.time), end = Date.parse(dest.time);
       if (start && end && end > start) pct = Math.max(0, Math.min(1, (Date.now() - start) / (end - start)));
       const min = end ? Math.round((end - Date.now()) / 60000) : null;
-      if (min != null) eta = min <= 0 ? "Now" : min < 60 ? `${min}<small>min</small>` : `${Math.floor(min / 60)}<small>h</small> ${min % 60}<small>m</small>`;
+      if (min != null) eta = min <= 0 ? T("Now") : min < 60 ? `${min}<small>min</small>` : `${Math.floor(min / 60)}<small>h</small> ${min % 60}<small>m</small>`;
     }
     const color = t?.routeColor || a.color;
     return `<div class="track-card live" style="--c:${color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
       <div class="la-top">${plate(rec.number || a.short, a.color, "xs")}<span class="la-route">${esc(rec.route || AGENCIES[rec.agency]?.name || "")}</span>${eta ? `<span class="la-eta">${eta}</span>` : ""}
-        <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="Stop tracking ${esc(trainLabel(rec))}" title="Stop tracking">×</button></div>
+        <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="${esc(T("Stop tracking {train}", { train: trainLabel(rec) }))}" title="${T("Stop tracking")}">×</button></div>
       ${where || status || warn ? `<div class="la-where">${[where, status, warn].filter(Boolean).join(" · ")}</div>` : ""}
       ${pct != null ? `<div class="la-track" style="--p:${pct.toFixed(3)}" aria-hidden="true"><span class="la-fill"></span><span class="la-end"></span><span class="la-dot"></span></div>` : ""}
     </div>`;
@@ -2444,7 +2465,7 @@ function renderTracked() {
 
 function openTracked(id) {
   const t = state.trains.get(id);
-  if (!t) return toast("That train isn't reporting right now.");
+  if (!t) return toast(T("That train isn't reporting right now."));
   select(id);
 }
 
@@ -2567,7 +2588,7 @@ function select(id, { fly = true } = {}) {
   if (state.trackPick?.id !== id) state.trackPick = null;
   state.railroad = null;
   state.line = null;
-  $("back-btn").lastChild.textContent = " All trains";
+  setBack(T("All trains"));
   if (state.selected !== id) state.car = null;
   state.selected = id;
   state.station = null;
@@ -2663,7 +2684,7 @@ function closeDetailTo() {
   clearInterval(predictionTimer);
   const back = state.returnTo;
   state.returnTo = null;
-  $("back-btn").lastChild.textContent = " All trains";
+  setBack(T("All trains"));
   // Back to the station a train was opened from, or the train a station was,
   // or the railroad page either was.
   if (back?.railroad && !state.railroad) return openRailroad(back.railroad, { fly: false, line: back.line || null });
@@ -2722,7 +2743,7 @@ map.on("mousemove", (e) => {
   const nets = ["a", "b", "c"].map((k) => rail.properties[k]).filter(Boolean);
   popup
     .setLngLat(e.lngLat)
-    .setHTML(nets.map((n) => `<div class="rail-net"><span class="dot" style="background:${NETWORKS[n]?.color || "#8d95a3"}"></span>${esc(NETWORKS[n]?.name || "Commuter rail")}</div>`).join(""))
+    .setHTML(nets.map((n) => `<div class="rail-net"><span class="dot" style="background:${NETWORKS[n]?.color || "#8d95a3"}"></span>${esc(NETWORKS[n]?.name || T("Commuter rail"))}</div>`).join(""))
     .addTo(map);
   popup._railHover = true;
 });
@@ -2796,11 +2817,10 @@ function hoverCard(t) {
   const a = AGENCIES[t.agency];
   const c = consistOf(t);
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
-  const late = lateText(t.delayMin);
-  const status = late.text ? `<span class="status-t ${late.cls}">${esc(late.text)}</span>` : t.statusText ? esc(t.statusText) : "";
+  const status = t.statusText ? `<span class="status-t ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "";
   const where = next
-    ? `<span class="hc-k">Next</span> <strong>${esc(next.name)}</strong>${next.time ? ` · ${esc(fmtTime(next.time, next.tz))}` : ""}`
-    : t.destination ? `to <strong>${esc(t.destination)}</strong>` : "";
+    ? `<span class="hc-k">${T("Next")}</span> <strong>${esc(next.name)}</strong>${next.time ? ` · ${esc(fmtTime(next.time, next.tz))}` : ""}`
+    : t.destination ? `${T("to")} <strong>${esc(t.destination)}</strong>` : "";
   return `<div class="t">${plate(t.number || a.short, a.color, "xs")}<span>${esc(trainTitle(t))}</span></div>
     ${c ? `<div class="hc-strip" aria-hidden="true">${consistHtml(c, a.color).replaceAll(' role="button" tabindex="0"', "")}</div>` : ""}
     ${where || status ? `<div class="s">${[where, status].filter(Boolean).join(" · ")}</div>` : ""}`;
@@ -2850,7 +2870,7 @@ function openStop(li) {
   selectStation(li.dataset.stopStation);
   if (!t) return;
   state.returnTo = { train: t.id }; // "back" from this station goes to the train
-  $("back-btn").lastChild.textContent = ` ${t.number ? `Train ${t.number}` : "Train"}`;
+  setBack(t.number ? T("Train {n}", { n: t.number }) : T("Train"));
 }
 // Hovering a stop's circle previews the trip to it: the line from the train
 // and the stops on the way, in a lighter shade of the line's color.
@@ -2917,7 +2937,7 @@ on("train-detail", "click", (e) => {
     // "back" from a line or railroad opened from a train goes to the train
     if (fromTrain) {
       state.returnTo = { train: fromTrain.id };
-      $("back-btn").lastChild.textContent = ` ${fromTrain.number ? `Train ${fromTrain.number}` : "Train"}`;
+      setBack(fromTrain.number ? T("Train {n}", { n: fromTrain.number }) : T("Train"));
     }
     return;
   }
@@ -2947,7 +2967,7 @@ on("train-detail", "click", (e) => {
     select(b.dataset.select);
     // "back" from this train goes to the station, railroad or line it was opened from
     state.returnTo = railroad ? { railroad, line } : from;
-    $("back-btn").lastChild.textContent = railroad ? ` ${AGENCIES[railroad].short}` : from ? " Station" : " All trains";
+    setBack(railroad ? AGENCIES[railroad].short : from ? T("Station") : T("All trains"));
   }
   const st = e.target.closest("[data-station]");
   if (st) {
@@ -2955,7 +2975,7 @@ on("train-detail", "click", (e) => {
     selectStation(st.dataset.station);
     if (railroad) {
       state.returnTo = { railroad, line };
-      $("back-btn").lastChild.textContent = ` ${AGENCIES[railroad].short}`;
+      setBack(AGENCIES[railroad].short);
     }
   }
 });
@@ -2977,7 +2997,7 @@ on("share-btn", "click", async () => {
   } catch {
     return toast(url);
   }
-  toast("Link copied.");
+  toast(T("Link copied."));
   btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   clearTimeout(btn._reset);
   btn._reset = setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
@@ -3060,6 +3080,15 @@ on("theme-choice", "click", (e) => {
   themePref = b.dataset.themeChoice;
   store.set("tt-theme", themePref);
   applyTheme();
+});
+
+// Language: English, French, or the browser's ("auto"). The page reloads in it.
+for (const b of $("lang-choice")?.children || []) b.setAttribute("aria-pressed", String(b.dataset.lang === langPref));
+on("lang-choice", "click", (e) => {
+  const b = e.target.closest("[data-lang]");
+  if (!b || b.dataset.lang === langPref) return;
+  store.set("tt-lang", b.dataset.lang);
+  location.reload();
 });
 
 function applyUnits() {
@@ -3152,8 +3181,8 @@ function initTimeZones() {
   const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const match = own ? listedZone(own) : null;
   const opts = match ? TIME_ZONE_CHOICES
-    : [["", `Your time zone${own ? ` (${own.split("/").pop().replace(/_/g, " ")})` : ""}`], ...TIME_ZONE_CHOICES];
-  select.innerHTML = opts.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join("");
+    : [["", own ? T("Your time zone ({zone})", { zone: own.split("/").pop().replace(/_/g, " ") }) : T("Your time zone")], ...TIME_ZONE_CHOICES];
+  select.innerHTML = opts.map(([v, label]) => `<option value="${v}">${esc(T(label))}</option>`).join("");
   if (state.timeZone && !opts.some(([v]) => v === state.timeZone)) state.timeZone = "";
   select.value = state.timeZone || match || "";
 }
@@ -3212,8 +3241,8 @@ function toggleShortcuts(open = !document.querySelector(".keys-sheet")) {
   const el = document.createElement("div");
   el.className = "keys-sheet";
   el.setAttribute("role", "dialog");
-  el.setAttribute("aria-label", "Keyboard shortcuts");
-  el.innerHTML = `<div class="keys-card"><h3>Keyboard shortcuts</h3><ul>${SHORTCUTS.map(([k, what]) => `<li><kbd>${esc(k)}</kbd><span>${esc(what)}</span></li>`).join("")}</ul></div>`;
+  el.setAttribute("aria-label", T("Keyboard shortcuts"));
+  el.innerHTML = `<div class="keys-card"><h3>${T("Keyboard shortcuts")}</h3><ul>${SHORTCUTS.map(([k, what]) => `<li><kbd>${esc(T(k))}</kbd><span>${esc(T(what))}</span></li>`).join("")}</ul></div>`;
   el.addEventListener("click", (e) => { if (!e.target.closest(".keys-card")) toggleShortcuts(false); });
   document.body.append(el);
 }
@@ -3279,7 +3308,7 @@ const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platfor
 let installPrompt = null;
 const showInstall = () => { $("install-btn").hidden = standalone || !(installPrompt || isIOS); };
 async function install() {
-  if (!installPrompt) return toast("In Safari, tap Share, then Add to Home Screen.");
+  if (!installPrompt) return toast(T("In Safari, tap Share, then Add to Home Screen."));
   installPrompt.prompt();
   await installPrompt.userChoice.catch(() => null);
   installPrompt = null;

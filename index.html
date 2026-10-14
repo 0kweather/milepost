@@ -21,25 +21,25 @@
   <script src="config.js?v=dev"></script>
 </head>
 <body>
-  <div id="loading" class="loading" role="status" aria-label="Loading Trainsheet">
+  <div id="loading" class="loading" role="status" aria-label="Loading Trainsheet" data-i18n-aria="Loading Trainsheet">
     <h1 class="loading-name">Trainsheet</h1>
     <div class="loading-track" aria-hidden="true"><div class="loading-train" id="loading-train" inert></div></div>
   </div>
-  <div id="map" aria-label="Map of live train positions"></div>
+  <div id="map" aria-label="Map of live train positions" data-i18n-aria="Map of live train positions"></div>
   <!-- Trains being tracked: islands floating over the top of the map -->
-  <div id="tracked" class="tracked" aria-label="Tracked trains" aria-live="polite" hidden></div>
+  <div id="tracked" class="tracked" aria-label="Tracked trains" data-i18n-aria="Tracked trains" aria-live="polite" hidden></div>
 
-  <aside id="panel" class="panel" aria-label="Trains">
-    <button class="sheet-handle" id="sheet-handle" aria-label="Expand or collapse panel"></button>
+  <aside id="panel" class="panel" aria-label="Trains" data-i18n-aria="Trains">
+    <button class="sheet-handle" id="sheet-handle" aria-label="Expand or collapse panel" data-i18n-aria="Expand or collapse panel"></button>
 
     <!-- List view -->
     <section id="view-list">
       <div class="search-row">
         <div class="search">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
-          <input id="search" type="search" placeholder="Train, station, line, or city" autocomplete="off" spellcheck="false">
+          <input id="search" type="search" placeholder="Train, station, line, or city" data-i18n-placeholder="Train, station, line, or city" autocomplete="off" spellcheck="false">
         </div>
-        <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu">
+        <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings" data-i18n-title="Settings" data-i18n-aria="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu">
           <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
         </button>
       </div>
@@ -55,13 +55,13 @@
       <div class="detail-top">
         <button class="back" id="back-btn">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="m14.7 5.3 1.4 1.4L10.8 12l5.3 5.3-1.4 1.4L8 12z"/></svg>
-          All trains
+          <span data-i18n>All trains</span>
         </button>
         <div class="detail-actions">
-          <button class="icon-btn" id="share-btn" title="Copy a link to this train" aria-label="Copy a link to this train">
+          <button class="icon-btn" id="share-btn" title="Copy a link to this train" aria-label="Copy a link to this train" data-i18n-title="Copy a link to this train" data-i18n-aria="Copy a link to this train">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.5"/><path d="M15.5 8.5V6.5A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13a2.5 2.5 0 0 0 2.5 2.5h2"/></g></svg>
           </button>
-          <button class="icon-btn" id="follow-btn" title="Keep this train centered" aria-pressed="false">
+          <button class="icon-btn" id="follow-btn" title="Keep this train centered" data-i18n-title="Keep this train centered" aria-pressed="false">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm-1-6h2v3.06A7 7 0 0 1 18.94 11H22v2h-3.06A7 7 0 0 1 13 18.94V22h-2v-3.06A7 7 0 0 1 5.06 13H2v-2h3.06A7 7 0 0 1 11 5.06Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
           </button>
         </div>
@@ -70,69 +70,75 @@
     </section>
   </aside>
 
-  <div id="settings-menu" class="menu" role="dialog" aria-label="Settings" hidden>
-    <div class="menu-title">Appearance</div>
+  <div id="settings-menu" class="menu" role="dialog" aria-label="Settings" data-i18n-aria="Settings" hidden>
+    <div class="menu-title" data-i18n>Appearance</div>
     <div class="segmented" id="theme-choice">
-      <button data-theme-choice="auto">Auto</button>
-      <button data-theme-choice="light">Light</button>
-      <button data-theme-choice="dark">Dark</button>
+      <button data-theme-choice="auto" data-i18n>Auto</button>
+      <button data-theme-choice="light" data-i18n>Light</button>
+      <button data-theme-choice="dark" data-i18n>Dark</button>
     </div>
-    <div class="menu-title">Units</div>
+    <div class="menu-title" data-i18n>Language</div>
+    <div class="segmented" id="lang-choice">
+      <button data-lang="auto" data-i18n>Auto</button>
+      <button data-lang="en">English</button>
+      <button data-lang="fr">Français</button>
+    </div>
+    <div class="menu-title" data-i18n>Units</div>
     <div class="segmented two" id="units-choice">
-      <button data-units="mi">Miles</button>
-      <button data-units="km">Kilometers</button>
+      <button data-units="mi" data-i18n>Miles</button>
+      <button data-units="km" data-i18n>Kilometers</button>
     </div>
-    <div class="menu-title">Train labels</div>
+    <div class="menu-title" data-i18n>Train labels</div>
     <div class="segmented" id="labels-choice">
-      <button data-labels="number">Number</button>
-      <button data-labels="line">Line</button>
-      <button data-labels="none">None</button>
+      <button data-labels="number" data-i18n>Number</button>
+      <button data-labels="line" data-i18n>Line</button>
+      <button data-labels="none" data-i18n>None</button>
     </div>
-    <div class="menu-title">Map</div>
+    <div class="menu-title" data-i18n>Map</div>
     <label class="toggle">
       <input type="checkbox" id="stations-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>Show stations</strong><span>Station markers and names on the map</span></span>
+      <span class="toggle-text"><strong data-i18n>Show stations</strong><span data-i18n>Station markers and names on the map</span></span>
     </label>
     <label class="toggle">
       <input type="checkbox" id="heading-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>Infer direction</strong><span>Point trains toward their next stop when their railroad doesn't report a heading; otherwise they show as dots</span></span>
+      <span class="toggle-text"><strong data-i18n>Infer direction</strong><span data-i18n>Point trains toward their next stop when their railroad doesn't report a heading; otherwise they show as dots</span></span>
     </label>
     <label class="toggle">
       <input type="checkbox" id="estimated-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>Hide estimated trains</strong><span>Show only trains located by GPS, not ones placed from their predicted times</span></span>
+      <span class="toggle-text"><strong data-i18n>Hide estimated trains</strong><span data-i18n>Show only trains located by GPS, not ones placed from their predicted times</span></span>
     </label>
     <label class="toggle">
       <input type="checkbox" id="only-tracked-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>Only tracked trains</strong><span>While you're tracking a train, hide all the others</span></span>
+      <span class="toggle-text"><strong data-i18n>Only tracked trains</strong><span data-i18n>While you're tracking a train, hide all the others</span></span>
     </label>
 
-    <div class="menu-title"><label for="tz-choice">Time zone</label></div>
+    <div class="menu-title"><label for="tz-choice" data-i18n>Time zone</label></div>
     <select id="tz-choice" class="menu-select"></select>
     <label class="toggle">
       <input type="checkbox" id="clock-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>24-hour clock</strong><span>Times like 18:05 instead of 6:05 PM</span></span>
+      <span class="toggle-text"><strong data-i18n>24-hour clock</strong><span data-i18n>Times like 18:05 instead of 6:05 PM</span></span>
     </label>
-    <div class="menu-title">Delays</div>
+    <div class="menu-title" data-i18n>Delays</div>
     <label class="toggle">
       <input type="checkbox" id="infer-toggle">
       <span class="switch" aria-hidden="true"></span>
-      <span class="toggle-text"><strong>Catch unreported delays</strong><span>Mark a train late when GPS shows it running behind what its railroad reports</span></span>
+      <span class="toggle-text"><strong data-i18n>Catch unreported delays</strong><span data-i18n>Mark a train late when GPS shows it running behind what its railroad reports</span></span>
     </label>
-    <div class="menu-title">Help</div>
-    <button type="button" class="menu-link" id="tour-btn">Take a tour<span aria-hidden="true">›</span></button>
-    <button type="button" class="menu-link" id="install-btn" hidden>Install as an app<span aria-hidden="true">›</span></button>
-    <button type="button" class="menu-link keys-link" id="keys-btn">Keyboard shortcuts<span aria-hidden="true">›</span></button>
+    <div class="menu-title" data-i18n>Help</div>
+    <button type="button" class="menu-link" id="tour-btn"><span data-i18n>Take a tour</span><span aria-hidden="true">›</span></button>
+    <button type="button" class="menu-link" id="install-btn" hidden><span data-i18n>Install as an app</span><span aria-hidden="true">›</span></button>
+    <button type="button" class="menu-link keys-link" id="keys-btn"><span data-i18n>Keyboard shortcuts</span><span aria-hidden="true">›</span></button>
     <details class="menu-about">
-      <summary>About the data</summary>
-      <p>Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
-      <p>Railroads often don't post a delay until well after it starts. Trainsheet watches GPS for trains still at a station after their posted departure, or too far out to make their next stop on time, and adds that delay itself. Those delays are underlined with dots. You can turn this off above.</p>
+      <summary data-i18n>About the data</summary>
+      <p data-i18n-html="Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.">Positions come from each railroad's public real-time feed and refresh every 20–60 seconds. Trains marked <em>estimated</em> are placed between stations using predicted arrival times because their feed doesn't report GPS.</p>
+      <p data-i18n>Railroads often don't post a delay until well after it starts. Trainsheet watches GPS for trains still at a station after their posted departure, or too far out to make their next stop on time, and adds that delay itself. Those delays are underlined with dots. You can turn this off above.</p>
       <p id="credits"></p>
-      <p><a href="https://github.com/0kweather/trainsheet">Source on GitHub</a></p>
+      <p><a href="https://github.com/0kweather/trainsheet" data-i18n>Source on GitHub</a></p>
     </details>
   </div>
 

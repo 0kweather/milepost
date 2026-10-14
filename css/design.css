@@ -508,7 +508,7 @@ kbd {
   padding: 11px 14px; border: 0; background: var(--group); color: var(--accent);
   font: inherit; font-size: var(--fs-base); text-align: left; cursor: pointer;
 }
-.menu-link > span { color: var(--faint); font-size: 18px; line-height: 1; }
+.menu-link > span[aria-hidden] { color: var(--faint); font-size: 18px; line-height: 1; }
 .menu-link:hover, .menu-about > summary:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
 .menu-title + .menu-link { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
 .menu-link + .menu-link::before, .menu-link + .menu-about > summary::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; height: 0.5px; background: var(--line); }
