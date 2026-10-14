@@ -2227,7 +2227,7 @@ function renderTracked() {
       <div class="la-top">${plate(rec.number || a.short, a.color, "xs")}<span class="la-route">${esc(rec.route || AGENCIES[rec.agency]?.name || "")}</span>${eta ? `<span class="la-eta">${eta}</span>` : ""}
         <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="Stop tracking ${esc(trainLabel(rec))}" title="Stop tracking">×</button></div>
       ${where || status || warn ? `<div class="la-where">${[where, status, warn].filter(Boolean).join(" · ")}</div>` : ""}
-      ${pct != null ? `<div class="la-track" aria-hidden="true"><span class="la-fill" style="width:${(pct * 100).toFixed(1)}%"></span><span class="la-end"></span><span class="la-dot" style="left:${(pct * 100).toFixed(1)}%"></span></div>` : ""}
+      ${pct != null ? `<div class="la-track" style="--p:${pct.toFixed(3)}" aria-hidden="true"><span class="la-fill"></span><span class="la-end"></span><span class="la-dot"></span></div>` : ""}
     </div>`;
   }).join("");
   // A train just tracked grows out of a pill, like the Dynamic Island. A
