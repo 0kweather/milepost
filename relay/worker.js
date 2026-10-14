@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-13 (exo)";
+const RELAY_VERSION = "2026-10-14 (njt api)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -191,6 +191,60 @@ function minutesUntil(text, now) {
 
 let njtMem = null; // { st, at, json }
 
+// NJ Transit's Rail Data API (with an account: NJT_USERNAME and NJT_PASSWORD,
+// stored as secrets): each running train's GPS position, next stop and how
+// late it is. A token lasts a day, and only 10 can be asked for a day, so
+// one is kept and reused; a refused token is replaced at most every 10
+// minutes. Positions are fetched at most every 20 seconds (the account
+// allows 40,000 calls a day).
+const NJT_API = "https://raildata.njtransit.com/api/TrainData";
+let njtToken = null;       // { token, at }
+let njtTokenTried = 0;     // when a token was last asked for
+let njtVehicles = null;    // { at, list }
+async function njtApi(method, form) {
+  const body = new FormData();
+  for (const [k, v] of Object.entries(form)) body.append(k, v);
+  const res = await fetch(`${NJT_API}/${method}`, { method: "POST", body, headers: { accept: "application/json" } });
+  if (!res.ok) throw new Error(`NJ Transit API HTTP ${res.status}`);
+  return res.json();
+}
+async function njtGetToken(env) {
+  if (njtToken && Date.now() - njtToken.at < 23 * 3600 * 1000) return njtToken.token;
+  if (Date.now() - njtTokenTried < 10 * 60 * 1000) throw new Error("NJ Transit token: waiting before asking again");
+  njtTokenTried = Date.now();
+  const r = await njtApi("getToken", { username: env.NJT_USERNAME, password: env.NJT_PASSWORD });
+  if (r?.Authenticated !== "True" || !r.UserToken) throw new Error(`NJ Transit token refused${r?.errorMessage ? `: ${r.errorMessage}` : ""}`);
+  njtToken = { token: r.UserToken, at: Date.now() };
+  return njtToken.token;
+}
+// "30-May-2024 02:30:44 PM" in New York, as epoch milliseconds.
+const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+const nyParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" });
+function nyTime(text) {
+  const m = /^(\d{1,2})-(\w{3})-(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) ([AP])M$/i.exec(String(text || "").trim());
+  if (!m || MONTHS[m[2]] == null) return null;
+  const local = Date.UTC(+m[3], MONTHS[m[2]], +m[1], (+m[4] % 12) + (/p/i.test(m[7]) ? 12 : 0), +m[5], +m[6]);
+  const p = Object.fromEntries(nyParts.formatToParts(new Date(local)).map((x) => [x.type, +x.value]));
+  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute) - Math.floor(local / 60000) * 60000;
+  return local - offset;
+}
+async function fetchNjtVehicles(env) {
+  if (!env.NJT_USERNAME || !env.NJT_PASSWORD) return null;
+  if (njtVehicles && Date.now() - njtVehicles.at < 20 * 1000) return njtVehicles.list;
+  let r = await njtApi("getVehicleData", { token: await njtGetToken(env) });
+  if (!Array.isArray(r) && /token/i.test(r?.errorMessage || "")) {
+    njtToken = null;
+    r = await njtApi("getVehicleData", { token: await njtGetToken(env) });
+  }
+  if (!Array.isArray(r)) throw new Error(`NJ Transit vehicles: ${r?.errorMessage || "no data"}`);
+  const list = r.map((v) => ({
+    id: String(v.ID), line: v.TRAIN_LINE, dir: v.DIRECTION, next: v.NEXT_STOP,
+    lat: +v.LATITUDE, lon: +v.LONGITUDE, late: v.SEC_LATE === "" ? null : +v.SEC_LATE, at: nyTime(v.LAST_MODIFIED),
+  })).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon) && v.lat && v.lon);
+  njtVehicles = { at: Date.now(), list };
+  return list;
+}
+
 // ---------- Transitland (UTA) ----------
 // Transitland keeps copies of UTA's GTFS-realtime feeds and serves them with
 // an API key. Its free tier allows 10,000 requests a month, so positions are
@@ -324,9 +378,12 @@ async function njtBoard(code) {
   return json;
 }
 
-async function fetchNjtDv(ctx) {
+async function fetchNjtDv(ctx, env) {
   const now = Date.now();
   if (njtMem && now - njtMem.at < 15 * 1000) return Response.json(njtMem.json);
+  // GPS positions from the Rail Data API, where there's an account; the
+  // scraped boards below still give each train's stops.
+  const vehicles = fetchNjtVehicles(env).catch((err) => (console.warn(err.message), null));
   const cache = caches.default, key = new Request(NJT_STATE);
   let st = njtMem?.st;
   if (!st) {
@@ -367,7 +424,7 @@ async function fetchNjtDv(ctx) {
   }
   ctx.waitUntil(cache.put(key, new Response(JSON.stringify(st), { headers: { "Cache-Control": "max-age=86400" } })).catch(() => {}));
   const trains = Object.values(st.trains).filter((t) => t.stops).map(({ id, line, abbr, color, dest, stops }) => ({ id, line, abbr, color, dest, stops }));
-  njtMem = { st, at: now, json: { at: now, trains } };
+  njtMem = { st, at: now, json: { at: now, trains, vehicles: await vehicles } };
   return Response.json(njtMem.json);
 }
 
@@ -380,8 +437,18 @@ export default {
       const feeds = Object.fromEntries(Object.entries(FEEDS).map(([id, f]) => [id, Boolean(f(env))]));
       // Which code is deployed, and whether optional keys are visible to it
       // (true/false only), for checking a deploy.
-      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY) };
+      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+    }
+
+    // Whether the NJ Transit account works: a count, never the token.
+    if (pathname === "/njt-check") {
+      try {
+        const list = await fetchNjtVehicles(env);
+        return Response.json({ configured: list != null, vehicles: list?.length ?? 0, sample: list?.[0] ? { id: list[0].id, line: list[0].line, next: list[0].next } : null }, { headers: CORS });
+      } catch (err) {
+        return Response.json({ configured: true, error: err.message }, { status: 502, headers: CORS });
+      }
     }
 
     const board = pathname.match(/^\/njt-board\/([A-Z0-9]{2,3})$/);
@@ -414,7 +481,7 @@ export default {
     const headers = { "User-Agent": "Trainsheet relay", ...spec.headers };
     let upstream;
     try {
-      upstream = spec.njtDv ? await fetchNjtDv(ctx)
+      upstream = spec.njtDv ? await fetchNjtDv(ctx, env)
         : spec.goTracker ? Response.json(await fetchGoTracker())
         : spec.exoHub ? Response.json(await fetchExo())
         : spec.transitland ? await fetchTransitland(spec.transitland, env)
