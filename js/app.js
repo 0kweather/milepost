@@ -93,6 +93,7 @@ const state = {
   query: "",
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
 };
+let islandsShown = new Map(); // tracked train id -> when its island first showed
 
 // ---------- Theme ----------
 
@@ -1843,7 +1844,7 @@ function frameFocus() {
   for (const t of focusTrains()) if (Number.isFinite(t.lat)) b.extend([t.lon, t.lat]);
   if (b.isEmpty()) return;
   const pad = panelPadding();
-  let padding = { top: 60, right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) };
+  let padding = { top: Math.max(60, pad.top + 20), right: 60, bottom: Math.max(60, pad.bottom + 20), left: Math.max(60, pad.left + 40) };
   // Where the margins leave no room to fit it, use smaller ones (else the map
   // wouldn't move at all).
   if (!map.cameraForBounds(b, { padding })) padding = { top: 20, right: 20, bottom: Math.min(padding.bottom, innerHeight / 3), left: Math.min(padding.left, innerWidth / 3) };
@@ -2229,8 +2230,17 @@ function renderTracked() {
       ${pct != null ? `<div class="la-track" aria-hidden="true"><span class="la-fill" style="width:${(pct * 100).toFixed(1)}%"></span><span class="la-end"></span><span class="la-dot" style="left:${(pct * 100).toFixed(1)}%"></span></div>` : ""}
     </div>`;
   }).join("");
-  // On phones, keep the cards visible when the sheet is collapsed.
-  document.documentElement.style.setProperty("--tracked-h", `${el.hidden ? 0 : el.offsetHeight}px`);
+  // A train just tracked grows out of a pill, like the Dynamic Island. A
+  // redraw midway picks the animation up where it was.
+  const now = Date.now();
+  for (const card of el.children) {
+    const since = now - (islandsShown.get(card.dataset.trackOpen) ?? now);
+    if (since < 600) {
+      card.classList.add("enter");
+      card.style.setProperty("--enter-at", `${-since}ms`);
+    }
+  }
+  islandsShown = new Map(state.tracked.map((r) => [r.id, islandsShown.get(r.id) ?? now]));
 }
 
 function openTracked(id) {
@@ -2458,8 +2468,10 @@ function closeDetail() {
 }
 
 function panelPadding() {
-  if (matchMedia("(max-width: 720px)").matches) return { bottom: window.innerHeight * 0.46, top: 0, left: 0, right: 0 };
-  return { left: 360, top: 0, bottom: 0, right: 0 };
+  // Clear of the tracked trains' islands across the top of the map, too.
+  const islands = $("tracked"), top = islands && !islands.hidden ? islands.getBoundingClientRect().bottom : 0;
+  if (matchMedia("(max-width: 720px)").matches) return { bottom: window.innerHeight * 0.46, top, left: 0, right: 0 };
+  return { left: 360, top, bottom: 0, right: 0 };
 }
 
 function setFollow(on) {

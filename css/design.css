@@ -239,7 +239,32 @@ html, body {
 
 /* ---------- Live Activity tracked trains ---------- */
 
-.tracked { padding: 14px 14px 4px; gap: 10px; }
+/* Floating over the top of the map, centred in the space beside the panel
+ * (on phones, across the top of the screen), like the Dynamic Island. */
+.tracked {
+  position: fixed;
+  z-index: 3;
+  top: 12px;
+  left: calc(12px + 372px + 12px);
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  pointer-events: none;
+}
+.tracked .live { width: min(380px, 100%); pointer-events: auto; border-radius: 26px; }
+.tracked .live.enter { animation: island-in 0.55s cubic-bezier(0.32, 1.25, 0.5, 1) var(--enter-at, 0ms) both; }
+.tracked .live.enter > * { animation: island-content 0.55s ease var(--enter-at, 0ms) both; }
+@keyframes island-in {
+  0% { clip-path: inset(0 32% calc(100% - 34px) 32% round 17px); transform: translateY(-4px); }
+  100% { clip-path: inset(0 0 0 0 round 26px); transform: none; }
+}
+@keyframes island-content { 0%, 35% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tracked .live.enter, .tracked .live.enter > * { animation: none; }
+}
 .live {
   position: relative;
   display: grid;
@@ -300,5 +325,6 @@ html, body {
 
 @media (max-width: 720px) {
   .panel { top: auto; left: 0; bottom: 0; width: auto; border-radius: 24px 24px 0 0; }
+  .tracked { top: calc(env(safe-area-inset-top) + 10px); left: 10px; right: 10px; }
   .sheet-handle::after { width: 36px; height: 5px; border-radius: 3px; top: 7px; }
 }
