@@ -1326,8 +1326,11 @@ function renderDetail() {
   const rec = state.tracked.find((r) => r.id === t.id);
   const ahead = t.stops?.findIndex((s) => s.status !== "past") ?? -1;
   const dest = !rec || !t.stops ? -1 : rec.stopKey ? t.stops.findIndex((s) => s.key === rec.stopKey) : t.stops.length - 1;
+  // The ride starts from the station the train is standing at, else from
+  // the last one it left.
+  const at = ahead >= 0 && t.stops[ahead].here;
   const leg = (i) => dest < 0 || ahead < 0 ? ""
-    : i === dest ? " dest" : i > dest ? " beyond" : i >= ahead ? " ride" : i === ahead - 1 ? " ride-from" : "";
+    : i === dest ? " dest" : i > dest ? " beyond" : i === (at ? ahead : ahead - 1) ? " ride-from" : i >= ahead ? " ride" : "";
   const stops = t.stops?.length
     ? rrSection("stops", "Stops", t.stops.length, `${ahead >= 0 && !rec ? '<p class="stops-hint">Tap a stop’s circle to track the train until there.</p>' : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
@@ -1337,7 +1340,7 @@ function renderDetail() {
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
-        return `<li class="${s.status}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
+        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`)
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -2572,8 +2575,11 @@ on("train-detail", "mouseover", (e) => {
   const rows = [...dot.closest(".stops").children];
   const to = rows.indexOf(dot.closest("li")), ahead = rows.findIndex((li) => !li.classList.contains("past"));
   if (ahead < 0) return;
+  // From the station it's standing at, else from the last one it left.
+  const from = rows[ahead].classList.contains("here") ? ahead : ahead - 1;
+  if (to <= from) return;
   rows.forEach((li, i) => {
-    if (i === ahead - 1) li.classList.add("pv-from");
+    if (i === from) li.classList.add("pv-from");
     else if (i >= ahead && i < to) li.classList.add("pv-ride");
     else if (i === to) li.classList.add("pv-dest");
   });
