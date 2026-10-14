@@ -313,7 +313,7 @@ a { color: var(--link); }
 .notices-count {
   min-width: 16px;
   padding: 0 5px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   color: var(--warn);
   text-align: center;
@@ -808,7 +808,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .pill {
   display: inline-block;
   padding: var(--s1) var(--s3);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   font-weight: 600;
   font-size: var(--fs-xs);
 }
@@ -836,7 +836,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
   align-items: center;
   gap: var(--s1);
   padding: var(--s1) var(--s3);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   background: var(--hover);
   font-size: var(--fs-xs);
   color: var(--muted);
@@ -1171,7 +1171,7 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .rr-car .title { font-weight: 600; }
 .rr-car .sub { font-size: var(--fs-xs); color: var(--muted); }
 .rr-sec { flex: none; }
-.rr-count { min-width: 16px; padding: 0 5px; border-radius: var(--r-pill); background: var(--hover); color: var(--muted); text-align: center; line-height: 16px; }
+.rr-count { min-width: 16px; padding: 0 5px; border-radius: var(--r-sm); background: var(--hover); color: var(--muted); text-align: center; line-height: 16px; }
 .rr-sec.collapsed .chev { transform: rotate(-90deg); }
 
 /* Search results: a railroad's swatch, a line's stripe. */
