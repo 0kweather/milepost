@@ -1983,8 +1983,9 @@ function renderLine() {
   const stations = orderedLineStations(id, name);
   // Keep the cars strip where it was scrolled across redraws.
   const strip = el.querySelector(".consist-strip");
-  const keepStrip = el.dataset.line === typical.id ? strip?.scrollLeft || 0 : 0;
-  el.dataset.line = typical.id;
+  // (Not "data-line": that marks a tappable line row.)
+  const keepStrip = el.dataset.stripOf === typical.id ? strip?.scrollLeft || 0 : 0;
+  el.dataset.stripOf = typical.id;
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
@@ -2591,7 +2592,7 @@ on("train-detail", "click", (e) => {
     else state.car.page = false;
     return renderDetail();
   }
-  const lineBtn = e.target.closest("[data-line]");
+  const lineBtn = e.target.closest("button[data-line]");
   if (lineBtn && state.railroad) return openLine(state.railroad, lineBtn.dataset.line);
   const servedToggle = e.target.closest("[data-served-toggle]");
   if (servedToggle) {
