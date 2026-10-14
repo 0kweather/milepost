@@ -1102,7 +1102,7 @@ function renderAgencies() {
       rows[a.kind].push(`
         <div class="agency ${off ? "off" : ""}" style="--swatch:${a.color}">
           <button type="button" class="check-hit" data-toggle="${id}" aria-pressed="${!off}" aria-label="${esc(T(off ? "Show {name} trains" : "Hide {name} trains", { name: a.name }))}" title="${T(off ? "Show its trains" : "Hide its trains")}"><span class="check">${CHECK}</span></button>
-          <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(T("{name}: what's running, its lines and fleet", { name: a.name }))}">
+          <button type="button" class="agency-open" data-railroad="${id}" aria-label="${esc(T("{name}: its lines and fleet", { name: a.name }))}">
             <span class="name">${esc(a.name)}<span class="sub">${esc(T(a.region))}</span></span>
             ${count}
           </button>
@@ -1799,9 +1799,9 @@ function atStation(st, extras) {
 
 // ---------- Railroad and line pages ----------
 // From the i beside each railroad: the map frames its network and lights up
-// its track; the page shows what's running, its
-// lines, its fleet, its busiest stations and where the data comes from. Each
-// line has a page of its own, with just its track lit up.
+// its track; the page shows how its trains are doing, its lines, its fleet
+// and where the data comes from. Each line has a page of its own, with just
+// its track lit up.
 
 function openRailroad(id, { fly = true, line = null } = {}) {
   if (!AGENCIES[id]) return;
@@ -2043,6 +2043,14 @@ function rrSection(key, title, count, body) {
   </section>`;
 }
 
+// A section that always stays open: its heading and count, then its body.
+function plainSection(title, count, body) {
+  return `<section class="rr-sec">
+    <h3 class="section-title">${esc(title)}${count == null ? "" : ` <span class="rr-count">${count}</span>`}</h3>
+    ${body}
+  </section>`;
+}
+
 // A stand-in train for a line's typical consist (or, given one car's number,
 // the consist that car runs in), so its cars draw and open model pages like
 // a live train's.
@@ -2099,17 +2107,6 @@ const skeletonRows = (n = 3) => Array.from({ length: n }, (_, i) =>
   `<div class="sk-row" aria-hidden="true"><span class="sk sk-plate"></span><span class="sk-lines"><span class="sk" style="width:${[62, 48, 70][i % 3]}%"></span><span class="sk sk-sub" style="width:${[38, 30, 44][i % 3]}%"></span></span><span class="sk sk-end"></span></div>`).join("");
 const isLoading = (agency) => state.sourceStatus[SOURCES.find((s) => s.agencies.includes(agency))?.id]?.status === "loading";
 
-function runningList(a, trains, withLine) {
-  const running = [...trains].sort((x, y) => String(x.route || "").localeCompare(String(y.route || "")) ||
-    String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
-  return `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
-        ${plate(t.number || a.short, a.color, "sm")}
-        <span><span class="title">${esc(t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t))}</span><br><span class="sub">${esc([withLine && t.route, t.nextStop && T("next {place}", { place: t.nextStop })].filter(Boolean).join(" · "))}</span></span>
-        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "<span></span>"}
-      </button>`).join("") + (running.length > 40 ? `<p class="sub">${T("and {n} more", { n: running.length - 40 })}</p>` : "")
-      : isLoading(Object.keys(AGENCIES).find((k) => AGENCIES[k] === a)) ? skeletonRows()
-      : `<p class="empty">${esc(T("No {rr} trains are reporting here right now.", { rr: a.short }))}</p>`}</div>`;
-}
 // A line's stations joined by a line in its color, like a train's stops.
 function lineDiagram(id, list, color) {
   const a = AGENCIES[id];
@@ -2164,9 +2161,8 @@ function renderRailroad() {
     </div>
     ${!trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : ""}
     ${trainStats(trains)}
-    ${lineList.length > 1 ? rrSection("lines", T("Lines"), lineList.length,
+    ${lineList.length > 1 ? plainSection(T("Lines"), lineList.length,
       `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : ""}
-    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains, true))}
     ${fleet.count ? rrSection("fleet", T("Fleet"), fleet.count, `<p class="rr-hint">${T("Tap one to read about it.")}</p><div class="rr-cars">${fleet.html}</div>`) : ""}
     ${src ? `<p class="estimate-note">${T("Data:")} <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
@@ -2218,7 +2214,7 @@ function quietCard(id) {
   </div>`;
 }
 
-// A line's page: what's running on it, its stations in order and its fleet.
+// A line's page: how its trains are doing, its typical train and its stations in order.
 function renderLine() {
   const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
   // The line's typical train, drawn and tappable like a train page's cars.
@@ -2239,7 +2235,6 @@ function renderLine() {
       ${consistSection(typical)}
     </div>
     ${trainStats(trains)}
-    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains, false))}
     ${stations.length ? rrSection("line-stations", T("Stations"), stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
   const shown = el.querySelector(".consist-strip");
   if (shown) shown.scrollLeft = keepStrip;

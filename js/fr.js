@@ -85,7 +85,7 @@ export default {
   "Hide {name} trains": "Masquer les trains de {name}",
   "Show its trains": "Afficher ses trains",
   "Hide its trains": "Masquer ses trains",
-  "{name}: what's running, its lines and fleet": "{name} : trains en service, lignes et matériel roulant",
+  "{name}: its lines and fleet": "{name} : lignes et matériel roulant",
   "Recent": "Récents",
   "Clear": "Effacer",
   "Stations": "Gares",
@@ -226,14 +226,11 @@ export default {
   "Live GPS positions": "Positions GPS en temps réel",
   "No trains reporting right now": "Aucun train ne transmet pour le moment",
   "updated {ago}": "mis à jour {ago}",
-  "Running now": "En service",
   "Tap one to read about it.": "Touchez-en un pour en savoir plus.",
   "train running": "train en service",
   "trains running": "trains en service",
   "on time": "à l’heure",
   "over 5 min late": "plus de 5 min de retard",
-  "and {n} more": "et {n} de plus",
-  "No {rr} trains are reporting here right now.": "Aucun train de {rr} ne transmet ici pour le moment.",
   "{n} a weekday": "{n} par jour de semaine",
   "{n} stations": "{n} gares",
   "{rr} is asleep": "{rr} dort",
@@ -284,8 +281,8 @@ export default {
   "Each arrow is a train, pointing the way it's heading, in its railroad's color. Trains placed from their timetable rather than GPS are marked estimated. Tap one to open it.":
     "Chaque flèche est un train, orientée dans son sens de marche, aux couleurs de son réseau. Les trains placés d’après leur horaire plutôt que par GPS sont marqués estimés. Touchez-en un pour l’ouvrir.",
   "Find a train by its number, or a station, a line or a city.": "Trouvez un train par son numéro, ou une gare, une ligne ou une ville.",
-  "Every railroad on the map, with how many of its trains are running. Tap one for its page: what's running, its lines, its fleet and its stations. Its checkbox hides or shows its trains.":
-    "Tous les réseaux de la carte, avec le nombre de trains en service. Touchez-en un pour sa page : ses trains, ses lignes, son matériel roulant et ses gares. Sa case à cocher masque ou affiche ses trains.",
+  "Every railroad on the map, with how many of its trains are running. Tap one for its page: its lines, its fleet and its stations. Its checkbox hides or shows its trains.":
+    "Tous les réseaux de la carte, avec le nombre de trains en service. Touchez-en un pour sa page : ses lignes, son matériel roulant et ses gares. Sa case à cocher masque ou affiche ses trains.",
   "Dark mode, units, train labels, your time zone, and which trains show on the map. You can restart this tour from here too.":
     "Mode sombre, unités, étiquettes des trains, fuseau horaire et trains affichés sur la carte. Vous pouvez aussi relancer cette visite d’ici.",
   "A train's page": "La page d’un train",
