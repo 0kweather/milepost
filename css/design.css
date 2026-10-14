@@ -532,3 +532,13 @@ kbd {
 .install-text strong { font-size: var(--fs-base); font-weight: 600; }
 .install-text span { font-size: var(--fs-sm); color: var(--muted); }
 .install-x { width: 26px; height: 26px; flex: none; border: 0; border-radius: 50%; background: var(--fill); color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+
+/* ---------- On board (from a train's cars) ---------- */
+
+.on-board { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.on-board-title { width: 100%; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.amenity {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 14px;
+  background: var(--fill); font-size: var(--fs-sm); font-weight: 500;
+}
+.amenity svg { color: var(--accent); flex: none; }

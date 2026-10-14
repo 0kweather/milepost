@@ -1437,7 +1437,36 @@ function consistSection(t) {
   if (open != null) strip = strip.replace(`data-car="${open}" `, `data-car="${open}" aria-pressed="true" `);
   return `<div class="consist">
     <div class="consist-strip${open != null ? " has-open" : ""}">${strip}</div>
-    ${open != null ? modelCard(t, c, open) : ""}</div>`;
+    ${open != null ? modelCard(t, c, open) : ""}</div>
+    ${onBoard(c)}`;
+}
+
+// What a train has on board, read from its cars: a dining car, a café,
+// sleepers, a lounge with big windows, business class, cars carried along.
+const AMENITY_ICON = {
+  dining: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5m4-5v5M17 21V3c-2 1-3 3.5-3 7 0 1.7.9 3 3 3"/>',
+  cafe: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3"/>',
+  sleepers: '<path d="M3 19V6m0 9h18v4m0-4v-3a3 3 0 0 0-3-3h-7v6M7 12.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>',
+  lounge: '<path d="M3 20h18M5 20l5-9 3 5 2-3 4 7M15 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/>',
+  business: '<path d="M4 8h16v11H4zM9 8V5h6v3M4 13h16"/>',
+  autos: '<path d="M5 16l1.5-5h11l1.5 5M4 16h16v3H4zM7 19v1.5M17 19v1.5M7.5 16h.01M16.5 16h.01"/>',
+};
+const AMENITIES = [
+  ["dining", "Dining car", ["superlinerDiner", "viewlinerDiner", "buddDiner", "renaissanceDiner"]],
+  ["cafe", "Café", ["amfleetCafe", "superlinerLounge", "skyline"]],
+  ["sleepers", "Sleeping cars", ["superlinerSleeper", "viewlinerSleeper", "buddSleeper", "renaissanceSleeper"]],
+  ["lounge", "Lounge with a view", ["superlinerLounge", "skyline", "parkCar"]],
+  ["business", "Business class", ["amfleetBusiness", "acelaCoach"]],
+  ["autos", "Your car rides along", ["autorack"]],
+];
+function onBoard(c) {
+  const keys = new Set(c.cars.map((car) => car.type?.key).filter(Boolean));
+  const has = AMENITIES.filter(([, , types]) => types.some((k) => keys.has(k)));
+  if (!has.length) return "";
+  return `<div class="on-board" aria-label="${c.typical ? "Usually on board" : "On board"}">
+    <span class="on-board-title">${c.typical ? "Usually on board" : "On board"}</span>
+    ${has.map(([id, label]) => `<span class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg>${label}</span>`).join("")}
+  </div>`;
 }
 
 // ---------- Train models ----------
