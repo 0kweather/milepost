@@ -220,6 +220,27 @@ html, body {
 .sb-lines { margin-left: 22px; }
 .stops-scroll { padding: 6px 14px; }
 .dep { border-radius: 0; padding: 10px 12px; }
+/* Departure rows: plate, where it's going, the track as a platform sign,
+ * and a countdown in rounded numerals with the clock time under it. */
+.dep { grid-template-columns: auto minmax(0, 1fr) auto minmax(52px, auto); gap: 10px; }
+.dep .what .sub .status-t { font-weight: 600; }
+.dep .status-t.good { color: var(--good); }
+.dep .status-t.warn { color: var(--warn); }
+.dep .status-t.bad { color: var(--bad); }
+.dep .status-t.inferred { text-decoration: underline dotted; text-underline-offset: 2px; }
+.trk {
+  min-width: 26px; height: 26px; padding: 0 5px; border-radius: 6px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #121417; color: #fff; font-size: 13px; font-weight: 800; letter-spacing: 0;
+}
+:root[data-theme="dark"] .trk { background: #f2f2f7; color: #121417; }
+.cd { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cd strong { font-family: var(--font-rounded); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.cd strong small { font-size: 11px; font-weight: 600; margin-left: 1px; color: var(--muted); }
+.cd > span { font-size: 11px; color: var(--muted); }
+.cd.warn strong { color: var(--warn); }
+.cd.bad strong { color: var(--bad); }
+.cd.far strong { font-size: 15px; }
 .rr-cars { padding: 4px 0; }
 .rr-car { border-radius: 0; padding: 10px 12px; }
 
@@ -362,3 +383,96 @@ html, body {
   body.sheet-expanded .maplibregl-ctrl-bottom-left { bottom: calc(86vh + 4px); }
   .sheet-handle::after { width: 36px; height: 5px; border-radius: 3px; top: 7px; }
 }
+
+/* ---------- Recents (under the search box) ---------- */
+
+.recents { padding: 0 16px; flex: none; }
+.recents[hidden] { display: none; }
+.recents-head { display: flex; align-items: baseline; justify-content: space-between; padding-right: 4px; }
+.recents + .agencies > .group-title:first-child { margin-top: 10px; }
+.recents-head .group-title { margin: 14px 4px 6px; }
+.recents-head .link-btn { margin: 0; font-size: var(--fs-sm); font-weight: 400; }
+.recents-row {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: 0 -16px; padding: 2px 16px 6px; scroll-padding: 0 16px;
+}
+.recents-row::-webkit-scrollbar { display: none; }
+.recent {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; max-width: 240px;
+  min-height: 36px; padding: 5px 15px 5px 11px; border: 0; border-radius: 18px;
+  background: var(--group); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap;
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.recent > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.recent:hover { background: color-mix(in srgb, var(--group) 88%, var(--text)); }
+.recent:active { transform: scale(0.97); }
+.rc-station { width: 15px; height: 15px; border-radius: 50%; border: 3px solid var(--c); box-sizing: border-box; background: #fff; flex: none; }
+.rc-line { width: 18px; height: 6px; border-radius: 3px; background: var(--c); flex: none; }
+.rc-rr { width: 13px; height: 13px; border-radius: 50%; background: var(--c); flex: none; }
+
+/* ---------- Quiet hours (a railroad page with nothing running) ---------- */
+
+.quiet { margin: 14px 0 4px; padding: 20px 16px 18px; border-radius: var(--r-card); background: var(--group); text-align: center; }
+.quiet-moon { color: #8e8cf0; }
+.quiet h3 { margin: 6px 0 4px; font-size: 17px; font-weight: 700; }
+.quiet p { margin: 0 auto; max-width: 280px; font-size: var(--fs-sm); color: var(--muted); }
+.quiet-first {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 5px 12px 5px 7px;
+  border-radius: 16px; background: var(--fill); font-size: var(--fs-sm); font-weight: 600;
+}
+
+/* ---------- Hover card (a train on the map, on a computer) ---------- */
+
+.hover-card .maplibregl-popup-content {
+  min-width: 190px; max-width: 260px; padding: 10px 12px 9px; border-radius: 14px;
+  background: var(--panel); border: 0.5px solid var(--glass-edge);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.hover-card .t { font-weight: 700; }
+.hc-strip {
+  display: flex; align-items: flex-end; margin: 7px 0 6px; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+.hc-strip .car { margin: 0; flex: none; }
+.hc-strip .car svg { display: block; height: 22px; width: auto; }
+.hc-strip figcaption { display: none; }
+.hover-card .s { font-size: 12px; color: var(--muted); }
+.hover-card .s strong { color: var(--text); font-weight: 600; }
+.hover-card .status-t { font-weight: 600; }
+.hover-card .status-t.good { color: var(--good); }
+.hover-card .status-t.warn { color: var(--warn); }
+.hover-card .status-t.bad { color: var(--bad); }
+
+/* ---------- Skeleton loading ---------- */
+
+.sk {
+  display: block; height: 11px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--fill) 0%, color-mix(in srgb, var(--fill) 45%, transparent) 50%, var(--fill) 100%);
+  background-size: 200% 100%; animation: sk-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+.sk-count { display: inline-block; width: 64px; height: 12px; vertical-align: middle; }
+.sk-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px; background: var(--group); }
+.sk-plate { width: 44px; height: 26px; border-radius: 6px; }
+.sk-lines { display: grid; gap: 6px; }
+.sk-sub { height: 9px; opacity: 0.7; }
+.sk-end { width: 48px; height: 10px; }
+
+/* ---------- Share ---------- */
+
+.detail-actions { display: flex; gap: 8px; }
+.detail-actions [hidden] { display: none; }
+.share-sheet {
+  position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(0, 0, 0, 0.42);
+}
+.share-card {
+  width: min(560px, 100%); padding: 14px; border-radius: 24px; background: var(--panel-solid); box-shadow: var(--shadow);
+  animation: share-in 0.3s cubic-bezier(0.32, 1.2, 0.5, 1);
+}
+.share-card img { display: block; width: 100%; border-radius: 14px; box-shadow: 0 0 0 0.5px var(--line); }
+.share-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.share-actions a.btn { text-decoration: none; }
+@keyframes share-in { from { transform: scale(0.94); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .share-card { animation: none; } }

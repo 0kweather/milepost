@@ -6,6 +6,7 @@ import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
+import { shareTrain } from "./share.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -77,6 +78,7 @@ const state = {
   // Trains the viewer is following (saved in the browser):
   // [{ id, agency, number, route, stopKey, stopName, eta, lastSeen }]
   tracked: store.get("tt-tracked", []),
+  recents: store.get("tt-recents", []), // [{ kind: train|station|railroad|line, id, agency?, name, number? }]
   // Service notices folded down to their heading until opened (remembered
   // across trains).
   noticesCollapsed: store.get("tt-notices-collapsed", true),
@@ -93,6 +95,7 @@ const state = {
   query: "",
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
 };
+let goingBack = false; // going back doesn't count as opening something (for Recents)
 let islandsShown = new Map(); // tracked train id -> when its island first showed
 
 // ---------- Theme ----------
@@ -1087,7 +1090,7 @@ function renderAgencies() {
       // The checkbox shows or hides its trains; the rest of the row opens its page.
       const off = state.hidden.has(id);
       let count = `<span class="count">${counts[id] || 0} running ›</span>`;
-      if (st?.status === "loading") count = '<span class="count">…</span>';
+      if (st?.status === "loading") count = '<span class="count"><span class="sk sk-count" aria-label="Loading"></span></span>';
       else if (st?.status === "error" && !counts[id]) count = `<span class="count err" title="${esc(st.error)}">offline ›</span>`;
       rows[a.kind].push(`
         <div class="agency ${off ? "off" : ""}" style="--swatch:${a.color}">
@@ -1139,16 +1142,44 @@ function trainTitle(t) {
   return t.route ? `${t.route}` : a.name;
 }
 
+// What was opened lately, newest first: chips under the search box that
+// open it again. Trains no longer running drop out of view.
+const MAX_RECENTS = 8;
+function remember(item) {
+  if (goingBack) return;
+  state.recents = [item, ...state.recents.filter((r) => !(r.kind === item.kind && r.id === item.id))].slice(0, MAX_RECENTS * 2);
+  store.set("tt-recents", state.recents);
+}
+
+function renderRecents() {
+  const el = $("recents");
+  const shown = state.recents.filter((r) => AGENCIES[r.agency] && (r.kind !== "train" ? true : state.trains.has(r.id))
+    && (r.kind !== "station" || state.stations.has(r.id))).slice(0, MAX_RECENTS);
+  el.hidden = !shown.length;
+  if (!shown.length) return;
+  el.innerHTML = `<div class="recents-head"><span class="group-title">Recent</span><button type="button" class="link-btn" data-recents-clear>Clear</button></div>
+    <div class="recents-row">${shown.map((r) => {
+      const a = AGENCIES[r.agency];
+      const icon = r.kind === "train" ? plate(r.number || a.short, a.color, "xs")
+        : r.kind === "station" ? `<span class="rc-station" style="--c:${a.color}"></span>`
+        : r.kind === "line" ? `<span class="rc-line" style="--c:${[...state.trains.values()].find((t) => t.agency === r.agency && t.routeColor && onLine(t, r.name))?.routeColor || a.color}"></span>`
+        : `<span class="rc-rr" style="--c:${a.color}"></span>`;
+      return `<button type="button" class="recent" data-recent-kind="${r.kind}" data-recent-id="${esc(r.id)}">${icon}<span>${esc(r.name)}</span></button>`;
+    }).join("")}</div>`;
+}
+
 function renderResults() {
   const q = state.query.trim().toLowerCase();
   const el = $("results");
   if (!q) {
     el.hidden = true;
     $("agencies").hidden = false;
+    renderRecents();
     return;
   }
   el.hidden = false;
   $("agencies").hidden = true;
+  $("recents").hidden = true;
   const terms = q.split(/\s+/);
   const matches = [];
   for (const t of state.trains.values()) {
@@ -1496,14 +1527,18 @@ function lateText(min) {
   return { text: `${Math.round(min)} min late`, cls: min <= 20 ? "warn" : "bad" };
 }
 
+// A station's next train: its plate, where it's going, the track as a
+// platform-sign badge, and a countdown tile (the clock time beneath).
 function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred, track }) {
-  const when = time
-    ? `<span class="when"><strong>${fmtTime(new Date(time).toISOString(), tz)}</strong><span>${fmtIn(time)}</span></span>`
-    : '<span class="when"><strong>Next</strong><span>stop</span></span>';
-  const inner = `${when}
-    ${plate(badge, color, "sm")}
-    <span class="what"><span class="title">${esc(title)}</span><span class="sub">${track ? `<strong class="track">Track ${esc(track)}</strong> · ` : ""}${esc(sub || "")}</span></span>
-    ${status ? `<span class="status ${statusCls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(status)}</span>` : "<span></span>"}`;
+  const min = time ? Math.round((time - Date.now()) / 60000) : null;
+  const clock = time ? fmtTime(new Date(time).toISOString(), tz) : "";
+  const big = min == null ? "—" : min <= 0 ? "Now" : min < 60 ? `${min}<small>min</small>` : esc(clock);
+  const small = min == null ? "" : min < 60 ? clock : `in ${fmtIn(time)}`;
+  const statusHtml = status ? `<span class="status-t ${statusCls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(status)}</span>` : "";
+  const inner = `${plate(badge, color, "sm")}
+    <span class="what"><span class="title">${esc(title)}</span><span class="sub">${[statusHtml, esc(sub || "")].filter(Boolean).join(" · ")}</span></span>
+    ${track ? `<span class="trk" title="Track ${esc(track)}" aria-label="Track ${esc(track)}">${esc(track)}</span>` : "<span></span>"}
+    <span class="cd${statusCls === "warn" || statusCls === "bad" ? ` ${statusCls}` : ""}${min >= 60 ? " far" : ""}"><strong>${big}</strong>${small ? `<span>${esc(small)}</span>` : ""}</span>`;
   return id
     ? `<button class="dep" data-select="${esc(id)}">${inner}</button>`
     : `<div class="dep">${inner}</div>`;
@@ -1569,7 +1604,7 @@ function renderStation() {
   }
   rows.sort((x, y) => x.sort - y.sort);
 
-  const loading = st.agencies.includes("mbta") && state.predictions === null;
+  const loading = (st.agencies.includes("mbta") && state.predictions === null) || st.agencies.some(isLoading);
   // Served by: each railroad (opening its page), its lines folded under it
   // (each opening the line's page). Lines come from its timetables and the
   // routes of trains stopping here (Amtrak's, whose stations name no lines);
@@ -1638,6 +1673,7 @@ function openRailroad(id, { fly = true, line = null } = {}) {
     redrawStations();
     redrawRail();
   }
+  remember(line ? { kind: "line", id: `${id}|${line}`, agency: id, name: line } : { kind: "railroad", id, agency: id, name: AGENCIES[id].name });
   clearInterval(predictionTimer);
   Object.assign(state, { selected: null, station: null, predictions: null, car: null, returnTo: null, railroad: id, line });
   focusCache.key = null;
@@ -1919,6 +1955,11 @@ function trainStats(trains) {
       ${statTile(late, "over 5 min late", late ? "warn" : "")}
     </div>`;
 }
+// Placeholder rows, shimmering while a railroad's feed is still loading.
+const skeletonRows = (n = 3) => Array.from({ length: n }, (_, i) =>
+  `<div class="sk-row" aria-hidden="true"><span class="sk sk-plate"></span><span class="sk-lines"><span class="sk" style="width:${[62, 48, 70][i % 3]}%"></span><span class="sk sk-sub" style="width:${[38, 30, 44][i % 3]}%"></span></span><span class="sk sk-end"></span></div>`).join("");
+const isLoading = (agency) => state.sourceStatus[SOURCES.find((s) => s.agencies.includes(agency))?.id]?.status === "loading";
+
 function runningList(a, trains, withLine) {
   const running = [...trains].sort((x, y) => String(x.route || "").localeCompare(String(y.route || "")) ||
     String(x.number).localeCompare(String(y.number), undefined, { numeric: true }));
@@ -1927,6 +1968,7 @@ function runningList(a, trains, withLine) {
         <span><span class="title">${esc(t.destination ? `to ${t.destination}` : trainTitle(t))}</span><br><span class="sub">${esc([withLine && t.route, t.nextStop && `next ${t.nextStop}`].filter(Boolean).join(" · "))}</span></span>
         ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(t.statusText)}</span>` : "<span></span>"}
       </button>`).join("") + (running.length > 40 ? `<p class="sub">and ${running.length - 40} more</p>` : "")
+      : isLoading(Object.keys(AGENCIES).find((k) => AGENCIES[k] === a)) ? skeletonRows()
       : `<p class="empty">No ${esc(a.short)} trains are reporting here right now.</p>`}</div>`;
 }
 // A line's stations joined by a line in its color, like a train's stops.
@@ -1995,6 +2037,7 @@ function renderRailroad() {
       <h2>${esc(a.name)}</h2>
       <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
     </div>
+    ${!trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : ""}
     ${trainStats(trains)}
     ${lineList.length > 1 ? rrSection("lines", "Lines", lineList.length,
       `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? `${l.running} running` : "none running"} ›</span></button></li>`).join("")}</ul>`) : ""}
@@ -2002,6 +2045,53 @@ function renderRailroad() {
     ${fleet.count ? rrSection("fleet", "Fleet", fleet.count, `<p class="rr-hint">Tap one to read about it.</p><div class="rr-cars">${fleet.html}</div>`) : ""}
     ${busiest.length ? rrSection("stations", "Busiest stations", busiest.length, `<p class="rr-hint">Of its ${stations.length}, by trains a weekday.</p>${stationButtons(id, busiest)}`) : ""}
     ${src ? `<p class="estimate-note">Data: <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
+}
+
+// Quiet hours: nothing of a railroad's is running, so its page says when
+// its first train goes (data/firsts.json, from its timetable).
+let firstsData = null;
+function firsts() {
+  if (!firstsData) {
+    firstsData = {};
+    fetch("data/firsts.json?v=dev").then((r) => r.json()).then((d) => {
+      firstsData = d;
+      if (state.railroad) renderDetail();
+    }).catch((err) => console.warn("firsts", err));
+  }
+  return firstsData;
+}
+// Minutes a zone is ahead of UTC at a moment.
+function zoneOffset(ms, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
+    .formatToParts(ms).map((x) => [x.type, x.value]));
+  return (Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute) - Math.floor(ms / 60000) * 60000) / 60000;
+}
+function nextFirstTrain(id) {
+  const all = firsts(), d = all[id];
+  if (!d?.days || !all.start) return null;
+  const [y, m, day] = all.start.split("-").map(Number), now = Date.now();
+  let best = null;
+  d.days.forEach((list, i) => {
+    const noon = Date.UTC(y, m - 1, day + i, 12);
+    const midnight = Date.UTC(y, m - 1, day + i) - zoneOffset(noon, d.tz || "UTC") * 60000;
+    for (const [dep, number, line, origin] of list || []) {
+      const at = midnight + dep * 60000;
+      if (at > now && (!best || at < best.at)) best = { at, number, line, origin, tz: d.tz };
+    }
+  });
+  return best;
+}
+function quietCard(id) {
+  const a = AGENCIES[id], f = nextFirstTrain(id);
+  const when = f && (f.at - Date.now() > 20 * 3600 * 1000
+    ? `${new Date(f.at).toLocaleDateString([], { weekday: "long", timeZone: (state.timeZone === "station" ? f.tz : state.timeZone) || undefined })} at ${fmtTime(new Date(f.at).toISOString(), f.tz)}`
+    : `at ${fmtTime(new Date(f.at).toISOString(), f.tz)}`);
+  return `<div class="quiet">
+    <svg class="quiet-moon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M20.4 14.6A8.5 8.5 0 0 1 9.4 3.6a8.5 8.5 0 1 0 11 11Z"/></svg>
+    <h3>${esc(a.short)} is asleep</h3>
+    <p>${f ? `The first train leaves ${esc(f.origin)} ${esc(when)}, in ${esc(fmtIn(f.at))}.` : "None of its trains are running right now."}</p>
+    ${f ? `<span class="quiet-first">${f.number ? plate(f.number, a.color, "xs") : `<span class="rc-rr" style="--c:${a.color}"></span>`}${esc(f.line)}</span>` : ""}
+  </div>`;
 }
 
 // A line's page: what's running on it, its stations in order and its fleet.
@@ -2048,7 +2138,7 @@ function nextTrainsSection(rows, arrivals, loading) {
     </div>
     ${open ? `<div class="deps">
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
-        : `<p class="empty">${loading ? "Loading live trains…" : `No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.`}</p>`}
+        : loading ? skeletonRows() : `<p class="empty">No live trains are reporting ${arrivals ? "an arrival" : "a departure"} here right now.</p>`}
     </div>
     <p class="estimate-note">Times are live predictions from each railroad.</p>` : ""}
   </section>`;
@@ -2359,11 +2449,14 @@ function showDetailView(open) {
   $("view-list").hidden = open;
   $("view-train").hidden = !open;
   $("follow-btn").hidden = !state.selected;
+  $("share-btn").hidden = !state.selected;
   delete $("train-detail").dataset.scrollTop;
   $("train-detail").scrollTop = 0;
 }
 
 function select(id, { fly = true } = {}) {
+  const opened = id && state.trains.get(id);
+  if (opened) remember({ kind: "train", id, agency: opened.agency, name: trainTitle(opened), number: opened.number || "" });
   state.returnTo = null;
   if (state.trackPick?.id !== id) state.trackPick = null;
   state.railroad = null;
@@ -2420,6 +2513,8 @@ async function refreshStationExtras(st) {
 }
 
 function selectStation(id, { fly = true } = {}) {
+  const openedSt = state.stations.get(id);
+  if (openedSt) remember({ kind: "station", id, agency: openedSt.agencies[0], name: openedSt.name });
   const st = state.stations.get(id);
   if (!st) return;
   state.selected = null;
@@ -2447,6 +2542,14 @@ function selectStation(id, { fly = true } = {}) {
 }
 
 function closeDetail() {
+  goingBack = true;
+  try {
+    return closeDetailTo();
+  } finally {
+    goingBack = false;
+  }
+}
+function closeDetailTo() {
   clearInterval(predictionTimer);
   const back = state.returnTo;
   state.returnTo = null;
@@ -2485,7 +2588,7 @@ function setFollow(on) {
 // ---------- Events ----------
 
 const canHover = matchMedia("(hover: hover)").matches;
-const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: "hover-card" });
+const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, focusAfterOpen: false, offset: 14, className: "hover-card" });
 
 // Hovering a track names the railroads that run on it.
 const RAIL_LAYERS = ["tt-rail-0", "tt-rail-1", "tt-rail-2"];
@@ -2567,15 +2670,34 @@ map.on("mousemove", "tt-trains", (e) => {
   if (!canHover) return;
   const t = state.trains.get(e.features[0].properties.id);
   if (!t) return;
-  const a = AGENCIES[t.agency];
-  popup
-    .setLngLat(e.features[0].geometry.coordinates)
-    .setHTML(`<div class="t">${plate(t.number || a.short, a.color, "xs")}<span>${esc(trainTitle(t))}</span></div>
-      <div class="s">${t.destination ? `to ${esc(t.destination)}` : ""}${t.statusText ? ` · ${esc(t.statusText)}` : ""}</div>`)
-    .addTo(map);
+  popup.setLngLat(e.features[0].geometry.coordinates);
+  // Redrawn only when the train or its data changes: the cars are drawings.
+  const key = `${t.id}|${t.updated}|${state.units}`;
+  if (popup._ttKey !== key) {
+    popup._ttKey = key;
+    popup.setHTML(hoverCard(t));
+  }
+  if (!popup.isOpen()) popup.addTo(map);
 });
+
+// The card shown hovering a train on a computer: its plate and name, its
+// cars, and its next stop and whether it's on time.
+function hoverCard(t) {
+  const a = AGENCIES[t.agency];
+  const c = consistOf(t);
+  const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
+  const late = lateText(t.delayMin);
+  const status = late.text ? `<span class="status-t ${late.cls}">${esc(late.text)}</span>` : t.statusText ? esc(t.statusText) : "";
+  const where = next
+    ? `<span class="hc-k">Next</span> <strong>${esc(next.name)}</strong>${next.time ? ` · ${esc(fmtTime(next.time, next.tz))}` : ""}`
+    : t.destination ? `to <strong>${esc(t.destination)}</strong>` : "";
+  return `<div class="t">${plate(t.number || a.short, a.color, "xs")}<span>${esc(trainTitle(t))}</span></div>
+    ${c ? `<div class="hc-strip" aria-hidden="true">${consistHtml(c, a.color).replaceAll(' role="button" tabindex="0"', "")}</div>` : ""}
+    ${where || status ? `<div class="s">${[where, status].filter(Boolean).join(" · ")}</div>` : ""}`;
+}
 map.on("mouseleave", "tt-trains", () => {
   map.getCanvas().style.cursor = "";
+  popup._ttKey = null;
   popup.remove();
 });
 
@@ -2733,6 +2855,25 @@ on("follow-btn", "click", () => {
   if (state.follow && t) map.easeTo({ center: [t.lon, t.lat], padding: panelPadding() });
 });
 
+on("share-btn", "click", () => {
+  const t = state.trains.get(state.selected);
+  if (!t) return;
+  const a = AGENCIES[t.agency], c = consistOf(t), late = lateText(t.delayMin);
+  const cars = [];
+  for (let i = 0; c && i < 14; i++) {
+    const svg = carSvg(c, i, a.color, 400);
+    if (!svg) break;
+    cars.push(svg);
+  }
+  const url = `${location.origin}${location.pathname}?train=${encodeURIComponent(t.id)}`;
+  shareTrain({
+    title: trainTitle(t), number: t.number ? String(t.number) : "", color: t.routeColor || a.color, railroad: a.short,
+    route: [t.origin, t.destination].filter(Boolean).join(" → "),
+    where: t.nextStop ? `Next stop ${t.nextStop}` : t.destination ? `To ${t.destination}` : "",
+    status: late.text, statusColor: { good: "#248a3d", warn: "#c45c00", bad: "#d70015" }[late.cls], cars, url,
+  }, toast);
+});
+
 on("search", "input", (e) => {
   state.query = e.target.value;
   renderResults();
@@ -2756,6 +2897,21 @@ on("results", "click", (e) => {
   const st = e.target.closest("[data-station]");
   if (b) select(b.dataset.select);
   else if (st) selectStation(st.dataset.station);
+});
+
+on("recents", "click", (e) => {
+  if (e.target.closest("[data-recents-clear]")) {
+    state.recents = [];
+    store.set("tt-recents", []);
+    return renderRecents();
+  }
+  const b = e.target.closest("[data-recent-kind]");
+  if (!b) return;
+  const { recentKind: kind, recentId: id } = b.dataset;
+  if (kind === "train") select(id);
+  else if (kind === "station") selectStation(id);
+  else if (kind === "railroad") openRailroad(id);
+  else openLine(id.slice(0, id.indexOf("|")), id.slice(id.indexOf("|") + 1));
 });
 
 on("agencies", "click", (e) => {
@@ -3026,8 +3182,10 @@ map.once("load", () => (mapLoaded = true));
 }
 const loadingWait = setInterval(() => {
   const sources = Object.values(state.sourceStatus);
-  const ready = mapLoaded && state.railGeo && sources.length && sources.every((x) => x.status !== "loading");
   const waited = Date.now() - loadingStart;
+  // Up once the map's drawn; feeds still loading after a few seconds shimmer
+  // in the list instead of holding the screen.
+  const ready = mapLoaded && state.railGeo && sources.length && (waited > 3000 || sources.every((x) => x.status !== "loading"));
   if ((!ready && waited < 15000) || waited < 1200) return; // shown long enough to see the train
   clearInterval(loadingWait);
   $("loading").classList.add("done");
