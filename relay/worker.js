@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api 6)";
+const RELAY_VERSION = "2026-10-14 (njt crowd)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -232,6 +232,34 @@ async function njtGetToken(env) {
   njtToken = { token: r.UserToken, at: Date.now(), server: njtServer };
   return njtToken.token;
 }
+// One train's crowding (getTrainStopList's CAPACITY): how full it is, by
+// section (front, middle, back) and car, with which cars have a restroom.
+// Read when someone opens the train, at most every minute per train.
+const njtCrowd = new Map(); // train -> { at, json }
+async function fetchNjtCrowd(env, id) {
+  const hit = njtCrowd.get(id);
+  if (hit && Date.now() - hit.at < 60 * 1000) return hit.json;
+  let r = await njtApi("getTrainStopList", { token: await njtGetToken(env), train: id });
+  if (r?.errorMessage && /token/i.test(r.errorMessage)) {
+    njtToken = null;
+    r = await njtApi("getTrainStopList", { token: await njtGetToken(env), train: id });
+  }
+  if (r?.errorMessage) throw new Error(r.errorMessage);
+  const num = (v) => (v === "" || v == null || Number.isNaN(+v) ? null : +v);
+  const c = (r?.CAPACITY || [])[0];
+  const json = { at: Date.now(), crowd: c ? {
+    pct: num(c.CUR_PERCENTAGE), color: (c.CUR_CAPACITY_COLOR || "").trim() || null, count: num(c.CUR_PASSENGER_COUNT),
+    at: nyTime(c.CREATED_TIME),
+    sections: (c.SECTIONS || []).map((x) => ({
+      pos: x.SECTION_POSITION, pct: num(x.CUR_PERCENTAGE), color: (x.CUR_CAPACITY_COLOR || "").trim() || null, count: num(x.CUR_PASSENGER_COUNT),
+      cars: (x.CARS || []).map((k) => ({ no: k.CAR_NO, position: num(k.CAR_POSITION), rest: k.CAR_REST === true || k.CAR_REST === "true",
+        pct: num(k.CUR_PERCENTAGE), color: (k.CUR_CAPACITY_COLOR || "").trim() || null, count: num(k.CUR_PASSENGER_COUNT) })),
+    })),
+  } : null };
+  njtCrowd.set(id, { at: Date.now(), json });
+  return json;
+}
+
 // "30-May-2024 02:30:44 PM" in New York, as epoch milliseconds.
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 const nyParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" });
@@ -462,6 +490,16 @@ export default {
       // (true/false only), for checking a deploy.
       const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+    }
+
+    const crowd = pathname.match(/^\/njt-crowd\/(\w{1,6})$/);
+    if (crowd) {
+      if (!env.NJT_USERNAME) return new Response("Not configured", { status: 404, headers: CORS });
+      try {
+        return Response.json(await fetchNjtCrowd(env, crowd[1]), { headers: { ...CORS, "Cache-Control": "public, max-age=60" } });
+      } catch (err) {
+        return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
+      }
     }
 
     // Whether the NJ Transit account works: a count, never the token.
