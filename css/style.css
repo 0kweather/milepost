@@ -952,6 +952,8 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 }
 /* The stops on the way are ringed in the line's color too. */
 .stops li.ride:not(.next) .stop-dot::before { border-color: var(--line-color, var(--accent)); }
+/* Stops of the ride the train has already passed: filled in, like steps done. */
+.stops li.past.ride .stop-dot::before, .stops li.past.ride-from .stop-dot::before { background: var(--line-color, var(--accent)); border-color: var(--line-color, var(--accent)); }
 
 /* Hovering a later stop's circle previews the trip to it, lighter. */
 .stops { --pv: color-mix(in srgb, var(--line-color, var(--accent)) 38%, var(--panel-solid)); }
