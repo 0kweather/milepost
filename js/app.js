@@ -2854,27 +2854,22 @@ on("follow-btn", "click", () => {
   if (state.follow && t) map.easeTo({ center: [t.lon, t.lat], padding: panelPadding() });
 });
 
-// Share a train's link: the system share sheet where there is one, else
-// the link is copied.
+// Copy a link to the open train; the button shows a tick for a moment.
+const copyIcon = $("share-btn").innerHTML;
 on("share-btn", "click", async () => {
   const t = state.trains.get(state.selected);
   if (!t) return;
-  const a = AGENCIES[t.agency];
+  const btn = $("share-btn");
   const url = `${location.origin}${location.pathname}?train=${encodeURIComponent(t.id)}`;
-  const title = `${t.number ? `${a.short} ${t.number} ` : ""}${trainTitle(t)}`;
-  if (navigator.share) {
-    try {
-      return await navigator.share({ title, text: title, url });
-    } catch (err) {
-      if (err.name === "AbortError") return;
-    }
-  }
   try {
     await navigator.clipboard.writeText(url);
-    toast("Link copied.");
   } catch {
-    toast(url);
+    return toast(url);
   }
+  toast("Link copied.");
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  clearTimeout(btn._reset);
+  btn._reset = setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
 });
 
 on("search", "input", (e) => {
