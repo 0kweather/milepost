@@ -463,3 +463,27 @@ html, body {
 
 .detail-actions { display: flex; gap: 8px; }
 .detail-actions [hidden] { display: none; }
+
+/* ---------- Keyboard shortcuts ---------- */
+
+.keys-link { display: none; }
+@media (hover: hover) and (pointer: fine) { .keys-link { display: block; } }
+.keys-sheet { position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.32); }
+.keys-card {
+  width: min(340px, 100%); padding: 18px 18px 10px; border-radius: 22px;
+  background: var(--panel); border: 0.5px solid var(--glass-edge); box-shadow: var(--shadow);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: keys-in 0.25s cubic-bezier(0.32, 1.2, 0.5, 1);
+}
+.keys-card h3 { margin: 0 0 10px; font-size: 17px; font-weight: 700; }
+.keys-card ul { margin: 0; padding: 0; list-style: none; }
+.keys-card kbd { min-width: 38px; }
+.keys-card li { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: var(--fs-base); border-top: 0.5px solid var(--line); }
+.keys-card li:first-child { border-top: 0; }
+kbd {
+  display: inline-block; min-width: 26px; padding: 2px 7px; border-radius: 6px; box-sizing: border-box; text-align: center;
+  background: var(--panel-solid); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2), 0 0 0 0.5px var(--line);
+  font: 600 12px/1.4 var(--font); color: var(--text);
+}
+@keyframes keys-in { from { transform: scale(0.95); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .keys-card { animation: none; } }

@@ -3084,6 +3084,66 @@ document.addEventListener("click", (e) => {
   if (!$("settings-menu").hidden && !e.target.closest("#settings-menu")) toggleMenu(false);
 });
 document.addEventListener("keydown", (e) => e.key === "Escape" && toggleMenu(false));
+
+// ---------- Keyboard shortcuts (on a computer) ----------
+
+const SHORTCUTS = [
+  ["/", "Search"],
+  ["Esc", "Back to the home page"],
+  ["B", "Back one page"],
+  ["F", "Follow the open train"],
+  ["C", "Copy a link to the open train"],
+  ["?", "Show these shortcuts"],
+];
+function toggleShortcuts(open = !document.querySelector(".keys-sheet")) {
+  document.querySelector(".keys-sheet")?.remove();
+  if (!open) return;
+  const el = document.createElement("div");
+  el.className = "keys-sheet";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Keyboard shortcuts");
+  el.innerHTML = `<div class="keys-card"><h3>Keyboard shortcuts</h3><ul>${SHORTCUTS.map(([k, what]) => `<li><kbd>${esc(k)}</kbd><span>${esc(what)}</span></li>`).join("")}</ul></div>`;
+  el.addEventListener("click", (e) => { if (!e.target.closest(".keys-card")) toggleShortcuts(false); });
+  document.body.append(el);
+}
+on("keys-btn", "click", () => toggleShortcuts());
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  if (document.querySelector(".tour-card")) return; // the tour has its own keys
+  const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+  const sheet = document.querySelector(".keys-sheet");
+  if (e.key === "Escape") {
+    if (sheet) return toggleShortcuts(false);
+    if (!$("settings-menu").hidden || typing) return; // closes the menu / clears the search
+    if (state.selected || state.station || state.railroad) goHome();
+    return;
+  }
+  if (typing) return;
+  const open = state.selected && state.trains.get(state.selected);
+  switch (e.key) {
+    case "/":
+      e.preventDefault();
+      if (state.selected || state.station || state.railroad) goHome();
+      if (isPhone) setSheet("expanded");
+      $("search").focus();
+      $("search").select();
+      break;
+    case "?":
+      return toggleShortcuts();
+    case "b": case "B":
+      if (state.selected || state.station || state.railroad) closeDetail();
+      break;
+    case "f": case "F":
+      if (open) $("follow-btn").click();
+      break;
+    case "c": case "C":
+      if (open) $("share-btn").click();
+      break;
+    default:
+      return;
+  }
+  toggleShortcuts(false);
+}, true);
 map.on("movestart", () => toggleMenu(false));
 
 applyTheme();
