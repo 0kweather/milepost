@@ -87,6 +87,24 @@ const FLEETS = {
   railrunner: [
     [101, 109, "mp36"], [1001, 1013, "bilevel"], [1101, 1109, "bilevelCab"],
   ],
+  // ACE (Wikipedia, "Altamont Corridor Express"): F40PH-3C 3101-3106 (3101
+  // and 3106 stored), SC-44 Chargers 3110-3115; BiLevel VI coaches
+  // 3201-3222 and cab cars 3301-3308, BiLevel IX coaches from 3223 and cab
+  // cars 3310-3314. The feed reports the locomotive's number.
+  ace: [
+    [3101, 3106, "f40c"], [3110, 3115, "charger"],
+    [3201, 3234, "bilevel"], [3301, 3308, "bilevelCab"], [3310, 3314, "bilevelCab"],
+  ],
+  // exo (Wikipedia, "Exo commuter rail"): F59PHI 1320-1330, F59PH
+  // 1341-1345, ALP-45DP 1350-1369, Siemens Chargers ("EC-42") 1400-1409;
+  // BiLevel cab cars 2000-2003 and coaches 2020-2037; CRRC bi-level cab cars
+  // 2050-2057 and coaches 2100-2135; MultiLevel cab cars 3000-3025 and
+  // coaches 3026-3159 (160 cars in the 3000s, 26 of them cab cars).
+  exo: [
+    [1320, 1330, "f59"], [1341, 1345, "f59ph"], [1350, 1369, "alp45"], [1400, 1409, "charger"],
+    [2000, 2003, "bilevelCab"], [2020, 2037, "bilevel"], [2050, 2057, "crrcBilevelCab"], [2100, 2135, "crrcBilevel"],
+    [3000, 3025, "multilevelCab"], [3026, 3159, "multilevel"],
+  ],
 };
 
 // name: what it's called; kind: how it's drawn. Flags: pan (pantograph),
@@ -217,7 +235,8 @@ function typeOf(agency, number) {
   const n = Number(number);
   if (!Number.isInteger(n)) return null;
   const hit = (FLEETS[agency] || []).find(([a, b]) => n >= a && n <= b);
-  return hit ? hit[2] : null;
+  // A type with no drawing yet (TYPES lacks it) isn't matched.
+  return hit && TYPES[hit[2]] ? hit[2] : null;
 }
 
 // ---------- Typical equipment by route ----------
@@ -280,6 +299,9 @@ const VIA = {
   "Saguenay": set("F40PH locomotive with Budd stainless cars", ["f40", 1], ["buddBaggage", 1], ["buddCoach", 2]),
   "Lake Superior": set("Budd Rail Diesel Car", ["rdc", 1]),
 };
+
+// A type if it has a drawing, else a stand-in that does.
+const drawable = (key, instead) => (TYPES[key] && MODELS[key] ? key : instead);
 
 // Typical equipment for a train, or null. reported: the type of a car the
 // feed named, which picks between a railroad's electric and diesel fleets.
@@ -390,6 +412,33 @@ function typicalFor(t, reported) {
     // 4 cars.
     case "railrunner": return set("MP36PH-3C locomotive with BiLevel coaches and a cab car, usually 4 cars",
       ["mp36", 1], ["bilevel", 3], ["bilevelCab", 1]);
+    // ACE: an SC-44 Charger (or an F40PH-3C, when the feed names one) with
+    // BiLevel coaches and a cab car, usually 4 to 8 cars.
+    case "ace": {
+      const f40 = reported === "f40c";
+      return set(`${f40 ? "F40PH-3C" : "SC-44 Charger"} locomotive with BiLevel coaches and a cab car, usually 4 to 8 cars`,
+        [f40 ? "f40c" : "charger", 1], ["bilevel", 5], ["bilevelCab", 1]);
+    }
+    // exo: push-pull trains, the locomotive at the outbound end. The
+    // ALP-45DPs run on diesel on the Vaudreuil-Hudson, Saint-Jérôme and
+    // Mont-Saint-Hilaire lines (with F59PHIs and, since late 2025, Chargers);
+    // F59PHIs on Candiac, F59PHs on Mascouche. Saint-Jérôme has the BiLevels
+    // (and CRRC bi-levels), the others MultiLevels. The reported locomotive
+    // or car picks.
+    case "exo": {
+      const route = t.route || "";
+      const locos = { alp45: "ALP-45DP", f59: "F59PHI", f59ph: "F59PH", charger: "Charger" };
+      const usual = /Mascouche/.test(route) ? "f59ph" : /Candiac/.test(route) ? "f59" : "alp45";
+      const loco = drawable(locos[reported] ? reported : usual, /Mascouche/.test(route) ? "f59" : "charger");
+      const name = locos[loco];
+      if (reported === "crrcBilevel" || reported === "crrcBilevelCab") {
+        return set(`${name} locomotive with CRRC bi-level coaches and a cab car`, [loco, 1], ["crrcBilevel", 5], [drawable("crrcBilevelCab", "bilevelCab"), 1]);
+      }
+      const bl = reported === "bilevel" || reported === "bilevelCab" || (/J[ée]r[ôo]me/.test(route) && !["multilevel", "multilevelCab"].includes(reported));
+      if (bl) return set(`${name} locomotive with BiLevel coaches and a cab car (some trains CRRC bi-levels)`, [loco, 1], ["bilevel", 5], ["bilevelCab", 1]);
+      const n = /Vaudreuil|Hilaire/.test(route) ? 6 : 4;
+      return set(`${name} locomotive with MultiLevel coaches and a cab car`, [loco, 1], ["multilevel", n], ["multilevelCab", 1]);
+    }
     default: return null;
   }
 }

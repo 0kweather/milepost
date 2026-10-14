@@ -29,6 +29,15 @@ const LOGOS = {
   // Sounder (Sound Transit): the "ST SoundTransit" mark, white on the blue.
   // Sound Transit logo, Wikimedia Commons (public domain).
   sounder: [6.58, true],
+  // ACE (Altamont Corridor Express): "ACE" and its two arrows over
+  // ALTAMONT CORRIDOR EXPRESS, as on the Chargers; "ace-mark" without the
+  // name, as on the BiLevels. Recolored as painted: dark letters, magenta
+  // arrows. Wikimedia Commons, "Altamont Corridor Express logo.svg" (public
+  // domain).
+  ace: [3.911, false], "ace-mark": [5.09, false],
+  // exo: its wordmark, in the near-black navy it is painted in. Wikimedia
+  // Commons, "Exo.svg" (public domain).
+  exo: [3.027, false],
   // Amtrak's state-supported services.
   surfliner: [6.0, true], "amtrak-california": [1.41, true], cascades: [3.53, true], "cascades-dark": [3.53, false],
   // Caltrans' mark and name (Charger and Venture sides); the San Joaquins
@@ -71,6 +80,17 @@ const LETTERING = {
     font: 'font-family="Trajan Pro, Palatino, Georgia, Times New Roman, serif"' },
   "rr-express": { text: "EXPRESS", aspect: 9, color: "#5e3237", fit: "spacing",
     font: 'font-family="Trajan Pro, Palatino, Georgia, Times New Roman, serif"' },
+  // exo's customer-service name, "allo" set over the exo wordmark ("allo
+  // exo"): black on the Chargers, red on the coaches' white panels. Set
+  // as wide as the wordmark under it.
+  allo: { text: "allo", aspect: 2.32, color: "#1b1e2e", fit: "spacingAndGlyphs",
+    font: 'font-family="Avenir Next, Futura, Century Gothic, Helvetica Neue, Arial, sans-serif" font-weight="700"' },
+  "allo-red": { text: "allo", aspect: 2.32, color: "#b3124e", fit: "spacingAndGlyphs",
+    font: 'font-family="Avenir Next, Futura, Century Gothic, Helvetica Neue, Arial, sans-serif" font-weight="600"' },
+  // The wordmark's letters set as type, for the small "allo exo" panels on
+  // the coaches (too small for the logo file to draw cleanly).
+  "exo-word": { text: "exo", aspect: 2.32, color: "#1b1e2e", fit: "spacingAndGlyphs",
+    font: 'font-family="Avenir Next, Futura, Century Gothic, Helvetica Neue, Arial, sans-serif" font-weight="700"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 
