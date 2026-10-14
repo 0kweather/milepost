@@ -1714,26 +1714,67 @@ function renderStation() {
     ${rrSection("served", "Served by", st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
     ${noticesBlock(extras?.notices || [], null, "Station notices")}
     ${nextTrainsSection(rows, arrivals, loading)}
-    ${atStation(extras)}`;
+    ${atStation(st, extras)}`;
 }
 
-// At the station: what it has, where railroads publish it (the MBTA's
-// facilities), and its street address (Amtrak's), opening a map.
-function atStation(extras) {
-  const f = extras?.facilities, address = extras?.address;
-  const tiles = [];
-  if (f?.ticketWindow) tiles.push(tile("Tickets", '<span class="ft-name">Ticket window</span>'));
-  if (f?.machines) tiles.push(tile("Fare machines", `${f.machines}`));
-  for (const p of (f?.parking || []).slice(0, 2)) {
-    const fee = p.fee.match(/Daily Max:\s*\$\d+/i)?.[0].replace(/Daily Max:\s*/i, "") || p.fee.match(/\$\d+(\.\d\d)?/)?.[0] || "";
-    tiles.push(tile("Parking", p.spaces ? `${p.spaces.toLocaleString()}<small>spaces</small>` : '<span class="ft-name">Yes</span>', fee ? `${esc(fee)} a day` : ""));
+// At the station: what it has, from OpenStreetMap (data/amenities.json,
+// scripts/build_amenities.py) and, live, the MBTA's own facilities; and its
+// street address (Amtrak's), opening a map.
+let amenitiesData = null;
+function amenities() {
+  if (!amenitiesData) {
+    amenitiesData = {};
+    fetch("data/amenities.json?v=dev").then((r) => r.json()).then((d) => {
+      amenitiesData = d;
+      if (state.station) renderDetail();
+    }).catch((err) => console.warn("amenities", err));
   }
-  if (f?.bikes) tiles.push(tile("Bike racks", `${f.bikes}<small>spaces</small>`));
-  if (f?.elevators) tiles.push(tile("Elevators", `${f.elevators}`));
-  if (!tiles.length && !address) return "";
+  return amenitiesData;
+}
+const AMENITY_ROW_ICON = {
+  ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4zM14 7v10" stroke-dasharray="2 2"/>',
+  machine: '<path d="M7 3h10v18H7zM10 7h4M10 11h4M10 17h4"/>',
+  restroom: '<path d="M7 7.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 7.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM5 20v-6H4l1-5h4l1 5H9v6M15 20v-9h4v9M12 3v18"/>',
+  elevator: '<path d="M5 3h14v18H5zM9 9l3-3 3 3M9 15l3 3 3-3"/>',
+  parking: '<path d="M5 3h14v18H5zM10 17V7h3a3 3 0 0 1 0 6h-3"/>',
+  bike: '<path d="M6 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15l4-7h5l3 7M10 8l2 7h-6"/>',
+  share: '<path d="M6 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15l4-7h5l3 7M15 4h3"/>',
+  taxi: '<path d="M5 16l1.5-5h11l1.5 5M4 16h16v3H4zM9 8h6l-1-3h-4z"/>',
+  food: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5m4-5v5M17 21V3c-2 1-3 3.5-3 7 0 1.7.9 3 3 3"/>',
+};
+function atStation(st, extras) {
+  const all = amenities(), f = extras?.facilities, address = extras?.address;
+  // Every railroad's stop here, combined.
+  const o = {};
+  for (const m of st.members) {
+    const x = all[`${m.agency}:${m.id}`];
+    if (!x) continue;
+    for (const [k, v] of Object.entries(x)) o[k] = typeof v === "number" && k !== "pr" ? Math.max(o[k] ?? 0, v) : v;
+  }
+  const rows = [];
+  const row = (icon, label, detail = "") => rows.push(`<li><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ROW_ICON[icon]}</svg><span>${esc(label)}</span>${detail ? `<span class="am-detail">${esc(detail)}</span>` : ""}</li>`);
+  if (f?.ticketWindow || o.k) row("ticket", "Ticket office");
+  const machines = f?.machines || o.v;
+  if (machines) row("machine", machines === 1 ? "Ticket machine" : "Ticket machines", machines > 1 ? `${machines}` : "");
+  if (o.w) row("restroom", "Restrooms");
+  const elevators = f?.elevators || o.e;
+  if (elevators) row("elevator", elevators === 1 ? "Elevator" : "Elevators", elevators > 1 ? `${elevators}` : "");
+  const lot = f?.parking?.[0];
+  if (lot || o.p != null) {
+    const spaces = lot?.spaces || o.p;
+    const fee = lot && (lot.fee.match(/Daily Max:\s*\$\d+/i)?.[0].replace(/Daily Max:\s*/i, "") || lot.fee.match(/\$\d+(\.\d\d)?/)?.[0]);
+    row("parking", o.pr ? "Park and ride" : "Parking", [spaces ? `${spaces.toLocaleString()} spaces` : "", fee ? `${fee} a day` : ""].filter(Boolean).join(" · "));
+  }
+  const bikes = f?.bikes || o.b;
+  if (f?.bikes || o.b != null) row("bike", "Bike parking", bikes ? `${bikes} spaces` : "");
+  if (o.s) row("share", "Bike share");
+  if (o.x) row("taxi", "Taxi stand");
+  if (o.f) row("food", "Places to eat nearby", `${o.f}`);
+  if (!rows.length && !address) return "";
   const map = address && `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-  return rrSection("at-station", "At the station", null, `${tiles.length ? `<div class="facts station-facts-tiles">${tiles.join("")}</div>` : ""}
-    ${address ? `<a class="st-address" href="${esc(map)}" target="_blank" rel="noopener"><span>${esc(address)}</span><span aria-hidden="true">↗</span></a>` : ""}`);
+  return rrSection("at-station", "At the station", null, `${rows.length ? `<ul class="amenities">${rows.join("")}</ul>` : ""}
+    ${address ? `<a class="st-address" href="${esc(map)}" target="_blank" rel="noopener"><span>${esc(address)}</span><span aria-hidden="true">↗</span></a>` : ""}
+    ${rows.length ? `<p class="estimate-note">From ${f ? "the MBTA and " : ""}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>; may be incomplete.</p>` : ""}`);
 }
 
 // ---------- Railroad and line pages ----------

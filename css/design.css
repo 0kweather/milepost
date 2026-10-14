@@ -566,10 +566,14 @@ kbd {
 
 /* ---------- At the station ---------- */
 
-.station-facts-tiles { padding: 4px 0 0; border-top: 0; }
 .st-address {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
   padding: 12px 14px; border-radius: 14px; background: var(--group); color: var(--text); text-decoration: none; font-size: var(--fs-base);
 }
 .st-address span:last-child { color: var(--accent); }
 .st-address:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
+.amenities { margin: 4px 0 0; padding: 0; list-style: none; border-radius: var(--r-card); background: var(--group); overflow: hidden; }
+.amenities li { position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 14px; font-size: var(--fs-base); }
+.amenities li + li::before { content: ""; position: absolute; top: 0; left: 44px; right: 0; height: 0.5px; background: var(--line); }
+.amenities svg { color: var(--accent); flex: none; }
+.am-detail { margin-left: auto; color: var(--muted); font-size: var(--fs-sm); text-align: right; }
