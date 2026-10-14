@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api 2)";
+const RELAY_VERSION = "2026-10-14 (njt api 3)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -445,6 +445,15 @@ export default {
 
     // Whether the NJ Transit account works: a count, never the token.
     if (pathname === "/njt-check") {
+      // ?server=test: whether the same account logs in to the test server
+      // (yes or no only; that token is thrown away).
+      if (new URL(request.url).searchParams.get("server") === "test") {
+        const body = new FormData();
+        body.append("username", env.NJT_USERNAME || "");
+        body.append("password", env.NJT_PASSWORD || "");
+        const r = await fetch("https://testraildata.njtransit.com/api/TrainData/getToken", { method: "POST", body }).then((x) => x.json()).catch((e) => ({ errorMessage: e.message }));
+        return Response.json({ server: "test", authenticated: r?.Authenticated === "True", error: r?.errorMessage || null }, { headers: CORS });
+      }
       try {
         const list = await fetchNjtVehicles(env);
         return Response.json({ configured: list != null, vehicles: list?.length ?? 0, sample: list?.[0] ? { id: list[0].id, line: list[0].line, next: list[0].next } : null }, { headers: CORS });
