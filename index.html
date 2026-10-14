@@ -14,16 +14,8 @@
   <script src="config.js?v=dev"></script>
 </head>
 <body>
-  <div id="loading" class="loading" role="status" aria-live="polite">
-    <div class="loading-brand">
-      <img src="img/icon.svg" alt="" width="84" height="84">
-      <h1>Trainsheet</h1>
-      <p>Live trains across the US and Canada</p>
-    </div>
-    <div class="loading-progress">
-      <div class="loading-bar" aria-hidden="true"><span id="loading-fill"></span></div>
-      <span id="loading-status">Drawing the map…</span>
-    </div>
+  <div id="loading" class="loading" role="status" aria-label="Loading Trainsheet">
+    <h1 class="loading-name">Trainsheet</h1>
     <div class="loading-track" aria-hidden="true"><div class="loading-train" id="loading-train" inert></div></div>
   </div>
   <div id="map" aria-label="Map of live train positions"></div>
