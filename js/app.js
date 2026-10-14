@@ -192,15 +192,13 @@ function tagImage(fill) {
 // Each train's label on the map: a small number plate like the one in the
 // panel, white with a black outline and the railroad's color across the top.
 // It stretches sideways to fit the number.
-// Drawn to the panel's plate proportions (style.css .plate): corners about a
-// quarter of its height, a 1.5 px outline, a band a sixth of its height.
 function plateImage(color) {
   const ratio = 2, w = 32, h = 30, c = document.createElement("canvas");
   c.width = w * ratio;
   c.height = h * ratio;
   const g = c.getContext("2d");
   g.scale(ratio, ratio);
-  const x = 2, y = 1, pw = 28, ph = 26, band = 4.5, r = 6;
+  const x = 2, y = 1, pw = 28, ph = 26, band = 4, r = 4;
   g.save();
   g.shadowColor = "rgba(0,0,0,0.25)";
   g.shadowBlur = 3;
@@ -218,16 +216,16 @@ function plateImage(color) {
   g.fillRect(x, y, pw, band);
   g.restore();
   g.beginPath();
-  g.roundRect(x + 0.75, y + 0.75, pw - 1.5, ph - 1.5, r - 0.75);
-  g.lineWidth = 1.5;
+  g.roundRect(x + 0.6, y + 0.6, pw - 1.2, ph - 1.2, r - 0.6);
+  g.lineWidth = 1.2;
   g.strokeStyle = "#121417";
   g.stroke();
   return {
     image: g.getImageData(0, 0, c.width, c.height),
     options: {
       pixelRatio: ratio,
-      stretchX: [[9 * ratio, 23 * ratio]],
-      stretchY: [[11 * ratio, 20 * ratio]],
+      stretchX: [[8 * ratio, 24 * ratio]],
+      stretchY: [[10 * ratio, 21 * ratio]],
       content: [6 * ratio, (y + band + 1) * ratio, 26 * ratio, (y + ph - 3) * ratio],
     },
   };
@@ -555,12 +553,12 @@ function addLayers() {
     layout: {
       "text-field": ["get", "plate"],
       "text-font": ["Noto Sans Bold"],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 8, 12, 12, 13.5],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 8, 11, 12, 12],
       // Beside the marker, clear of the white rim; the first one that fits wins.
       "text-variable-anchor-offset": plateOffset(),
       "icon-image": ["concat", "tt-plate-", ["get", "agency"]], // fitted around the number
       "icon-text-fit": "both",
-      "icon-text-fit-padding": [1, 4, 0.5, 4],
+      "icon-text-fit-padding": [0.5, 3, 0.5, 3],
       "text-padding": 2,
       "symbol-sort-key": ["get", "labelOrder"],
     },
