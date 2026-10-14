@@ -371,7 +371,22 @@ html, body {
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
 }
 
-.loading p { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--muted); }
+/* The loading screen: the icon and name, a thin bar naming each railroad as
+ * it connects, and a train passing along the track below. */
+.loading { gap: 0; justify-content: center; padding-bottom: 14vh; }
+.loading-brand { display: flex; flex-direction: column; align-items: center; text-align: center; animation: loading-rise 0.7s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+.loading-brand img { width: 84px; height: 84px; border-radius: 20px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08); }
+.loading-brand h1 { margin: 20px 0 0; font-family: var(--font-display); font-size: 36px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--text); }
+.loading-brand p { margin: 6px 0 0; font-family: var(--font); font-size: 15px; font-weight: 400; letter-spacing: -0.01em; color: var(--muted); }
+.loading-progress { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 34px; animation: loading-rise 0.7s 0.12s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+.loading-bar { width: 168px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--fill); }
+.loading-bar span { display: block; height: 100%; border-radius: 2px; background: var(--text); transform: scaleX(0.04); transform-origin: left; transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1); }
+#loading-status { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.3em; }
+.loading .loading-track { position: absolute; left: 0; right: 0; bottom: 7vh; height: 64px; }
+.loading .loading-track::after { height: 1.5px; background: var(--line); }
+.loading.done .loading-brand { transform: scale(1.04); transition: transform 0.45s ease; }
+@keyframes loading-rise { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .loading-brand, .loading-progress { animation: none; } }
 
 /* ---------- Phones ---------- */
 

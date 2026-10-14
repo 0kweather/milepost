@@ -3238,9 +3238,25 @@ map.once("load", () => (mapLoaded = true));
     el.addEventListener("animationend", nextTrain);
   }
 }
+// The loading screen's progress: the map, then each railroad's feed, named
+// as it connects.
+function loadingProgress() {
+  const entries = Object.entries(state.sourceStatus);
+  const done = entries.filter(([, x]) => x.status !== "loading").length;
+  const parts = 2 + entries.length; // the map and the rail lines, then the feeds
+  const ready = mapLoaded && state.railGeo && entries.length && done === entries.length;
+  const fill = ready ? 1 : ((mapLoaded ? 1 : 0) + (state.railGeo ? 1 : 0) + done) / Math.max(parts, 3);
+  $("loading-fill").style.transform = `scaleX(${Math.max(0.04, Math.min(1, fill)).toFixed(3)})`;
+  const waiting = entries.find(([, x]) => x.status === "loading");
+  const name = waiting && AGENCIES[SOURCES.find((x) => x.id === waiting[0])?.agencies[0]]?.name;
+  $("loading-status").textContent = !mapLoaded || !state.railGeo ? "Drawing the map…"
+    : !entries.length ? "Connecting to the railroads…"
+    : name ? `Connecting to ${name}…` : "Ready";
+}
 const loadingWait = setInterval(() => {
   const sources = Object.values(state.sourceStatus);
   const waited = Date.now() - loadingStart;
+  loadingProgress();
   // Up once the map's drawn; feeds still loading after a few seconds shimmer
   // in the list instead of holding the screen.
   const ready = mapLoaded && state.railGeo && sources.length && (waited > 3000 || sources.every((x) => x.status !== "loading"));
