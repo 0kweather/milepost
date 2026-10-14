@@ -1206,7 +1206,7 @@ function renderRecents() {
       const a = AGENCIES[r.agency];
       const icon = r.kind === "train" ? plate(r.number || a.short, a.color, "xs")
         : r.kind === "station" ? `<span class="rc-station" style="--c:${a.color}"></span>`
-        : r.kind === "line" ? `<span class="rc-line" style="--c:${[...state.trains.values()].find((t) => t.agency === r.agency && t.routeColor && onLine(t, r.name))?.routeColor || a.color}"></span>`
+        : r.kind === "line" ? lineMark(r.agency, r.name)
         : `<span class="rc-rr" style="--c:${a.color}"></span>`;
       return `<button type="button" class="recent" data-recent-kind="${r.kind}" data-recent-id="${esc(r.id)}">${icon}<span>${esc(r.name)}</span></button>`;
     }).join("")}</div>`;
@@ -1265,7 +1265,7 @@ function renderResults() {
   const lineBlock = lines.length ? `<div class="group-title">${T("Lines")}</div>` + lines.slice(0, 6).map((l) => {
     const a = AGENCIES[l.agency];
     return `<button class="result" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}">
-      <span class="line-icon" style="--c:${a.color}"></span>
+      <span class="line-icon">${lineMark(l.agency, l.name)}</span>
       <span><span class="title">${esc(l.name)}</span><br><span class="sub">${esc(a.short)}</span></span>
       <span class="count">${T("{n} running", { n: l.running })} ›</span>
     </button>`;
@@ -1745,10 +1745,7 @@ function renderStation() {
   for (const m of st.members) for (const l of m.lines || []) addLine(m.agency, l);
   for (const t of state.trains.values()) if (t.route && t.stops?.some((s) => st.keys.has(s.key))) addLine(t.agency, t.route);
   const lineRow = (l) => {
-    const a = AGENCIES[l.agency], k = lineKey(l.name);
-    // The line's own color where its trains carry one (GO's, MBTA's).
-    const color = [...state.trains.values()].find((t) => t.agency === l.agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor || a.color;
-    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name"><span class="line-swatch" style="background:${color}"></span><span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`;
+    return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name">${lineMark(l.agency, l.name)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`;
   };
   const servedBy = st.members.map((m) => {
     const a = AGENCIES[m.agency];
@@ -1763,7 +1760,7 @@ function renderStation() {
           ? `<button type="button" class="sb-toggle" data-served-toggle="${m.agency}" aria-expanded="${open}">${name}<svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
           : `<button type="button" class="sb-toggle" data-railroad="${m.agency}">${name}<span class="sb-go">›</span></button>`}
       </div>
-      ${open ? `<ul class="sb-lines"><li><button type="button" class="rr-line" data-railroad="${m.agency}"><span class="served-name"><span>${esc(T("All of {rr}", { rr: a.short }))}</span></span><span class="sub">›</span></button></li>${lines.map(lineRow).join("")}</ul>` : ""}
+      ${open ? `<ul class="sb-lines">${lines.map(lineRow).join("")}</ul>` : ""}
     </li>`;
   }).join("");
   const local = localTimeNote(st);
@@ -1924,7 +1921,30 @@ function singleLine(agency) {
 
 // A line's own color where its trains carry one (GO's, MBTA's), else its
 // railroad's.
-const lineColor = (id, name) => focusTrains().find((t) => onLine(t, name) && t.routeColor)?.routeColor || AGENCIES[id].color;
+const lineColor = (id, name) => lineColorOf(id, name);
+
+// Each line's own color: its railroad's timetable (data/linecolors.json, from
+// scripts/build_linecolors.py), else the one its running trains carry, else
+// its railroad's.
+let lineColorsData = null;
+function lineColors() {
+  if (!lineColorsData) {
+    lineColorsData = {};
+    fetch("data/linecolors.json?v=dev").then((r) => r.json()).then((d) => {
+      lineColorsData = d;
+      renderAll();
+    }).catch((err) => console.warn("line colors", err));
+  }
+  return lineColorsData;
+}
+function lineColorOf(agency, name) {
+  const own = lineColors()[agency] || {}, k = lineKey(name);
+  const hit = own[name] || Object.entries(own).find(([n]) => sameLine(lineKey(n), k))?.[1];
+  return hit || [...state.trains.values()].find((t) => t.agency === agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor
+    || AGENCIES[agency]?.color || "#8d95a3";
+}
+// The mark beside a line's name: a short stretch of line in its color.
+const lineMark = (agency, name) => `<span class="line-mark" style="--c:${lineColorOf(agency, name)}" aria-hidden="true"></span>`;
 
 // The open page's trains: the railroad's, or the line's.
 function focusTrains() {
@@ -2210,7 +2230,7 @@ function renderRailroad() {
     ${!trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : ""}
     ${trainStats(trains)}
     ${lineList.length > 1 ? plainSection(T("Lines"), lineList.length,
-      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span>${esc(l.name)}</span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : ""}
+      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span class="served-name">${lineMark(id, l.name)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : ""}
     ${fleet.count ? rrSection("fleet", T("Fleet"), fleet.count, `<p class="rr-hint">${T("Tap one to read about it.")}</p><div class="rr-cars">${fleet.html}</div>`) : ""}
     ${src ? `<p class="estimate-note">${T("Data:")} <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
 }
@@ -2258,7 +2278,7 @@ function quietCard(id) {
     <svg class="quiet-moon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M20.4 14.6A8.5 8.5 0 0 1 9.4 3.6a8.5 8.5 0 1 0 11 11Z"/></svg>
     <h3>${esc(T("{rr} is asleep", { rr: a.short }))}</h3>
     <p>${esc(f ? T("The first train leaves {place} {when}, in {time}.", { place: f.origin, when, time: fmtIn(f.at) }) : T("None of its trains are running right now."))}</p>
-    ${f ? `<span class="quiet-first">${f.number ? plate(f.number, a.color, "xs") : `<span class="rc-rr" style="--c:${a.color}"></span>`}${esc(f.line)}</span>` : ""}
+    ${f ? `<span class="quiet-first">${f.number ? plate(f.number, a.color, "xs") : ""}${lineMark(id, f.line)}${esc(f.line)}</span>` : ""}
   </div>`;
 }
 

@@ -1169,7 +1169,6 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 /* Search results: a railroad's swatch, a line's stripe. */
 .rr-icon, .line-icon { width: 44px; display: grid; place-items: center; }
 .rr-icon::before { content: ""; width: 14px; height: 14px; border-radius: 4px; background: var(--c); }
-.line-icon::before { content: ""; width: 20px; height: 4px; border-radius: 2px; background: var(--c); }
 .result .count { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* A line's stations on its page: dots on a line in its color. */
@@ -1182,7 +1181,6 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .served-name { display: flex; align-items: flex-start; gap: var(--s3); }
 .served-name .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; }
 .served-name .sub, .rr-line .sub { color: var(--muted); font-size: var(--fs-xs); }
-.line-swatch { flex: none; width: 14px; height: 4px; border-radius: 2px; margin-top: 8px; }
 .rr-line > .sub { align-self: center; white-space: nowrap; font-size: var(--fs-sm); }
 
 /* Station pages: served by each railroad, its lines folded under it. */

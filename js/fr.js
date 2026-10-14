@@ -208,7 +208,6 @@ export default {
   "Intercity trains": "Trains interurbains",
   "{n} line": "{n} ligne",
   "{n} lines": "{n} lignes",
-  "All of {rr}": "Tout le réseau {rr}",
   "Step-free access": "Accès de plain-pied",
   "Not step-free": "Pas de plain-pied",
   "Served by": "Desservie par",

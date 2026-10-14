@@ -420,7 +420,6 @@ html, body {
 .recent:hover { background: color-mix(in srgb, var(--group) 88%, var(--text)); }
 .recent:active { transform: scale(0.97); }
 .rc-station { width: 15px; height: 15px; border-radius: 50%; border: 3px solid var(--c); box-sizing: border-box; background: #fff; flex: none; }
-.rc-line { width: 18px; height: 6px; border-radius: 3px; background: var(--c); flex: none; }
 .rc-rr { width: 13px; height: 13px; border-radius: 50%; background: var(--c); flex: none; }
 
 /* ---------- Quiet hours (a railroad page with nothing running) ---------- */
@@ -590,3 +589,8 @@ kbd {
 .cc-rest { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); color: var(--muted); line-height: 0; }
 .crowd-ends { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
 .crowd-tip { margin: 8px 0 0; font-size: var(--fs-sm); }
+
+/* ---------- A line's mark: a short stretch of line in its color ---------- */
+
+.line-mark { display: inline-block; flex: none; width: 18px; height: 5px; border-radius: 3px; background: var(--c); vertical-align: middle; }
+.served-name:has(> .line-mark) { align-items: center; }
