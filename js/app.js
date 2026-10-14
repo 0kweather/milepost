@@ -1328,14 +1328,6 @@ function renderDetail() {
   const rec = state.tracked.find((r) => r.id === t.id);
   const pick = state.trackPick?.id === t.id ? state.trackPick : null;
   const ahead = t.stops?.findIndex((s) => s.status !== "past") ?? -1;
-<<<<<<< HEAD
-  const dest = !rec || !t.stops ? -1 : rec.stopKey ? t.stops.findIndex((s) => s.key === rec.stopKey) : t.stops.length - 1;
-  // The ride starts from the station the train is standing at, else from
-  // the last one it left.
-  const at = ahead >= 0 && t.stops[ahead].here;
-  const leg = (i) => dest < 0 || ahead < 0 ? ""
-    : i === dest ? " dest" : i > dest ? " beyond" : i === (at ? ahead : ahead - 1) ? " ride-from" : i >= ahead ? " ride" : "";
-=======
   const indexOf = (key) => (key ? t.stops?.findIndex((s) => s.key === key) ?? -1 : -1);
   const dest = !rec || !t.stops ? -1 : rec.stopKey ? indexOf(rec.stopKey) : t.stops.length - 1;
   // Where the ride starts: where they got on; for a ride tracked without one,
@@ -1348,7 +1340,6 @@ function renderDetail() {
     : i === dest ? " dest" : i > dest ? " beyond" : i === from ? " ride-from" : i < from ? " before" : " ride";
   const hint = pick ? "Now tap the stop where you’re getting off."
     : !rec && t.stops?.length ? "Tap the stop you got on at, then the one you’re getting off at." : "";
->>>>>>> main
   const stops = t.stops?.length
     ? rrSection("stops", "Stops", t.stops.length, `${hint ? `<p class="stops-hint">${hint}</p>` : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
@@ -1358,11 +1349,7 @@ function renderDetail() {
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
-<<<<<<< HEAD
-        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
-=======
         return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, { isDest: !pick && i === dest, isFrom: i === pickFrom, picking: Boolean(pick) })}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
->>>>>>> main
       }).join("")}</ol></div>`)
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -2621,16 +2608,6 @@ on("train-detail", "mouseover", (e) => {
   for (const li of document.querySelectorAll(".stops li.pv-from, .stops li.pv-ride, .stops li.pv-dest")) li.classList.remove("pv-from", "pv-ride", "pv-dest");
   if (!dot) return;
   const rows = [...dot.closest(".stops").children];
-<<<<<<< HEAD
-  const to = rows.indexOf(dot.closest("li")), ahead = rows.findIndex((li) => !li.classList.contains("past"));
-  if (ahead < 0) return;
-  // From the station it's standing at, else from the last one it left.
-  const from = rows[ahead].classList.contains("here") ? ahead : ahead - 1;
-  if (to <= from) return;
-  rows.forEach((li, i) => {
-    if (i === from) li.classList.add("pv-from");
-    else if (i >= ahead && i < to) li.classList.add("pv-ride");
-=======
   // Once they've tapped where they got on: the ride from there to here.
   const start = rows.findIndex((li) => li.classList.contains("pick-from"));
   const to = rows.indexOf(dot.closest("li"));
@@ -2638,7 +2615,6 @@ on("train-detail", "mouseover", (e) => {
   rows.forEach((li, i) => {
     if (i === start) li.classList.add("pv-from");
     else if (i > start && i < to) li.classList.add("pv-ride");
->>>>>>> main
     else if (i === to) li.classList.add("pv-dest");
   });
 });
