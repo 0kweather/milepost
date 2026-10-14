@@ -1349,9 +1349,9 @@ function renderDetail() {
   el.innerHTML = `
     <div class="hero">
       <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
-      <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route
+      <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route && !singleLine(t.agency)
         // The title is the train's line: it opens the line's page (or, with
-        // no line, the railroad's).
+        // no line or just the one, the railroad's).
         ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
         : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : "to "}<strong>${esc(t.destination)}</strong></p>` : ""}
@@ -1671,6 +1671,18 @@ function allLines() {
   return out;
 }
 
+// Railroads with one line (SunRail, ACE, Brightline): their line's page
+// would only repeat the railroad's. Counted from their stations' timetables.
+const lineCounts = new Map();
+function singleLine(agency) {
+  if (!lineCounts.has(agency) && state.stations.size) {
+    const names = new Set();
+    for (const st of state.stations.values()) for (const m of st.members) if (m.agency === agency) for (const l of m.lines || []) names.add(lineKey(l));
+    lineCounts.set(agency, names.size);
+  }
+  return (lineCounts.get(agency) ?? 2) <= 1;
+}
+
 // A line's own color where its trains carry one (GO's, MBTA's), else its
 // railroad's.
 const lineColor = (id, name) => focusTrains().find((t) => onLine(t, name) && t.routeColor)?.routeColor || AGENCIES[id].color;
@@ -1793,6 +1805,9 @@ function lineTrack(id, name) {
       done.add(k);
       const path = rail.route(rail.snap(p, 1500, id), rail.snap(q, 1500, id), id);
       if (path?.coords.length > 1) out.push(path.coords);
+      // Track newer than the map's rail data (South Shore's Monon Corridor):
+      // a straight line between neighboring stations, so the line still shows.
+      else if (Math.hypot((p[0] - q[0]) * 85, (p[1] - q[1]) * 111) < 25) out.push([p, q]);
     }
   }
   return out;
@@ -2957,6 +2972,7 @@ const loadingWait = setInterval(() => {
 }, 200);
 
 // Handy for poking at the live state from the browser console.
-window.trainsheet = { state, map, checkTracked };
+// For debugging and audits from the console.
+window.trainsheet = { state, map, checkTracked, select, selectStation, openRailroad, openLine, closeDetail, modelOf, focusFeatures, orderedLineStations, allLines };
 
 start();

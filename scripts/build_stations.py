@@ -183,9 +183,10 @@ def gtfs_stations(url, keep, line_name, group=None):
 
 
 def intercity_timetables():
-    """Per station code: trains on a typical weekday, step-free access and
-    time zone, from Amtrak's and VIA's own timetables (Amtrak's by stop id,
-    VIA's by stop code)."""
+    """Per station code: trains on a typical weekday, step-free access, time
+    zone and the routes that stop there (trains only: not Thruway buses, nor
+    the commuter railroads Amtrak's feed also carries), from Amtrak's and
+    VIA's own timetables (Amtrak's by stop id, VIA's by stop code)."""
     info = {}
     for url, code_field in (("https://content.amtrak.com/content/gtfs/GTFS.zip", "stop_id"),
                             ("https://www.viarail.ca/sites/all/files/gtfs/viarail.zip", "stop_code")):
@@ -193,14 +194,23 @@ def intercity_timetables():
             zf = zipfile.ZipFile(io.BytesIO(get(url)))
             stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
             today = weekday_trips(zf, {t["trip_id"] for t in rows(zf, "trips.txt")})
-            daily = defaultdict(set)
+            agencies = {a.get("agency_id", ""): a.get("agency_name", "") for a in rows(zf, "agency.txt")}
+            routes = {r["route_id"]: long_name(r) for r in rows(zf, "routes.txt")
+                      if r.get("route_type") == "2" and re.search(r"amtrak|via", agencies.get(r.get("agency_id", ""), "amtrak"), re.I)}
+            trip_route = {t["trip_id"]: routes[t["route_id"]] for t in rows(zf, "trips.txt") if t["route_id"] in routes}
+            daily, lines = defaultdict(set), defaultdict(set)
             for st in rows(zf, "stop_times.txt"):
-                if st["trip_id"] in today and st["stop_id"] in stops:
-                    daily[stops[st["stop_id"]][code_field]].add(st["trip_id"])
+                if st["stop_id"] not in stops:
+                    continue
+                code = stops[st["stop_id"]][code_field]
+                if st["trip_id"] in today:
+                    daily[code].add(st["trip_id"])
+                if st["trip_id"] in trip_route:
+                    lines[code].add(trip_route[st["trip_id"]])
             for s in stops.values():
                 code = s[code_field]
                 if code and code not in info:
-                    info[code] = (len(daily[code]) or None, access_of(s, []), s.get("stop_timezone") or None)
+                    info[code] = (len(daily[code]) or None, access_of(s, []), s.get("stop_timezone") or None, sorted(lines[code]))
         except Exception as err:
             print(f"{url}: FAILED {err}")
     return info
@@ -235,8 +245,13 @@ def intercity_stations():
             continue  # announced but unserved stops (e.g., Iowa) aren't stations yet
         place = ", ".join(x for x in (s.get("city"), s.get("state")) if x and x.strip())
         lat, lon = AMTRAK_FIXES.get(code, (s["lat"], s["lon"])) if agency == "amtrak" else (s["lat"], s["lon"])
-        daily, access, tz = timetables.get(code, (None, None, s.get("tz") or None))
-        out[agency].append([code, s["name"].strip(), round(lat, 5), round(lon, 5), [], place,
+        daily, access, tz, lines = timetables.get(code, (None, None, s.get("tz") or None, []))
+        # No route in the timetable and no train there: not a stop Amtrak or
+        # VIA serves (NJ Transit's and Shore Line East's stops filed as
+        # Amtrak's, unbuilt or event-only stops, a yard).
+        if agency in ("amtrak", "via") and not lines and not s.get("trains"):
+            continue
+        out[agency].append([code, s["name"].strip(), round(lat, 5), round(lon, 5), lines, place,
                             code, len(s.get("trains") or []), daily, access, tz])
     # Amtraker also gives VIA codes to a few US stations Amtrak already covers
     # (e.g., New York Penn for the Adirondack); drop those duplicates.

@@ -40,6 +40,7 @@ export function restoreFeed(t) {
   if (!f) return;
   t.delayMin = f.delayMin;
   t.statusText = f.statusText;
+  t.nextStop = f.nextStop;
   t.stops?.forEach((s, i) => Object.assign(s, f.stops[i]));
 }
 
@@ -89,6 +90,7 @@ export function inferDelay(t, stopPos) {
   t._feed ??= {
     delayMin: t.delayMin,
     statusText: t.statusText,
+    nextStop: t.nextStop,
     stops: t.stops.map((s) => ({ time: s.time, arr: s.arr, dep: s.dep, status: s.status, here: s.here, scheduled: s.scheduled })),
   };
   restoreFeed(t);
@@ -118,6 +120,7 @@ export function inferDelay(t, stopPos) {
     s.dep = move(s.dep, s.schDep);
   });
   stop.status = "next";
+  t.nextStop = stop.name; // the "Next" chip agrees with the stop list
   if (held) {
     // Still at the platform: show when it can leave, not when it arrived.
     stop.here = true;

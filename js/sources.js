@@ -111,6 +111,13 @@ function parseAmtraker(json) {
       // (Maple Leaf, in Canada), so statuses alone can't be trusted.
       const ni = stations.findIndex((s) => (s.status === "Enroute" || s.status === "Station") && (s.arr || s.dep));
       const next = ni >= 0 ? stations[ni] : null;
+      // Finished: no stop ahead and its last one left over half an hour ago.
+      // Amtraker keeps some trains "Active" long after (VIA's especially),
+      // placed wherever their equipment has since gone.
+      if (!next) {
+        const last = Math.max(0, ...stations.map((s) => Date.parse(s.dep || s.arr) || 0));
+        if (last && Date.now() - last > 30 * 60 * 1000) continue;
+      }
       const nextAt = next ? Date.parse(next.arr || next.dep) : null;
       const stale = (s, j) => j > ni && nextAt && Date.parse(s.dep || s.arr) < nextAt;
       let delayMin = null;
@@ -188,7 +195,11 @@ function mbtaTrips(json) {
       time, arr: a.arrival_time, dep: a.departure_time, scheduled: sch?.departure_time || sch?.arrival_time || null,
     });
   }
-  for (const list of trips.values()) list.sort((x, y) => x.seq - y.seq);
+  for (const [id, list] of trips) {
+    list.sort((x, y) => x.seq - y.seq);
+    // The MBTA sometimes predicts a stop twice for the same trip: keep one.
+    trips.set(id, list.filter((x, i) => i === 0 || (x.seq !== list[i - 1].seq && x.place !== list[i - 1].place)));
+  }
   return trips;
 }
 const iso = (t) => (t ? new Date(t).toISOString() : null);
@@ -344,6 +355,9 @@ function parseMta(agency, buf, meta) {
   const out = [];
   for (const tu of feed.tripUpdates) {
     const tripId = tu.trip?.tripId;
+    // Yards and maintenance facilities trains pass through ("Hillside
+    // Facility") aren't stops riders make.
+    tu.stops = tu.stops.filter((st) => !/\b(Facility|Yard)\b/i.test(lookup[st.stopId]?.[0] || ""));
     const prog = tripProgress(tu.stops, now, lookup);
     if (!prog) continue;
     const vp = tu.entityVehicle || vpByTrip.get(tripId);
@@ -471,6 +485,12 @@ async function parseNjt(json) {
       else { t = Math.max(t, prev ? prev + 60 : 0, reached ? 0 : at + 30); reached = true; }
       prev = t;
       stops.push({ stopId: id, arrival: { time: t }, departure: { time: t }, raw });
+    }
+    // A stop it has left can't be later than the next one (DepartureVision
+    // sometimes gives the origin a time from another run).
+    for (let i = stops.length - 2; i >= 0; i--) {
+      const a = stops[i], b = stops[i + 1];
+      if (a.departure.time > b.arrival.time) a.arrival.time = a.departure.time = b.arrival.time - 120;
     }
     // Done: every stop but the last one left, and its arrival time passed.
     const end = stops[stops.length - 1];
@@ -937,6 +957,9 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
       fixAt: lookup && v.timestamp ? v.timestamp * 1000 : null,
     }));
     if (lookup && v.trip?.tripId) addTrip(out[out.length - 1], agency, v.trip.tripId, tripUpdates.get(v.trip.tripId), lookup, now);
+    // Still reporting a quarter hour after its last stop: the trip is over.
+    const st = out[out.length - 1].stops;
+    if (st?.length && st.every((s) => s.status === "past") && Date.parse(st[st.length - 1].time) < now * 1000 - 15 * 60 * 1000) out.pop();
   }
   return out;
 }
