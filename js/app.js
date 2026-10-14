@@ -252,26 +252,6 @@ function addImages() {
   }
 }
 
-// The basemap toned down after Vignelli's 1972 subway map: flat land, tan
-// water, parks and buildings barely there, roads white on the land, so the
-// rail lines and stations carry the map.
-function toneBasemap() {
-  const T = theme === "dark"
-    ? { land: "#121212", water: "#25231e", green: "#151714", built: "#171717", road: "#1f1f1f" }
-    : { land: "#f2f2ef", water: "#ddd5c1", green: "#e8ebe2", built: "#eaeae6", road: "#ffffff" };
-  for (const l of map.getStyle().layers) {
-    const id = l.id;
-    try {
-      if (l.type === "background") map.setPaintProperty(id, "background-color", T.land);
-      else if (l.type === "fill" && /water/.test(id)) map.setPaintProperty(id, "fill-color", T.water);
-      else if (l.type === "line" && /waterway|river/.test(id)) map.setPaintProperty(id, "line-color", T.water);
-      else if (l.type === "fill" && /park|wood|grass|landcover|forest|wetland/.test(id)) map.setPaintProperty(id, "fill-color", T.green);
-      else if (l.type === "fill" && /landuse|residential|building|aeroway/.test(id)) map.setPaintProperty(id, "fill-color", T.built);
-      else if (l.type === "line" && /highway|road|street|path|motorway|trunk|primary|secondary|tertiary|minor|service|bridge|tunnel/.test(id)) map.setPaintProperty(id, "line-color", T.road);
-    } catch { /* a layer drawn with a pattern: leave it */ }
-  }
-}
-
 function themeColors() {
   return theme === "dark"
     ? { text: "#eceef1", halo: "rgba(21,23,27,0.92)", rail: "#8d9ab0", railCommuter: "#66728a", railCasing: "rgba(0,0,0,0.5)",
@@ -326,7 +306,6 @@ function addLayers() {
   let lastShape = -1;
   baseLayers.forEach((l, i) => { if (l.type !== "symbol") lastShape = i; });
   const firstSymbol = baseLayers[lastShape + 1]?.id; // undefined = top of the stack
-  toneBasemap();
   // Keep the basemap quiet: of its labels only country and state names stay
   // (station names are the rest of the text); none of its rail layers (ours
   // replace them; its own draw every yard and siding up close); and its
