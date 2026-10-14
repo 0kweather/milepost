@@ -940,7 +940,16 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 }
 .stops li.dest button.stop-dot:hover::before { transform: scale(1.55); }
 .stops li.beyond, .stops li.beyond .time, .stops li.beyond .time .late { color: var(--faint); }
-.stops li.beyond .stop-dot::before { border-color: var(--line); }
+.stops li.beyond .stop-dot::before, .stops li.before .stop-dot::before { border-color: var(--line); }
+.stops li.before, .stops li.before .time, .stops li.before .time .late { color: var(--faint); }
+/* The stop a rider got on at, tapped first: filled in the line's color. */
+.stops li.pick-from { font-weight: 650; }
+.stops li.pick-from .stop-dot::before {
+  transform: scale(1.4);
+  border: 3px solid var(--line-color, var(--accent));
+  background: var(--line-color, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--line-color, var(--accent)) 28%, transparent);
+}
 /* The stops on the way are ringed in the line's color too. */
 .stops li.ride:not(.next) .stop-dot::before { border-color: var(--line-color, var(--accent)); }
 

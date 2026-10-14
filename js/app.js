@@ -42,6 +42,7 @@ const state = {
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
   railroad: null,        // railroad whose page is open
+  trackPick: null,       // { id, from }: the stop a rider got on at, tapped first when tracking
   line: null,            // ...and the line, on a line's page
   predictions: null,     // live MBTA predictions for the selected station
   showStations: store.get("tt-stations", true),
@@ -1321,18 +1322,26 @@ function renderDetail() {
     t.departedOn ? `Left <strong>${esc(t.departedOn)}</strong>` : null,
     t.estimated ? `Estimated · ${fmtAgo(t.updated)}` : `<span class="signal" title="Last GPS report">${SIGNAL_ICON}${fmtAgo(t.updated)}</span>`,
   ].filter(Boolean);
-  // Tracking to a stop: the line from the train to it is drawn in the line's
-  // color, and the stops after it are greyed out.
+  // Tracking: the rider taps the stop they got on at, then the one they're
+  // getting off at. The ride between is drawn in the line's color; the stops
+  // before and after it are greyed out.
   const rec = state.tracked.find((r) => r.id === t.id);
+  const pick = state.trackPick?.id === t.id ? state.trackPick : null;
   const ahead = t.stops?.findIndex((s) => s.status !== "past") ?? -1;
-  const dest = !rec || !t.stops ? -1 : rec.stopKey ? t.stops.findIndex((s) => s.key === rec.stopKey) : t.stops.length - 1;
-  // The ride starts from the station the train is standing at, else from
-  // the last one it left.
+  const indexOf = (key) => (key ? t.stops?.findIndex((s) => s.key === key) ?? -1 : -1);
+  const dest = !rec || !t.stops ? -1 : rec.stopKey ? indexOf(rec.stopKey) : t.stops.length - 1;
+  // Where the ride starts: where they got on; for a ride tracked without one,
+  // the station the train is standing at, else the last one it left.
   const at = ahead >= 0 && t.stops[ahead].here;
-  const leg = (i) => dest < 0 || ahead < 0 ? ""
-    : i === dest ? " dest" : i > dest ? " beyond" : i === (at ? ahead : ahead - 1) ? " ride-from" : i >= ahead ? " ride" : "";
+  const from = rec?.fromKey && indexOf(rec.fromKey) >= 0 ? indexOf(rec.fromKey) : at ? ahead : ahead - 1;
+  const pickFrom = pick ? indexOf(pick.from) : -1;
+  const leg = (i) => pick ? (i === pickFrom ? " pick-from" : "")
+    : dest < 0 ? ""
+    : i === dest ? " dest" : i > dest ? " beyond" : i === from ? " ride-from" : i < from ? " before" : " ride";
+  const hint = pick ? "Now tap the stop where you’re getting off."
+    : !rec && t.stops?.length ? "Tap the stop you got on at, then the one you’re getting off at." : "";
   const stops = t.stops?.length
-    ? rrSection("stops", "Stops", t.stops.length, `${ahead >= 0 && !rec ? '<p class="stops-hint">Tap a stop’s circle to track the train until there.</p>' : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
+    ? rrSection("stops", "Stops", t.stops.length, `${hint ? `<p class="stops-hint">${hint}</p>` : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
         const late = lateMin > 1
           ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
@@ -1340,7 +1349,7 @@ function renderDetail() {
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(s.name)} station"` : "";
-        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, i === dest)}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
+        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, { isDest: !pick && i === dest, isFrom: i === pickFrom, picking: Boolean(pick) })}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
       }).join("")}</ol></div>`)
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -2103,13 +2112,14 @@ function checkTracked() {
   if (changed) saveTracked();
 }
 
-function startTracking(t, stopKey) {
+function startTracking(t, stopKey, fromKey = null) {
   if (state.tracked.some((r) => r.id === t.id)) return;
   if (state.tracked.length >= MAX_TRACKED) return toast("You can track up to three trains at once.");
   const stop = stopKey ? t.stops?.find((s) => s.key === stopKey) : null;
   state.tracked.push({
     id: t.id, agency: t.agency, number: t.number, route: t.route,
     stopKey: stop?.key || null, stopName: stop?.name || null,
+    fromKey, fromName: fromKey ? t.stops?.find((s) => s.key === fromKey)?.name || null : null,
     eta: stop ? Date.parse(stop.time) : null, lastSeen: Date.now(),
   });
   saveTracked();
@@ -2132,7 +2142,7 @@ function untrack(id, message) {
 // tracks without a destination.
 function trackButton(t) {
   const rec = state.tracked.find((r) => r.id === t.id);
-  if (rec) return `<span class="tracking-note">Tracking${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>`;
+  if (rec) return `<span class="tracking-note">Tracking${rec.fromName ? ` from ${esc(rec.fromName)}` : ""}${rec.stopName ? ` to ${esc(rec.stopName)}` : ""}</span>`;
   if (t.stops?.some((s) => s.status !== "past")) return "";
   return `<button class="btn primary small" data-track="${esc(t.id)}">Track this train</button>`;
 }
@@ -2140,19 +2150,34 @@ function trackButton(t) {
 // Each stop's circle on the stop list. On a stop still ahead it's a button
 // that tracks the train until there; on the stop it's tracked to, tapping
 // it again stops tracking.
-function stopDot(s, isDest) {
-  if (s.status === "past" || !s.key) return '<span class="stop-dot" aria-hidden="true"></span>';
-  const label = isDest ? `Stop tracking to ${s.name}` : `Track until ${s.name}`;
-  return `<button type="button" class="stop-dot" data-track-to="${esc(s.key)}" aria-pressed="${isDest}" aria-label="${esc(label)}" title="${esc(label)}"></button>`;
+// Each stop's circle on the stop list: a button for tracking. The first tap
+// marks where the rider got on (it can be a stop the train has left), the
+// second where they're getting off; the destination's circle, tapped again,
+// stops tracking.
+function stopDot(s, { isDest, isFrom, picking }) {
+  if (!s.key) return '<span class="stop-dot" aria-hidden="true"></span>';
+  const label = isDest ? `Stop tracking to ${s.name}` : isFrom ? `Not from ${s.name}`
+    : picking ? `Getting off at ${s.name}` : `Got on at ${s.name}`;
+  return `<button type="button" class="stop-dot" data-track-to="${esc(s.key)}" aria-pressed="${Boolean(isDest || isFrom)}" aria-label="${esc(label)}" title="${esc(label)}"></button>`;
 }
 
 function trackTo(t, key) {
   const rec = state.tracked.find((r) => r.id === t.id);
-  if (!rec) return startTracking(t, key);
-  if (rec.stopKey === key) return untrack(t.id);
-  // Already tracked: move its destination to this stop.
-  const stop = t.stops.find((x) => x.key === key);
-  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, eta: Date.parse(stop.time) || null });
+  const pick = state.trackPick?.id === t.id ? state.trackPick : null;
+  const at = (k) => t.stops.findIndex((x) => x.key === k);
+  if (!pick) {
+    if (rec?.stopKey === key) return untrack(t.id); // the destination again: stop
+    state.trackPick = { id: t.id, from: key };       // where they got on
+    return renderDetail();
+  }
+  if (key === pick.from) { state.trackPick = null; return renderDetail(); }
+  // An earlier stop: that's where they got on instead.
+  if (at(key) < at(pick.from)) { state.trackPick = { id: t.id, from: key }; return renderDetail(); }
+  state.trackPick = null;
+  const stop = t.stops[at(key)], start = t.stops[at(pick.from)];
+  if (!rec) return startTracking(t, key, pick.from);
+  // Already tracked: this ride replaces the last.
+  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, fromKey: start.key, fromName: start.name, eta: Date.parse(stop.time) || null });
   saveTracked();
   checkTracked();
   renderAll();
@@ -2318,6 +2343,7 @@ function showDetailView(open) {
 
 function select(id, { fly = true } = {}) {
   state.returnTo = null;
+  if (state.trackPick?.id !== id) state.trackPick = null;
   state.railroad = null;
   state.line = null;
   $("back-btn").lastChild.textContent = " All trains";
@@ -2573,14 +2599,13 @@ on("train-detail", "mouseover", (e) => {
   for (const li of document.querySelectorAll(".stops li.pv-from, .stops li.pv-ride, .stops li.pv-dest")) li.classList.remove("pv-from", "pv-ride", "pv-dest");
   if (!dot) return;
   const rows = [...dot.closest(".stops").children];
-  const to = rows.indexOf(dot.closest("li")), ahead = rows.findIndex((li) => !li.classList.contains("past"));
-  if (ahead < 0) return;
-  // From the station it's standing at, else from the last one it left.
-  const from = rows[ahead].classList.contains("here") ? ahead : ahead - 1;
-  if (to <= from) return;
+  // Once they've tapped where they got on: the ride from there to here.
+  const start = rows.findIndex((li) => li.classList.contains("pick-from"));
+  const to = rows.indexOf(dot.closest("li"));
+  if (start < 0 || to <= start) return;
   rows.forEach((li, i) => {
-    if (i === from) li.classList.add("pv-from");
-    else if (i >= ahead && i < to) li.classList.add("pv-ride");
+    if (i === start) li.classList.add("pv-from");
+    else if (i > start && i < to) li.classList.add("pv-ride");
     else if (i === to) li.classList.add("pv-dest");
   });
 });
