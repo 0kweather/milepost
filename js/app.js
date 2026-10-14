@@ -1282,6 +1282,10 @@ function noticesBlock(list, route = null, title = "Service notices") {
   </div>`;
 }
 
+// The open page's color (its line's, else its railroad's), washed across the
+// top of the panel (design.css).
+const tint = (color) => $("view-train").style.setProperty("--tint", color || "transparent");
+
 const stripScroll = new Map();
 // A press in the panel holds off feed redraws until it's released: replacing
 // the row under the pointer between press and release loses the tap.
@@ -1314,6 +1318,7 @@ function renderDetail() {
   loadNotices(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
+  tint(lineColor);
   const chips = [
     t.nextStop ? `Next <strong>${esc(t.nextStop)}</strong>` : null,
     t.speedMph != null && !t.estimated ? speedText(t.speedMph) : null,
@@ -1510,6 +1515,7 @@ function renderStation() {
   const st = state.stations.get(state.station);
   const el = $("train-detail");
   if (!st) return;
+  tint(AGENCIES[st.agencies[0]]?.color);
   const trains = [...state.trains.values()].filter(inLists);
   const arrivals = state.stationView === "arr";
   const extras = state.stationExtras?.id === st.id ? state.stationExtras : null;
@@ -1937,6 +1943,7 @@ function stationButtons(id, list) {
 function renderRailroad() {
   if (state.line) return renderLine();
   const id = state.railroad, a = AGENCIES[id], el = $("train-detail");
+  tint(a.color);
   if (state.car?.page && state.car.fleet != null) return fleetModelPage(id, el);
   const src = SOURCES.find((s) => s.agencies.includes(id));
   const avail = src ? sourceAvailability(src) : { ok: false };
@@ -1991,6 +1998,7 @@ function renderRailroad() {
 // A line's page: what's running on it, its stations in order and its fleet.
 function renderLine() {
   const id = state.railroad, name = state.line, a = AGENCIES[id], el = $("train-detail");
+  tint(lineColor(id, name));
   // The line's typical train, drawn and tappable like a train page's cars.
   const typical = fleetTrain(id, name);
   if (state.car?.page && state.car.id === typical.id) return renderModelPage(typical, el);
@@ -2182,14 +2190,22 @@ function renderTracked() {
       where = rec.stopName ? `to <strong>${esc(rec.stopName)}</strong>` : "";
       warn = `<span class="stale">Not reporting · last seen ${fmtAgo(rec.lastSeen)}</span>`;
     }
-    return `<div class="track-card" style="--c:${a.color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
-      <span class="bar"></span>
-      <span class="tc-main">
-        <span class="tc-title">${plate(rec.number || a.short, a.color, "xs")}<span>${esc(rec.route || AGENCIES[rec.agency]?.name || "")}</span></span>
-        ${where ? `<span class="tc-where">${where}</span>` : ""}
-        ${status || warn ? `<span class="tc-status">${status}${warn}</span>` : ""}
-      </span>
-      <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="Stop tracking ${esc(trainLabel(rec))}" title="Stop tracking">×</button>
+    // Live Activity: a countdown to the stop it's tracked to, and how far
+    // along its trip it is (first stop to that stop, by time).
+    let eta = "", pct = null;
+    if (t?.stops?.length) {
+      const dest = (rec.stopKey && t.stops.find((s) => s.key === rec.stopKey)) || t.stops[t.stops.length - 1];
+      const start = Date.parse(t.stops[0].time), end = Date.parse(dest.time);
+      if (start && end && end > start) pct = Math.max(0, Math.min(1, (Date.now() - start) / (end - start)));
+      const min = end ? Math.round((end - Date.now()) / 60000) : null;
+      if (min != null) eta = min <= 0 ? "Now" : min < 60 ? `${min}<small>min</small>` : `${Math.floor(min / 60)}<small>h</small> ${min % 60}<small>m</small>`;
+    }
+    const color = t?.routeColor || a.color;
+    return `<div class="track-card live" style="--c:${color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
+      <div class="la-top">${plate(rec.number || a.short, a.color, "xs")}<span class="la-route">${esc(rec.route || AGENCIES[rec.agency]?.name || "")}</span>${eta ? `<span class="la-eta">${eta}</span>` : ""}
+        <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="Stop tracking ${esc(trainLabel(rec))}" title="Stop tracking">×</button></div>
+      ${where || status || warn ? `<div class="la-where">${[where, status, warn].filter(Boolean).join(" · ")}</div>` : ""}
+      ${pct != null ? `<div class="la-track" aria-hidden="true"><span class="la-fill" style="width:${(pct * 100).toFixed(1)}%"></span><span class="la-end"></span><span class="la-dot" style="left:${(pct * 100).toFixed(1)}%"></span></div>` : ""}
     </div>`;
   }).join("");
   // On phones, keep the cards visible when the sheet is collapsed.

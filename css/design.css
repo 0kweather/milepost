@@ -1,0 +1,314 @@
+/* Trainsheet's look, after Apple's system design: San Francisco type with
+ * large bold titles, the system colors, materials (frosted glass) over the
+ * map, inset grouped lists on rounded cards, iOS controls. Two striking
+ * touches: each page's top is washed in its railroad's or line's color (as
+ * Apple Music does with album art), and tracked trains are Live
+ * Activity-style cards with a countdown and a progress bar.
+ *
+ * Loaded after style.css; it redefines the tokens and restyles components.
+ */
+
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 24px;
+  --r-card: 14px;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 30px;
+
+  /* System colors (light). */
+  --bg: #f2f2f7;
+  --panel: rgba(242, 242, 247, 0.8);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-blur: blur(34px) saturate(1.9);
+  --panel-solid: #ffffff;
+  --group: #ffffff;                       /* an inset grouped list's card */
+  --fill: rgba(118, 118, 128, 0.12);       /* search fields, segmented controls */
+  --text: #000000;
+  --muted: rgba(60, 60, 67, 0.62);
+  --faint: rgba(60, 60, 67, 0.32);
+  --line: rgba(60, 60, 67, 0.16);
+  --hover: rgba(120, 120, 128, 0.1);
+  --accent: #007aff;
+  --good: #248a3d;
+  --warn: #c45c00;
+  --bad: #d70015;
+  --switch-on: #34c759;
+  --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --wash: 26%;                            /* how strongly a page's color tints its top */
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --panel: rgba(22, 22, 24, 0.8);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --panel-solid: #1c1c1e;
+  --group: #1c1c1e;
+  --fill: rgba(118, 118, 128, 0.24);
+  --text: #ffffff;
+  --muted: rgba(235, 235, 245, 0.6);
+  --faint: rgba(235, 235, 245, 0.3);
+  --line: rgba(255, 255, 255, 0.11);
+  --hover: rgba(120, 120, 128, 0.2);
+  --accent: #0a84ff;
+  --good: #30d158;
+  --warn: #ff9f0a;
+  --bad: #ff453a;
+  --switch-on: #30d158;
+  --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 12px 40px rgba(0, 0, 0, 0.6);
+  --wash: 34%;
+}
+
+html, body {
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Materials ---------- */
+
+.panel {
+  top: 12px;
+  left: 12px;
+  bottom: 12px;
+  width: 372px;
+  border-radius: var(--r-lg);
+}
+
+.maplibregl-ctrl-group { border-radius: var(--r-md) !important; overflow: hidden; }
+.maplibregl-ctrl-group button { width: 36px; height: 36px; }
+
+/* ---------- Controls ---------- */
+
+.search-row { margin: 18px 16px 4px; }
+.search {
+  height: 38px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--fill);
+}
+.search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.search input { font-size: 17px; letter-spacing: -0.02em; }
+.search input::placeholder { color: var(--muted); }
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--accent);
+}
+.icon-btn:hover { background: color-mix(in srgb, var(--fill) 100%, var(--text) 6%); color: var(--accent); }
+.icon-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.search-row .icon-btn { width: 38px; height: 38px; }
+.icon-btn.sm { width: 26px; height: 26px; }
+
+.segmented {
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--fill);
+}
+.segmented button { border-radius: 7px; font-size: var(--fs-sm); font-weight: 500; color: var(--text); padding: 6px 0; }
+.segmented button[aria-selected="true"],
+.segmented button[aria-pressed="true"] {
+  background: var(--panel-solid);
+  font-weight: 600;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+:root[data-theme="dark"] .segmented button[aria-selected="true"],
+:root[data-theme="dark"] .segmented button[aria-pressed="true"] { background: #636366; }
+
+.btn { border: 0; border-radius: var(--r-pill); background: var(--fill); color: var(--accent); }
+.btn:hover { background: color-mix(in srgb, var(--fill) 100%, var(--text) 6%); }
+.btn.primary { background: var(--accent); color: #fff; }
+
+/* iOS switches. */
+.switch { width: 42px; height: 26px; background: var(--fill); }
+:root[data-theme="dark"] .switch { background: rgba(120, 120, 128, 0.32); }
+.switch::after { top: 2px; left: 2px; width: 22px; height: 22px; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); }
+.toggle input:checked + .switch { background: var(--switch-on); }
+.toggle input:checked + .switch::after { transform: translateX(16px); }
+
+/* ---------- Inset grouped lists ----------
+   Rows sit on rounded cards (white on the grouped gray), divided by hairlines
+   inset past their icon. */
+
+.group-title {
+  margin: 20px 16px 6px;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+.agencies, .results { padding: 0 16px 16px; }
+.agencies .group-title, .results .group-title { margin: 22px 4px 6px; }
+
+/* The railroad list: consecutive rows form one card. */
+.agency { position: relative; background: var(--group); border-radius: 0; }
+.agency:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
+.group-title + .agency, .note + .agency { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
+.agency:has(+ .group-title), .agency:has(+ .note), .agency:last-child { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
+.agency + .agency::before { content: ""; position: absolute; top: 0; left: 46px; right: 0; height: 0.5px; background: var(--line); }
+.agency .check { width: 22px; height: 22px; border-radius: 50%; }
+.check-hit { padding: 11px 6px 11px 12px; }
+.agency-open { padding: 11px 14px 11px 8px; }
+.agency .name { font-size: var(--fs-md); font-weight: 600; letter-spacing: -0.02em; }
+.agency .sub { font-size: var(--fs-sm); }
+.agency .count { font-size: var(--fs-sm); }
+
+/* Search results: the same cards. */
+.result { position: relative; background: var(--group); border-radius: 0; padding: 10px 12px; }
+.result:hover, .result:focus-visible { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
+.results .group-title + .result, .results > .result:first-child { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
+.results .result:has(+ .group-title), .results .result:last-child { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
+.results .result + .result::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; height: 0.5px; background: var(--line); }
+
+/* Lists on the detail pages: each a card of its own. */
+.rr-trains, .rr-stations, .deps, .rr-lines, .served-by, .rr-cars, .stops-scroll {
+  margin: 8px 0 0;
+  padding: 0;
+  border-radius: var(--r-card);
+  background: var(--group);
+  overflow: hidden;
+}
+.rr-trains > *, .rr-stations > *, .deps > *, .rr-cars > * { position: relative; border-radius: 0; }
+.rr-trains > * + *::before, .rr-stations > * + *::before, .deps > * + *::before, .rr-cars > * + *::before {
+  content: ""; position: absolute; top: 0; left: 14px; right: 0; height: 0.5px; background: var(--line);
+}
+.rr-trains .result, .rr-stations .result { background: transparent; }
+.rr-lines { padding: 0 14px; }
+.rr-lines li, .served-by > li { border-bottom-color: var(--line); border-bottom-width: 0.5px; }
+.served-by { padding: 0 14px; }
+.served-by .sb-row { margin: 0 -8px; }
+.sb-lines { margin-left: 22px; }
+.stops-scroll { padding: 6px 14px; }
+.dep { border-radius: 0; padding: 10px 12px; }
+.rr-cars { padding: 4px 0; }
+.rr-car { border-radius: 0; padding: 10px 12px; }
+
+/* Section headings: bold, sentence case, like an app's own sections. */
+.section-title {
+  margin: 26px 0 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+.notices-toggle { font-size: inherit; font-weight: inherit; letter-spacing: inherit; }
+.rr-count, .notices-count { font-size: var(--fs-sm); font-weight: 600; line-height: 20px; padding: 0 7px; }
+.rr-count { background: var(--fill); color: var(--muted); }
+.notices-toggle .chev { color: var(--muted); }
+.rr-hint, .stops-hint { font-size: var(--fs-sm); color: var(--muted); margin-top: 4px; }
+
+/* ---------- Pages ---------- */
+
+/* The top of each page washed in its railroad's or line's color (set in
+   app.js as --tint), fading into the panel. */
+#view-train {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint, transparent) var(--wash), transparent) 0,
+    color-mix(in srgb, var(--tint, transparent) calc(var(--wash) / 3), transparent) 160px, transparent 300px);
+  transition: background 0.4s ease;
+}
+.detail-top { padding-top: 14px; }
+.back { font-size: 17px; letter-spacing: -0.02em; color: var(--accent); }
+
+.hero { border-bottom: 0; padding-bottom: 6px; }
+.hero h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.hero .agency-name { font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0; }
+.hero .od { font-size: 17px; letter-spacing: -0.02em; }
+.station-facts { color: var(--muted); }
+
+/* Big rounded numbers, like widgets. */
+.rr-stats { gap: 10px; margin-top: 16px; }
+.rr-stat { padding: 12px 14px 10px; border-radius: 18px; background: var(--group); }
+.rr-stat strong { font-family: var(--font-rounded); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+.rr-stat span { font-size: var(--fs-sm); font-weight: 500; }
+
+.pill { padding: 5px 12px; font-size: var(--fs-sm); }
+.meta li { border-radius: var(--r-pill) !important; }
+.model-card { border-radius: 18px; background: var(--group); border: 0; }
+.plate { border-radius: 7px; }
+
+/* ---------- Live Activity tracked trains ---------- */
+
+.tracked { padding: 14px 14px 4px; gap: 10px; }
+.live {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-radius: 22px;
+  background: #0b0b0c;
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+.live:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.track-card.live { grid-template-columns: minmax(0, 1fr); border: 0; overflow: visible; }
+.track-card.live:hover { border: 0; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.34), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); }
+.la-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.la-route { flex: 1; min-width: 0; font-size: var(--fs-sm); font-weight: 600; color: rgba(255, 255, 255, 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.la-eta { font-family: var(--font-rounded); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; white-space: nowrap; }
+.la-eta small { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin-left: 2px; }
+.la-where { font-size: var(--fs-sm); color: rgba(255, 255, 255, 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.la-where strong { color: #fff; }
+.la-where .status { font-weight: 700; }
+.la-where .status.good { color: #30d158; }
+.la-where .status.warn { color: #ff9f0a; }
+.la-where .status.bad { color: #ff453a; }
+.la-where .stale { color: #ff9f0a; font-weight: 600; }
+.la-track { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.16); }
+.la-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent); }
+.la-dot {
+  position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 0 3px var(--c), 0 0 14px var(--c);
+}
+.la-end { position: absolute; right: -2px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); background: #0b0b0c; }
+.live .tc-x { position: static; width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.8); font-size: 15px; line-height: 1; }
+.live .tc-x:hover { background: rgba(255, 255, 255, 0.24); color: #fff; }
+
+/* ---------- Menu, toast, loading ---------- */
+
+.menu { border-radius: 20px; width: 320px; padding: 10px; }
+.menu-title { margin: 14px 8px 6px; font-size: var(--fs-sm); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.menu .toggle { margin: 0; border-radius: 0; background: var(--group); position: relative; padding: 10px 12px; }
+.menu .menu-title + .toggle, .menu .menu-select + .toggle, .menu .segmented + .toggle { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
+.menu .toggle:has(+ .menu-title), .menu .toggle:last-child { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
+.menu .toggle + .toggle::before { content: ""; position: absolute; top: 0; left: 66px; right: 0; height: 0.5px; background: var(--line); }
+.menu .toggle:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }
+.menu .segmented { margin: 0 0 4px; }
+.menu-select { border-radius: 11px; border: 0; background: var(--group); }
+.tour-menu-btn { border-radius: var(--r-card); background: var(--accent); color: #fff; padding: 11px; font-size: var(--fs-md); }
+
+.toast {
+  border-radius: var(--r-pill) !important;
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+}
+
+.loading p { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--muted); }
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 720px) {
+  .panel { top: auto; left: 0; bottom: 0; width: auto; border-radius: 24px 24px 0 0; }
+  .sheet-handle::after { width: 36px; height: 5px; border-radius: 3px; top: 7px; }
+}
