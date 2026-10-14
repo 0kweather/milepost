@@ -561,3 +561,13 @@ kbd {
 .ft-compass .hub { fill: var(--panel-solid); stroke: var(--accent); stroke-width: 1.2; }
 .ft-gps { display: inline-flex; align-items: center; gap: 6px; }
 .ft-gps svg { width: 15px; height: 15px; color: var(--good); flex: none; }
+
+/* ---------- At the station ---------- */
+
+.station-facts-tiles { padding: 4px 0 0; border-top: 0; }
+.st-address {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
+  padding: 12px 14px; border-radius: 14px; background: var(--group); color: var(--text); text-decoration: none; font-size: var(--fs-base);
+}
+.st-address span:last-child { color: var(--accent); }
+.st-address:hover { background: color-mix(in srgb, var(--group) 100%, var(--text) 4%); }

@@ -174,3 +174,29 @@ export async function mbtaPredictions(placeId) {
     .filter((p) => p.time && p.time > now - 60000)
     .slice(0, 24);
 }
+
+// What an MBTA station has (its "facilities"): a ticket window, fare
+// machines, parking with its spaces and fee, bike storage, elevators.
+export async function mbtaFacilities(placeId) {
+  const url = `https://api-v3.mbta.com/facilities?filter%5Bstop%5D=${encodeURIComponent(placeId)}` +
+    "&filter%5Btype%5D=TICKET_WINDOW,FARE_VENDING_MACHINE,PARKING_AREA,BIKE_STORAGE,ELEVATOR";
+  const json = await (await fetch(url)).json();
+  const out = { ticketWindow: false, machines: 0, parking: [], bikes: 0, elevators: 0 };
+  for (const f of json.data || []) {
+    const a = f.attributes, prop = (k) => a.properties?.find((p) => p.name === k)?.value;
+    if (a.type === "TICKET_WINDOW") out.ticketWindow = true;
+    else if (a.type === "FARE_VENDING_MACHINE") out.machines++;
+    else if (a.type === "ELEVATOR") out.elevators++;
+    else if (a.type === "BIKE_STORAGE") out.bikes += Number(prop("capacity")) || 0;
+    else if (a.type === "PARKING_AREA") out.parking.push({ spaces: Number(prop("capacity")) || 0, fee: prop("fee-daily") || "" });
+  }
+  return out;
+}
+
+// An Amtrak station's street address (from Amtraker).
+export async function amtrakAddress(code) {
+  const json = await (await fetch(`https://api-v3.amtraker.com/v3/stations/${encodeURIComponent(code)}`)).json();
+  const s = json?.[code];
+  if (!s?.hasAddress) return null;
+  return [s.address1?.trim(), [s.city, s.state].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+}

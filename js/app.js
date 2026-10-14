@@ -1,5 +1,5 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
-import { loadStations, trainsDue, mbtaPredictions, meters, norm } from "./stations.js?v=dev";
+import { loadStations, trainsDue, mbtaPredictions, mbtaFacilities, amtrakAddress, meters, norm } from "./stations.js?v=dev";
 import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices, stationNotices } from "./notices.js?v=dev";
@@ -1710,7 +1710,27 @@ function renderStation() {
     </div>
     ${rrSection("served", "Served by", st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
     ${noticesBlock(extras?.notices || [], null, "Station notices")}
-    ${nextTrainsSection(rows, arrivals, loading)}`;
+    ${nextTrainsSection(rows, arrivals, loading)}
+    ${atStation(extras)}`;
+}
+
+// At the station: what it has, where railroads publish it (the MBTA's
+// facilities), and its street address (Amtrak's), opening a map.
+function atStation(extras) {
+  const f = extras?.facilities, address = extras?.address;
+  const tiles = [];
+  if (f?.ticketWindow) tiles.push(tile("Tickets", '<span class="ft-name">Ticket window</span>'));
+  if (f?.machines) tiles.push(tile("Fare machines", `${f.machines}`));
+  for (const p of (f?.parking || []).slice(0, 2)) {
+    const fee = p.fee.match(/Daily Max:\s*\$\d+/i)?.[0].replace(/Daily Max:\s*/i, "") || p.fee.match(/\$\d+(\.\d\d)?/)?.[0] || "";
+    tiles.push(tile("Parking", p.spaces ? `${p.spaces.toLocaleString()}<small>spaces</small>` : '<span class="ft-name">Yes</span>', fee ? `${esc(fee)} a day` : ""));
+  }
+  if (f?.bikes) tiles.push(tile("Bike racks", `${f.bikes}<small>spaces</small>`));
+  if (f?.elevators) tiles.push(tile("Elevators", `${f.elevators}`));
+  if (!tiles.length && !address) return "";
+  const map = address && `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  return rrSection("at-station", "At the station", null, `${tiles.length ? `<div class="facts station-facts-tiles">${tiles.join("")}</div>` : ""}
+    ${address ? `<a class="st-address" href="${esc(map)}" target="_blank" rel="noopener"><span>${esc(address)}</span><span aria-hidden="true">↗</span></a>` : ""}`);
 }
 
 // ---------- Railroad and line pages ----------
@@ -1952,7 +1972,7 @@ function rrSection(key, title, count, body) {
   const open = !state.rrCollapsed.has(key);
   return `<section class="rr-sec${open ? "" : " collapsed"}">
     <h3 class="section-title"><button type="button" class="notices-toggle" data-rr-section="${key}" aria-expanded="${open}">
-      ${esc(title)} <span class="rr-count">${count}</span>
+      ${esc(title)}${count == null ? "" : ` <span class="rr-count">${count}</span>`}
       <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button></h3>
     ${open ? body : ""}
@@ -2542,13 +2562,17 @@ async function refreshPredictions(st) {
 // (through the relay).
 async function refreshStationExtras(st) {
   const njt = st.members.find((m) => m.agency === "njt" && m.code);
-  const [notices, board] = await Promise.all([
+  const mbta = st.members.find((m) => m.agency === "mbta");
+  const amtrak = st.members.find((m) => m.agency === "amtrak");
+  const [notices, board, facilities, address] = await Promise.all([
     stationNotices(st).catch(() => []),
     njt && RELAY ? fetch(`${RELAY.replace(/\/$/, "")}/njt-board/${encodeURIComponent(njt.code)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
+    mbta ? mbtaFacilities(mbta.id).catch(() => null) : null,
+    amtrak ? amtrakAddress(amtrak.code || amtrak.id).catch(() => null) : null,
   ]);
   if (state.station !== st.id) return;
   const tracks = new Map((board?.items || []).filter((x) => x.track).map((x) => [String(x.trainID), x.track]));
-  state.stationExtras = { id: st.id, notices, tracks };
+  state.stationExtras = { id: st.id, notices, tracks, facilities, address };
   renderDetail();
 }
 
