@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt store)";
+const RELAY_VERSION = "2026-10-14 (mta crowd)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -289,6 +289,32 @@ async function fetchNjtCrowd(env, id) {
   return json;
 }
 
+// LIRR and Metro-North crowding, from the MTA's TrainTime app's data: each
+// train's cars in order, how full each is (EMPTY, MANY_SEATS, FEW_SEATS,
+// SRO, NO_DATA), riders counted, restrooms, quiet cars, bikes. One copy of
+// every train is read at most every 30 seconds and shared; a request gets
+// just its train's cars.
+const TRAINTIME = "https://backend-unified.mylirr.org/locations?geometry=TRACK_TURF&railroad=BOTH";
+let traintimeMem = null; // { at, byKey }
+async function mtaCrowd(railroad, number) {
+  if (!traintimeMem || Date.now() - traintimeMem.at > 30 * 1000) {
+    const res = await fetch(TRAINTIME, { headers: { Accept: "application/json", "Accept-Version": "3.0", "User-Agent": "Trainsheet relay" } });
+    if (!res.ok) throw new Error(`TrainTime HTTP ${res.status}`);
+    const byKey = new Map();
+    for (const t of await res.json()) {
+      const cars = t.consist?.cars;
+      if (!cars?.length) continue;
+      byKey.set(`${t.railroad}:${t.train_num}`, {
+        fleet: t.consist.fleet || null,
+        cars: cars.map((c) => ({ no: c.number != null ? String(c.number) : null, type: c.type || null, level: c.loading || null,
+          count: c.passengers ?? null, rest: Boolean(c.restroom), quiet: Boolean(c.quiet), bikes: Boolean(c.bikes), loco: Boolean(c.locomotive) })),
+      });
+    }
+    traintimeMem = { at: Date.now(), byKey };
+  }
+  return { at: traintimeMem.at, crowd: traintimeMem.byKey.get(`${railroad}:${number}`) || null };
+}
+
 // "30-May-2024 02:30:44 PM" in New York, as epoch milliseconds.
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 const nyParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" });
@@ -531,6 +557,15 @@ export default {
       // (true/false only), for checking a deploy.
       const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+    }
+
+    const mta = pathname.match(/^\/mta-crowd\/(lirr|mnr)\/(\w{1,8})$/);
+    if (mta) {
+      try {
+        return Response.json(await mtaCrowd(mta[1] === "lirr" ? "LIRR" : "MNR", mta[2]), { headers: { ...CORS, "Cache-Control": "public, max-age=30" } });
+      } catch (err) {
+        return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
+      }
     }
 
     const crowd = pathname.match(/^\/njt-crowd\/(\w{1,6})$/);
