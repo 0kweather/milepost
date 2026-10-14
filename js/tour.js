@@ -63,7 +63,7 @@ export function startTour(app) {
     },
     demo && {
       title: "Stops and tracking",
-      text: "Every stop with its live time. Tap a station's name to open it. Tap a stop's circle to track the train until there: it stays pinned at the top, and you're told when it arrives.",
+      text: "Every stop with its live time. Tap a station's name to open it. To track it, tap the circle of the stop you got on at, then the one you're getting off at: it stays pinned at the top, and you're told when it arrives.",
       enter: () => { if (app.state.selected !== demo.id) app.select(demo.id); if (app.isPhone) app.setSheet("expanded"); },
       target: "#train-detail .stops-scroll",
       optional: true,
