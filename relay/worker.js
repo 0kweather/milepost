@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (njt api 3)";
+const RELAY_VERSION = "2026-10-14 (njt api 4)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -452,7 +452,14 @@ export default {
         body.append("username", env.NJT_USERNAME || "");
         body.append("password", env.NJT_PASSWORD || "");
         const r = await fetch("https://testraildata.njtransit.com/api/TrainData/getToken", { method: "POST", body }).then((x) => x.json()).catch((e) => ({ errorMessage: e.message }));
-        return Response.json({ server: "test", authenticated: r?.Authenticated === "True", error: r?.errorMessage || null }, { headers: CORS });
+        let vehicles = null;
+        if (r?.UserToken) {
+          const vb = new FormData();
+          vb.append("token", r.UserToken);
+          const v = await fetch("https://testraildata.njtransit.com/api/TrainData/getVehicleData", { method: "POST", body: vb }).then((x) => x.json()).catch(() => null);
+          if (Array.isArray(v)) vehicles = { count: v.length, newest: v.map((x) => x.LAST_MODIFIED).sort((a, b) => (nyTime(b) || 0) - (nyTime(a) || 0))[0] || null, sample: v[0] ? { id: v[0].ID, line: v[0].TRAIN_LINE, next: v[0].NEXT_STOP } : null };
+        }
+        return Response.json({ server: "test", authenticated: r?.Authenticated === "True", error: r?.errorMessage || null, vehicles }, { headers: CORS });
       }
       try {
         const list = await fetchNjtVehicles(env);
