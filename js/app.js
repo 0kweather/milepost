@@ -2536,12 +2536,19 @@ function hoverStationTo(id) {
 // One click handler so a train sitting on a station wins over the station.
 map.on("click", (e) => {
   const box = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
-  const train = map.queryRenderedFeatures(box, { layers: ["tt-trains"] })[0];
+  const train = map.queryRenderedFeatures(box, { layers: ["tt-trains", "tt-labels"].filter((l) => map.getLayer(l)) })[0];
   if (train) return select(train.properties.id);
-  const station = map.queryRenderedFeatures(box, { layers: STATION_LAYERS.filter((l) => map.getLayer(l)) })[0];
+  const station = map.queryRenderedFeatures(box, { layers: [...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l)) })[0];
   if (station) return selectStation(station.properties.id);
-  if ((state.selected && !state.follow) || state.station) closeDetail();
+  // A tap on the map itself goes home, from whatever page is open.
+  if (state.selected || state.station || state.railroad) goHome();
 });
+
+function goHome() {
+  Object.assign(state, { returnTo: null, station: null, railroad: null, line: null, car: null });
+  setFollow(false);
+  closeDetail();
+}
 
 for (const layer of STATION_LAYERS) {
   map.on("mousemove", layer, (e) => {
