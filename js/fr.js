@@ -159,6 +159,7 @@ export default {
   "Café": "Café",
   "Sleeping cars": "Voitures-lits",
   "Lounge with a view": "Voiture panoramique",
+  "First class": "Première classe",
   "Business class": "Classe affaires",
   "Your car rides along": "Votre auto voyage aussi",
   "Copy a link to the open train": "Copier un lien vers le train ouvert",

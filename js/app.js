@@ -1602,6 +1602,7 @@ const AMENITY_ICON = {
   cafe: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3"/>',
   sleepers: '<path d="M3 19V6m0 9h18v4m0-4v-3a3 3 0 0 0-3-3h-7v6M7 12.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>',
   lounge: '<path d="M3 20h18M5 20l5-9 3 5 2-3 4 7M15 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/>',
+  first: '<path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/>',
   business: '<path d="M4 8h16v11H4zM9 8V5h6v3M4 13h16"/>',
   autos: '<path d="M5 16l1.5-5h11l1.5 5M4 16h16v3H4zM7 19v1.5M17 19v1.5M7.5 16h.01M16.5 16h.01"/>',
 };
@@ -1611,6 +1612,7 @@ const AMENITIES = [
   ["cafe", "Café", ["amfleetCafe", "superlinerLounge", "skyline", "acelaCoach"]],
   ["sleepers", "Sleeping cars", ["superlinerSleeper", "viewlinerSleeper", "buddSleeper", "renaissanceSleeper"]],
   ["lounge", "Lounge with a view", ["superlinerLounge", "skyline", "parkCar"]],
+  ["first", "First class", ["acelaCoach"]],
   ["business", "Business class", ["amfleetBusiness", "acelaCoach"]],
   ["autos", "Your car rides along", ["autorack"]],
 ];
