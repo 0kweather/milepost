@@ -29,6 +29,13 @@ long_name = lambda r: (r.get("route_long_name") or r.get("route_short_name") or 
 EXO_GTFS = "https://exo.quebec/uploads/ressources-telechargeables/a-propos/donnees-ouvertes/trains/google_transit.zip"
 exo_line = lambda r: re.sub(r"^\d+\s*-\s*", "", long_name(r)).replace("/", "-")
 slug = lambda name: re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", name.lower()).encode("ascii", "ignore").decode()).strip("-")
+# NCTD's stop names: "Oceanside Transit Center Platform 3" -> "Oceanside Transit Center".
+NCTD_WORDS = {"Rd": "Road", "Dr": "Drive", "Blvd": "Boulevard", "St": "Street", "Hwy": "Highway"}
+nctd_name = lambda name: re.sub(r"\b(Rd|Dr|Blvd|St|Hwy)$", lambda m: NCTD_WORDS[m.group(1)],
+                               re.sub(r"\s+(Platform\s+\d+|Station)$", "", name.strip()).replace("San Diego - ", "San Diego ").replace("Civic Center - Vista", "Vista Civic Center"))
+# The Alaska Railroad's trains by route: one line for both directions.
+ALASKA_LINES = {"DenaliNB": "Denali Star", "DenaliSB": "Denali Star", "AuroraNB": "Aurora Winter Train", "AuroraSB": "Aurora Winter Train",
+                "CoastalNB": "Coastal Classic", "CoastalSB": "Coastal Classic", "Glacier": "Glacier Discovery", "Hurricane": "Hurricane Turn"}
 GTFS = {
     "lirr": ("https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip", lambda r: True, long_name),
     "mnr": ("https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip", lambda r: True, long_name),
@@ -64,13 +71,50 @@ GTFS = {
     # exo lists each platform as its own stop, with no parent station: they
     # fold into one station per name. "11 - Vaudreuil/Hudson" -> "Vaudreuil-Hudson".
     "exo": (EXO_GTFS, rail, lambda r: exo_line(r), lambda s: (slug(s), s.strip())),
+    # NCTD: COASTER (commuter rail, two route ids) and SPRINTER (diesel railcars, filed as light rail).
+    # Each station is listed once per direction ("... Platform 3"), with no parent: folded by name.
+    "coaster": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "COASTER", lambda r: "Coaster",
+                lambda s: (slug(nctd_name(s)), nctd_name(s))),
+    "sprinter": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "SPRINTER", lambda r: "Sprinter",
+                 lambda s: (slug(nctd_name(s)), nctd_name(s))),
+    "atrain": ("https://gtfs.remix.com/dcta_denton_tx_us.zip", lambda r: r["route_long_name"] == "A-train", lambda r: "A-train"),
+    # DART's feed has the Trinity Railway Express (run with Trinity Metro) and the Silver Line.
+    "tre": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "TRE", lambda r: "Trinity Railway Express"),
+    "silverline": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "SILVER", lambda r: "Silver Line"),
+    "texrail": ("https://gtfsdata.ridetm.org/gtfs/fwtatransitdata.zip", lambda r: r["route_short_name"] == "TEXRail", lambda r: "TEXRail"),
+    "star": ("https://www.wegotransit.com/googleexport/google_transit.zip", lambda r: r["route_id"] == "90", lambda r: "WeGo Star"),
+    "upx": ("https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/UP-GTFS.zip", lambda r: True, lambda r: "UP Express"),
+    # Ontario Northland files every route as a bus; its train is the Polar Bear Express (Cochrane-Moosonee).
+    # The feed already has the Northlander's proposed trips, but it is not carrying passengers yet
+    # (October 2026): add r["route_long_name"].startswith("Northlander") back when it is.
+    "ontarionorthland": ("https://ontarionorthland.tmix.se/gtfs/gtfs.zip", lambda r: "Moosonee" in r["route_long_name"],
+                         lambda r: "Polar Bear Express"),
+    # The Alaska Railroad's page links its current timetable file (named by date).
+    "alaska": ("https://www.alaskarailroad.com/gtfs", lambda r: True, lambda r: ALASKA_LINES.get(r["route_id"], r.get("route_long_name", ""))),
 }
 
 
-def get(url, timeout=180):
+def get_raw(url, timeout=180):
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
+
+
+def get(url, timeout=180):
+    return current_feed(get_raw(url, timeout))
+
+
+def current_feed(data):
+    """A railroad's page that links its current timetable file (named by date,
+    as the Alaska Railroad's is): the zip it links, else the data as is."""
+    if data[:2] == b"PK":
+        return data
+    m = re.search(rb'href="([^"]+\.zip)"', data, re.I)
+    if not m:
+        raise ValueError("no timetable file linked")
+    href = m.group(1).decode()
+    return get_raw(urllib.parse.urljoin("https://www.alaskarailroad.com/", href))
+
 
 
 def rows(zf, name):
@@ -135,13 +179,14 @@ def access_of(stop, children):
     return None if not flags else 1 if "1" in flags else 0
 
 
-def gtfs_stations(url, keep, line_name, group=None):
+def gtfs_stations(url, keep, line_name, group=None, trip_line=None):
     """group(stop) -> (station id, name): folds stops into stations where a
-    feed has no parent stations (MARC)."""
+    feed has no parent stations (MARC). trip_line(trip, line): a trip's line
+    where it isn't its route's."""
     zf = zipfile.ZipFile(io.BytesIO(get(url)))
     agency_tz = next((a.get("agency_timezone") for a in rows(zf, "agency.txt")), None) or None
     routes = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
-    trip_line = {t["trip_id"]: routes[t["route_id"]] for t in rows(zf, "trips.txt") if t["route_id"] in routes}
+    trip_line = {t["trip_id"]: (trip_line or (lambda t, line: line))(t, routes[t["route_id"]]) for t in rows(zf, "trips.txt") if t["route_id"] in routes}
     stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
     children = defaultdict(list)
     for st in stops.values():
@@ -272,8 +317,26 @@ def njt_departurevision():
 
 # Station names that repeat the railroad or the word "Station".
 NAME_SUFFIX = {"railrunner": re.compile(r"\s+Rail Runner Station$"), "sounder": re.compile(r"(\s+Sounder)?(\s+Station)?$"),
-               "ace": re.compile(r"\s+Station$"), "exo": re.compile(r"^Gare\s+")}
-NAME_FIX = {"L Enfant": "L'Enfant", "San Jose Station Diridon": "San Jose Diridon", "Stockton - Robert J Cabral": "Stockton"}
+               "ace": re.compile(r"\s+Station$"), "exo": re.compile(r"^Gare\s+"),
+               "atrain": re.compile(r"\s+Station$"), "tre": re.compile(r"\s+Station$"), "silverline": re.compile(r"(\s+Silver Line)?\s+Station$"),
+               "texrail": re.compile(r"^TEXRail\s+|\s+(TEXRail\s+)?Station$"), "star": re.compile(r"\s+Station$"),
+               "upx": re.compile(r"^UP Express\s+|\s+GO/UP$"), "ontarionorthland": re.compile(r"\s+(Train Shelter|Station|Go Station)$")}
+NAME_FIX = {"L Enfant": "L'Enfant", "San Jose Station Diridon": "San Jose Diridon", "Stockton - Robert J Cabral": "Stockton",
+            # DCTA, DART and Trinity Metro, as the stations are signed.
+            "Ddtc": "Downtown Denton Transit Center", "Ebj Union": "Dallas Union Station", "Medical/Market Ctr": "Medical/Market Center",
+            "Dfw Terminal B": "DFW Airport Terminal B", "Dfw North": "DFW Airport North", "Ut Dallas": "UT Dallas", "12Th Street": "12th Street",
+            "Downtown Carrollton Silver Line": "Downtown Carrollton", "Shiloh Rd": "Shiloh Road", "Fort Worth Central": "Fort Worth Central",
+            "Fort Worth T&P": "Fort Worth T&P", "T&P": "Fort Worth T&P", "North side": "North Side", "Grapevine Main Street": "Grapevine/Main Street",
+            "DFW Airport (DFW)": "DFW Airport Terminal B", "Centreport": "CentrePort/DFW Airport",
+            # Ontario Northland.
+            "Toronto - Union Station Train": "Toronto Union Station", "Timmins-Porcupine": "Timmins"}
+
+# Stations a railroad's timetable places wrongly, as (lat, lon): the Alaska
+# Railroad's file puts its Fairbanks depot near Seward.
+POSITION_FIX = {("alaska", "FAIR"): (64.85583, -147.70892)}
+# Metrolink files its Arrow trains (San Bernardino-Redlands, 3800-3899) under
+# the San Bernardino Line.
+TRIP_LINE = {"metrolink": lambda t, line: "Metrolink Arrow" if re.fullmatch(r"38\d\d", t.get("trip_short_name") or "") else line}
 
 # Named railroads only: rebuild just those, keeping the rest of the file.
 only = sys.argv[1:]
@@ -283,10 +346,13 @@ for agency, (url, keep, line_name, *group) in GTFS.items():
     if only and agency not in only:
         continue
     try:
-        result[agency] = gtfs_stations(url, keep, line_name, *group)
+        result[agency] = gtfs_stations(url, keep, line_name, *(group or [None]), trip_line=TRIP_LINE.get(agency))
         for row in result[agency]:  # "Belen Rail Runner Station" -> "Belen"
             row[1] = NAME_SUFFIX[agency].sub("", row[1]) if agency in NAME_SUFFIX else row[1]
-            row[1] = NAME_FIX.get(row[1], row[1])
+            row[1] = NAME_FIX.get(row[1].strip(), row[1].strip())
+            row[1] = re.sub(r"\s{2,}", " ", row[1])
+            if (agency, row[0]) in POSITION_FIX:
+                row[2], row[3] = POSITION_FIX[(agency, row[0])]
         print(f"{agency}: {len(result[agency])} stations")
     except Exception as err:  # keep going; one broken feed shouldn't block the rest
         print(f"{agency}: FAILED {err}")

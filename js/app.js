@@ -4150,6 +4150,7 @@ const LOADING_TRAINS = [
   ["amtrak", "Amtrak Cascades"], ["amtrak", "Wolverine"], ["amtrak", "Crescent"], ["via", "Corridor"], ["via", "Canadian"],
   ["brightline"], ["lirr", "Babylon"], ["mnr", "New Haven"], ["mbta"], ["njt"], ["septa"], ["metra", "BNSF"], ["metra", "ME"],
   ["caltrain"], ["metrolink"], ["go"], ["marc", "Penn Line"], ["trirail"], ["frontrunner"], ["smart"], ["capmetro"], ["rtd"],
+  ["coaster"], ["sprinter"], ["texrail"], ["silverline"], ["tre"], ["upx"], ["alaska", "Aurora Winter Train"],
 ];
 const loadingStart = Date.now();
 let mapLoaded = false; // map.loaded() turns false whenever the trains layer updates

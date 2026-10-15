@@ -93,6 +93,7 @@ function wheel(cx, d) {
 
 // A coil spring seen from the side: stacked turns.
 function coil(x, y0, y1, w) {
+  if (y1 <= y0) return "";  // no room: a low-floor body sits right on the truck
   const turns = Math.max(3, Math.round((y1 - y0) / 0.24)), segs = [];
   for (let k = 0; k < turns; k++) {
     const y = y0 + ((k + 0.5) * (y1 - y0)) / turns;

@@ -15,6 +15,21 @@ import { PX_PER_FT, HEIGHT_FT, locoCoupler } from "./carart.js?v=dev";
 
 // [first, last, type]
 const FLEETS = {
+  // Trinity Railway Express: F59PHs 120-126, F40PH-2s 130-131, F59PHIs
+  // 569-570; BiLevel cab cars 1002-1009, coaches 1048-1064.
+  tre: [[120, 126, "f59ph"], [130, 131, "f40"], [569, 570, "f59"], [1002, 1009, "bilevelCab"], [1048, 1064, "bilevel"]],
+  // Coaster: SC-44s 5001-5009; BiLevel coaches, cab cars 2301-2310 and the
+  // CEM cab cars 421-423.
+  coaster: [[5001, 5009, "charger"], [2201, 2208, "bilevel"], [2401, 2406, "bilevel"], [2501, 2504, "bilevel"], [42101, 42108, "bilevel"],
+    [2301, 2310, "bilevelCab"], [421, 423, "bilevelCab"]],
+  sprinter: [[4001, 4012, "desiro"]],
+  upx: [[1001, 1012, "upxCar"], [3001, 3006, "upxMid"]],
+  ontarionorthland: [[1800, 1809, "gp38"], [416, 417, "onBaggage"], [650, 661, "onCoach"], [750, 750, "onDiner"]],
+  alaska: [[4317, 4328, "sd70mac"], [3001, 3015, "gp402"], [205, 210, "akCoach"]],
+  star: [[120, 122, "f40"], [381, 381, "f40"], [701, 733, "gallery"], [790, 795, "galleryCab"]],
+  texrail: [[101, 108, "flirtCar"]],
+  silverline: [[901, 908, "flirtCar"]],
+  atrain: [[101, 111, "gtwCar"]],
   septa: [
     [101, 188, "silverliner4"], [276, 460, "silverliner4"],
     [701, 738, "silverliner5"], [801, 882, "silverliner5"],
@@ -138,6 +153,9 @@ const TYPES = {
   bl36: { name: "BL36PH diesel locomotive", kind: "diesel" },
   f125: { name: "F125 diesel locomotive", kind: "diesel" },
   sd70mach: { name: "SD70MACH diesel locomotive", kind: "diesel" },
+  sd70mac: { name: "SD70MAC diesel locomotive", kind: "diesel" },
+  gp38: { name: "GP38-2 diesel locomotive", kind: "diesel" },
+  gp402: { name: "GP40-2 diesel locomotive", kind: "diesel" },
   // Electric and diesel multiple units
   silverliner4: { name: "Silverliner IV", kind: "emu", pan: true },
   silverliner5: { name: "Silverliner V", kind: "emu", pan: true },
@@ -152,9 +170,13 @@ const TYPES = {
   kissCab: { name: "Stadler KISS cab car", kind: "bilevel", emu: true },
   rdc: { name: "Budd Rail Diesel Car", kind: "emu" },
   smartDmu: { name: "Nippon Sharyo railcar", kind: "emu" },
+  upxCar: { name: "Nippon Sharyo railcar", kind: "emu" },
+  upxMid: { name: "Nippon Sharyo intermediate railcar", kind: "emu" },
   gtwCar: { name: "Stadler GTW passenger section", kind: "emu" },
   gtwPower: { name: "Stadler GTW power module", kind: "module" },
   flirtCar: { name: "Stadler FLIRT passenger section", kind: "emu" },
+  flirtMid: { name: "Stadler FLIRT intermediate section", kind: "emu" },
+  desiro: { name: "Siemens Desiro car", kind: "emu" },
   flirtPower: { name: "Stadler FLIRT power module", kind: "module" },
   // Single-level coaches
   pushPullCab: { name: "Bombardier cab car", kind: "coach", cab: true },
@@ -209,6 +231,13 @@ const TYPES = {
   multilevelCab: { name: "MultiLevel cab car", kind: "bilevel", cab: true },
   crrcBilevel: { name: "CRRC bi-level coach", kind: "bilevel" },
   crrcBilevelCab: { name: "CRRC bi-level cab car", kind: "bilevel", cab: true },
+  // Alaska Railroad and Ontario Northland
+  akCoach: { name: "Coach", kind: "coach" },
+  akDiner: { name: "Café or dining car", kind: "coach" },
+  akBaggage: { name: "Baggage car", kind: "coach", baggage: true },
+  onCoach: { name: "Rebuilt RTC-85 coach", kind: "coach" },
+  onDiner: { name: "Rebuilt RTC-85 dining car", kind: "coach" },
+  onBaggage: { name: "Baggage car", kind: "coach", baggage: true },
   // Other
   autorack: { name: "Auto carrier", kind: "autorack" },
 };
@@ -439,6 +468,43 @@ function typicalFor(t, reported) {
       const n = /Vaudreuil|Hilaire/.test(route) ? 6 : 4;
       return set(`${name} locomotive with MultiLevel coaches and a cab car`, [loco, 1], ["multilevel", n], ["multilevelCab", 1]);
     }
+    // TEXRail (Fort Worth–DFW Airport) and DART's Silver Line (DFW
+    // Airport–Shiloh Road): four-section Stadler FLIRT railcars with the
+    // power pack in the middle; at busy times two coupled.
+    case "texrail": case "silverline":
+      return set("Stadler FLIRT railcar (four sections and a power pack)", ["flirtCar", 1], ["flirtMid", 1], ["flirtPower", 1], ["flirtMid", 1], ["flirtCar", 1]);
+    // A-train (Denton–Carrollton): one Stadler GTW 2/6, now and then two.
+    case "atrain": return set("Stadler GTW diesel railcar", ["gtwCar", 1], ["gtwPower", 1], ["gtwCar", 1]);
+    // Trinity Railway Express: push-pull, an F59PH (or one of its F40PH-2s or
+    // F59PHIs) with BiLevel coaches and a cab car, usually 3 or 4 cars.
+    case "tre": return set("F59PH locomotive with BiLevel coaches and a cab car, usually 3 or 4 cars", ["f59ph", 1], ["bilevel", 2], ["bilevelCab", 1]);
+    // Coaster: an SC-44 Charger, usually at the Oceanside end, with BiLevel
+    // coaches and a cab car, usually 5 or 6 cars.
+    case "coaster": return set("SC-44 Charger locomotive with BiLevel coaches and a cab car, usually 5 or 6 cars", ["charger", 1], ["bilevel", 4], ["bilevelCab", 1]);
+    // Sprinter (Oceanside–Escondido): a two-car Siemens Desiro, at busy
+    // times two coupled.
+    case "sprinter": return set("Siemens Desiro two-car diesel railcar (sometimes two coupled)", ["desiro", 1], ["desiro", 1]);
+    // UP Express: Nippon Sharyo railcars, three-car trains (a cab car at
+    // each end), some still two.
+    case "upx": return set("Nippon Sharyo diesel railcars, usually 3 (some trains 2)", ["upxCar", 1], ["upxMid", 1], ["upxCar", 1]);
+    // WeGo Star (Nashville–Lebanon): an F40 at the Lebanon end with Budd
+    // gallery cars and a cab car, usually 3 cars behind it.
+    case "star": return set("F40PH locomotive with gallery bi-levels and a cab car", ["f40", 1], ["gallery", 2], ["galleryCab", 1]);
+    // Polar Bear Express (Cochrane–Moosonee): a mixed train, a GP38-2 (or
+    // two) with freight cars and a power car ahead of the baggage car,
+    // coaches and dining car; the freight cars are left out here.
+    case "ontarionorthland": return set("GP38-2 locomotive with a baggage car, rebuilt coaches and a dining car (freight cars too, not drawn)",
+      ["gp38", 1], ["onBaggage", 1], ["onCoach", 3], ["onDiner", 1]);
+    // Alaska Railroad. Aurora Winter Train (Anchorage–Fairbanks, weekends
+    // in winter): an SD70MAC with a baggage car, a café or dining car and
+    // coaches. Hurricane Turn: a GP40-2 with a coach and one of the F40s
+    // rebuilt as power and cab cars (P31, P32) at the far end. The summer
+    // trains (Denali Star, Coastal Classic, Glacier Discovery) add domes,
+    // drawn here as coaches.
+    case "alaska":
+      if (/Hurricane/.test(t.route || "")) return set("GP40-2 locomotive with a coach and an F40 power and cab car", ["gp402", 1], ["akCoach", 1], ["f40", 1]);
+      if (/Aurora/.test(t.route || "")) return set("SD70MAC locomotive with a baggage car, a café car and coaches", ["sd70mac", 1], ["akBaggage", 1], ["akDiner", 1], ["akCoach", 3]);
+      return set("SD70MAC locomotive with coaches, a dining car and dome cars (domes drawn as coaches)", ["sd70mac", 1], ["akBaggage", 1], ["akCoach", 3], ["akDiner", 1], ["akCoach", 2]);
     default: return null;
   }
 }

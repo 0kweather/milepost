@@ -4,11 +4,7 @@
 import { AGENCIES } from "./sources.js?v=dev";
 
 const UNTRACKED = {
-  coaster:    { name: "Coaster",              color: "#6f3c96" },
-  tre:        { name: "Trinity Railway Express", color: "#2a9d8f" },
   wes:        { name: "WES Commuter Rail",    color: "#5b8c2a" },
-  texrail:    { name: "TEXRail",              color: "#7d2248" },
-  alaska:     { name: "Alaska Railroad",      color: "#1b4f9c" },
   go:         { name: "GO Transit",           color: "#3d8b37" },
   wce:        { name: "West Coast Express",   color: "#7a1f5c" },
   commuter:   { name: "Commuter rail",        color: "#8d95a3" },

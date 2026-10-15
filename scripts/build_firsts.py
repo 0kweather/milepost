@@ -11,7 +11,7 @@ Output: {"start": "YYYY-MM-DD",
 
     python3 scripts/build_firsts.py [railroad ...]
 """
-import csv, datetime, io, json, pathlib, re, sys, time, urllib.request, zipfile
+import csv, datetime, io, json, pathlib, re, sys, time, urllib.parse, urllib.request, zipfile
 from collections import defaultdict
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
@@ -48,6 +48,20 @@ FEEDS = {
     "ace": (MDB.format("mdb-2684"), rail, lambda r: "ACE"),
     "exo": ("https://exo.quebec/uploads/ressources-telechargeables/a-propos/donnees-ouvertes/trains/google_transit.zip", rail,
             lambda r: re.sub(r"^\d+\s*-\s*", "", long_name(r)).replace("/", "-")),
+    "coaster": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "COASTER", lambda r: "Coaster"),
+    "sprinter": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "SPRINTER", lambda r: "Sprinter"),
+    "atrain": ("https://gtfs.remix.com/dcta_denton_tx_us.zip", lambda r: r["route_long_name"] == "A-train", lambda r: "A-train"),
+    "tre": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "TRE", lambda r: "Trinity Railway Express"),
+    "silverline": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "SILVER", lambda r: "Silver Line"),
+    "texrail": ("https://gtfsdata.ridetm.org/gtfs/fwtatransitdata.zip", lambda r: r["route_short_name"] == "TEXRail", lambda r: "TEXRail"),
+    "star": ("https://www.wegotransit.com/googleexport/google_transit.zip", lambda r: r["route_id"] == "90", lambda r: "WeGo Star"),
+    "upx": ("https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/UP-GTFS.zip", anything, lambda r: "UP Express"),
+    # Ontario Northland files every route as a bus; its train is the Polar Bear Express (Cochrane-Moosonee).
+    # The feed already has the Northlander's proposed trips, but it is not carrying passengers yet
+    # (October 2026): add r["route_long_name"].startswith("Northlander") back when it is.
+    "ontarionorthland": ("https://ontarionorthland.tmix.se/gtfs/gtfs.zip",
+                         lambda r: "Moosonee" in r["route_long_name"],
+                         lambda r: "Polar Bear Express"),
 }
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 SPAN = 14
@@ -57,7 +71,12 @@ def get(url, attempts=4):
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     for attempt in range(attempts):
         try:
-            return zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=240).read()))
+            data = urllib.request.urlopen(req, timeout=240).read()
+            # A page that links the current file (named by date).
+            if data[:2] != b"PK":
+                href = re.search(rb'href="([^"]+\.zip)"', data, re.I).group(1).decode()
+                return get(urllib.parse.urljoin(url, href))
+            return zipfile.ZipFile(io.BytesIO(data))
         except Exception as err:
             if attempt == attempts - 1:
                 raise
@@ -79,6 +98,9 @@ def minutes(hms):
 
 
 STATIONS = {a: {r[0]: r[1] for r in rs} for a, rs in json.loads((DATA / "stations.json").read_text()).items()}
+# Railroads whose stations fold several stops by name (no ids in common with
+# data/stations.json): any named stop counts as a station.
+FOLDED = {a: (lambda s: bool(s.get("stop_name"))) for a in ("exo", "marc", "coaster", "sprinter")}
 EACH = 3  # trains kept per stretch
 
 
@@ -95,6 +117,16 @@ def build(agency, url, keep, line_name, today):
         d = datetime.datetime.strptime(c["date"], "%Y%m%d").date()
         if d in window:
             (days[c["service_id"]].add if c["exception_type"] == "1" else days[c["service_id"]].discard)(d)
+    # Only the next timetable published (DART): days before it takes effect
+    # run as the same weekday in its first week (as in build_schedules.py).
+    starts = [datetime.datetime.strptime(c["start_date"], "%Y%m%d").date() for c in rows(zf, "calendar.txt")]
+    starts += [datetime.datetime.strptime(c["date"], "%Y%m%d").date() for c in rows(zf, "calendar_dates.txt") if c["exception_type"] == "1"]
+    begins = min(starts, default=today)
+    if begins > today:
+        for dates in days.values():
+            for d in window:
+                if d < begins and next((d + datetime.timedelta(7 * k) for k in range(1, 3) if d + datetime.timedelta(7 * k) >= begins), None) in dates:
+                    dates.add(d)
     lines = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
     trips = {t["trip_id"]: t for t in rows(zf, "trips.txt") if t["route_id"] in lines and days.get(t["service_id"])}
     stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
@@ -105,7 +137,7 @@ def build(agency, url, keep, line_name, today):
             if k and k in names:
                 return names[k]
         n = (stops.get(s.get("parent_station") or "") or s).get("stop_name", "")
-        n = re.sub(r"\s+(Station|Stn)$", "", n)
+        n = re.sub(r"\s+(Platform\s+\d+|Station|Stn)$", "", n)
         return n.title() if n.isupper() else n
     first = {}  # trip id -> (dep, first stop id)
     for st in rows(zf, "stop_times.txt"):
@@ -113,6 +145,10 @@ def build(agency, url, keep, line_name, today):
         if tid not in trips:
             continue
         seq, dep = int(st["stop_sequence"]), st["departure_time"] or st["arrival_time"]
+        # Yard limits and other timing points aren't stations (DART's TRE trips start at one).
+        if names and not any(k in names for k in (stops.get(st["stop_id"], {}).get("parent_station"), st["stop_id"])) \
+                and not (agency in FOLDED and FOLDED[agency](stops.get(st["stop_id"], {}))):
+            continue
         if dep and (tid not in first or seq < first[tid][0]):
             first[tid] = (seq, minutes(dep), st["stop_id"])
     starts = [[] for _ in range(SPAN)]

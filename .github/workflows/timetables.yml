@@ -3,7 +3,9 @@ name: Refresh timetables
 # The timetable files cover two weeks from the day they're built, so they're
 # rebuilt every Monday (early morning in North America): CT Rail's, the
 # railroads placed or given stops from their timetables (South Shore, SunRail,
-# Rail Runner, exo, SEPTA), and each railroad's first trains (quiet hours).
+# Rail Runner, exo, SEPTA, Coaster, Sprinter, the Dallas-Fort Worth railroads,
+# WeGo Star, UP Express, the Polar Bear Express, the Alaska Railroad), and each
+# railroad's first trains (quiet hours).
 # Each build runs on its own, so one railroad's download failing doesn't stop
 # the rest. Run it by hand from the Actions tab too.
 on:
@@ -33,9 +35,9 @@ jobs:
         continue-on-error: true
         run: python3 scripts/build_ct.py
 
-      - name: Timetables for South Shore, SunRail, Rail Runner, exo and SEPTA
+      - name: Timetables
         run: |
-          for railroad in southshore sunrail railrunner exo septa; do
+          for railroad in southshore sunrail railrunner exo septa coaster sprinter atrain tre silverline texrail star upx ontarionorthland alaska; do
             python3 scripts/build_schedules.py "$railroad" || echo "::warning::$railroad timetable failed; keeping the last one"
           done
 

@@ -39,6 +39,16 @@ export const AGENCIES = {
   smart:      { name: "SMART",               short: "SMART",    region: "Sonoma–Marin",        color: "#3f9b3f", kind: "commuter" },
   metrolink:  { name: "Metrolink",           short: "Metrolink", region: "Los Angeles",        color: "#00a3ad", kind: "commuter" },
   sounder:    { name: "Sounder",             short: "Sounder",  region: "Seattle",             color: "#2a7f9e", kind: "commuter" },
+  coaster:    { name: "COASTER",             short: "COASTER",  region: "San Diego",           color: "#00459d", kind: "commuter" },
+  sprinter:   { name: "SPRINTER",            short: "SPRINTER", region: "Oceanside–Escondido", color: "#00ab9b", kind: "commuter" },
+  atrain:     { name: "DCTA A-train",        short: "A-train",  region: "Denton",              color: "#9a7b16", kind: "commuter" },
+  tre:        { name: "Trinity Railway Express", short: "TRE",  region: "Dallas–Fort Worth",   color: "#1d3a8a", kind: "commuter" },
+  silverline: { name: "DART Silver Line",    short: "Silver Line", region: "Dallas",           color: "#8a9097", kind: "commuter" },
+  texrail:    { name: "TEXRail",             short: "TEXRail",  region: "Fort Worth",          color: "#7d2248", kind: "commuter" },
+  star:       { name: "WeGo Star",           short: "Star",     region: "Nashville",           color: "#0a3d7a", kind: "commuter" },
+  upx:        { name: "UP Express",          short: "UP Express", region: "Toronto",           color: "#5a6b2f", kind: "commuter" },
+  ontarionorthland: { name: "Ontario Northland", short: "Ontario Northland", region: "Northern Ontario", color: "#0f2d5c", kind: "intercity" },
+  alaska:     { name: "Alaska Railroad",     short: "Alaska Railroad", region: "Alaska",       color: "#1b4f9c", kind: "intercity" },
 };
 
 const STALE_SECONDS = 20 * 60;
@@ -786,7 +796,8 @@ function gpsRunTrain(agency, tt, number, run, fields, { delay = 0, live = {}, tr
   });
 }
 
-// Rail Runner: no live data, so each train is placed from its timetable.
+// Railroads with no live data (Rail Runner, COASTER, TEXRail...): each train
+// is placed from its timetable.
 async function timetableTrains(agency) {
   const tt = await loadSchedule(agency);
   const now = nowSec(), out = [];
@@ -799,7 +810,9 @@ async function timetableTrains(agency) {
     const nextStop = prog.dwelling ? prog.at : prog.next;
     const name = (st) => tt.stops[st.stopId][0];
     out.push(train({
-      id: `${agency}:${number}`, agency, number, route: run.line,
+      // Railroads that don't number their trains publicly key each run by its
+      // direction and first departure ("0-0605"), shown without a number.
+      id: `${agency}:${number}`, agency, number: tt.unnumbered ? null : number, route: run.line,
       lat: prog.lat, lon: prog.lon, bearing: prog.bearing ?? null,
       origin: name(prog.list[0]), destination: name(prog.list[prog.list.length - 1]), nextStop: name(nextStop),
       statusText: prog.dwelling ? `At ${name(prog.at)}` : "Scheduled",
@@ -1194,6 +1207,19 @@ export const SOURCES = [
     credit: { label: "Rail Runner timetable", href: "https://riometro.org/" },
     load: async () => null, parse: () => timetableTrains("railrunner"),
   },
+  // No live positions published (COASTER, SPRINTER and the A-train report
+  // through Swiftly, which needs a key; DART, Trinity Metro, WeGo's Star, UP
+  // Express, Ontario Northland and the Alaska Railroad publish none for
+  // their trains): placed from the timetable.
+  ...[["coaster", "COASTER timetable", "https://gonctd.com/coaster/"], ["sprinter", "SPRINTER timetable", "https://gonctd.com/sprinter/"],
+      ["atrain", "DCTA timetable", "https://www.dcta.net/"], ["tre", "DART timetable", "https://www.dart.org/"],
+      ["silverline", "DART timetable", "https://www.dart.org/"], ["texrail", "Trinity Metro timetable", "https://ridetrinitymetro.org/texrail/"],
+      ["star", "WeGo timetable", "https://www.wegotransit.com/ride/wego-star/"], ["upx", "UP Express timetable", "https://www.upexpress.com/"],
+      ["ontarionorthland", "Ontario Northland timetable", "https://www.ontarionorthland.ca/"],
+      ["alaska", "Alaska Railroad timetable", "https://www.alaskarailroad.com/"]].map(([id, label, href]) => ({
+    id, agencies: [id], interval: 60, credit: { label, href },
+    load: async () => null, parse: () => timetableTrains(id),
+  })),
   {
     // No live positions published: the timetable, adjusted by MTA TrainTime's
     // New Haven board (fetched directly; it allows browsers).
@@ -1233,7 +1259,12 @@ export const SOURCES = [
   {
     id: "metrolink", agencies: ["metrolink"], format: "pb", interval: 30, relay: true, needsKey: "METROLINK_API_KEY",
     credit: { label: "Metrolink", href: "https://metrolinktrains.com/about/gtfs/" },
-    parse: async (buf) => gtfsVehicles("metrolink", buf, { route: (v) => v.trip?.routeId, west: (await loadTrips()).metrolink }),
+    // Arrow (San Bernardino–Redlands, trains 3800-3899) comes under the San Bernardino Line.
+    parse: async (buf) => {
+      const west = (await loadTrips()).metrolink;
+      const arrow = (v) => /^38\d\d$/.test(west.trips[v.trip?.tripId]?.[0] || v.vehicle?.label || "");
+      return gtfsVehicles("metrolink", buf, { route: (v) => (arrow(v) ? "Arrow" : v.trip?.routeId), west });
+    },
   },
 ];
 

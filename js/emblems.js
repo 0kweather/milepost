@@ -46,6 +46,20 @@ const LOGOS = {
   "via-leaf": [0.84, false],
   // VIA's yellow letters alone, as on the side of the SCV-42 and the Venture cab car.
   "via-word": [2.7, false],
+  // Texas: "TRINITY METRO TEXRail" as on the FLIRTs' cabs; the Trinity
+  // Railway Express star; DART's mark and the SILVERLINE wordmark; DCTA's
+  // A-train mark. Wikimedia Commons (public domain).
+  "tm-texrail": [3.133, false], "tre-nolabel": [1.68, true], dart: [0.952, true], silverline: [3.382, false], atrain: [3.077, false],
+  // North County Transit District (San Diego): the COASTER and SPRINTER
+  // wordmarks. Wikimedia Commons (public domain).
+  coaster: [8.942, true], sprinter: [9.157, true],
+  // The Alaska Railroad's emblem (the round ARR herald). Wikimedia Commons
+  // (public domain).
+  alaska: [1.0, false],
+  // UP Express's wordmark (2024), in the olive of its cars' lettering;
+  // Ontario Northland's logo and the Polar Bear Express emblem. Wikimedia
+  // Commons (public domain).
+  upx: [3.198, false], ontarionorthland: [10.818, true], polarbear: [1.0, false],
 };
 // Lettering with no logo file: Piedmont's locomotives and coaches carry
 // "North Carolina" in an upright serif on the side.
@@ -91,6 +105,18 @@ const LETTERING = {
   // the coaches (too small for the logo file to draw cleanly).
   "exo-word": { text: "exo", aspect: 2.32, color: "#1b1e2e", fit: "spacingAndGlyphs",
     font: 'font-family="Avenir Next, Futura, Century Gothic, Helvetica Neue, Arial, sans-serif" font-weight="700"' },
+  // The Alaska Railroad's name in tall navy serif capitals along the yellow
+  // band of its cars and locomotives.
+  "alaska-word": { text: "ALASKA", aspect: 4.6, color: "#16295a", fit: "spacing",
+    font: 'font-family="Clarendon, Rockwell, Georgia, Times New Roman, serif" font-weight="700"' },
+  // WeGo Star: "Star" big in white on the gray lower hood of its F40s,
+  // edged in purple.
+  "star-word": { text: "Star", aspect: 1.9, color: "#ffffff",
+    font: 'font-family="Avenir Next, Futura, Helvetica Neue, Arial, sans-serif" font-weight="700" font-style="italic" stroke="#5a3fb4" stroke-width="0.08" paint-order="stroke"' },
+  // Trinity Railway Express: its name in navy italic capitals along the
+  // upper level of the BiLevels.
+  "tre-word": { text: "TRINITY RAILWAY EXPRESS", aspect: 15, color: "#002269", fit: "spacingAndGlyphs",
+    font: 'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="700" font-style="italic"' },
 };
 const BY_AGENCY = { lirr: "mta", mnr: "mta" };
 
