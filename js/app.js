@@ -99,6 +99,11 @@ const state = {
   follow: false,
   query: "",
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
+  // The train a rider pressing locate seems to be on: { id, mph, at }.
+  rideGuess: null,
+  // Statuses told apart by shape as well as color, in colors that work
+  // with red-green colorblindness (css/design.css).
+  colorblind: store.get("tt-colorblind", false),
 };
 let goingBack = false; // going back doesn't count as opening something (for Recents)
 let islandsShown = new Map(); // tracked train id -> when its island first showed
@@ -114,6 +119,7 @@ let themePref = store.get("tt-theme", "auto");
 const resolveTheme = () => (themePref === "auto" ? (prefersDark.matches ? "dark" : "light") : themePref);
 let theme = resolveTheme();
 document.documentElement.dataset.theme = theme;
+document.documentElement.toggleAttribute("data-colorblind", state.colorblind);
 
 // ---------- Map ----------
 
@@ -132,7 +138,9 @@ const map = new maplibregl.Map({
 });
 map.touchZoomRotate.disableRotation();
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-map.addControl(new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 10 } }), "bottom-right");
+const geolocate = new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 10 } });
+map.addControl(geolocate, "bottom-right");
+geolocate.on("geolocate", () => watchRide()); // Which train am I on?
 // A scale bar in the chosen units, beside the panel (see design.css).
 const scaleBar = new maplibregl.ScaleControl({ maxWidth: 88, unit: state.units === "km" ? "metric" : "imperial" });
 map.addControl(scaleBar, "bottom-left");
@@ -1741,7 +1749,7 @@ function statusLabel(text) {
 
 // A station's next train: its plate, where it's going, the track as a
 // platform-sign badge, and a countdown tile (the clock time beneath).
-function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred, track }) {
+function departureRow({ id, color, badge, title, sub, time, tz, status, statusCls, inferred, track, likely }) {
   const min = time ? Math.round((time - Date.now()) / 60000) : null;
   const clock = time ? fmtTime(new Date(time).toISOString(), tz) : "";
   const big = min == null ? "—" : min <= 0 ? T("Now") : min < 60 ? `${min}<small>min</small>` : esc(clock);
@@ -1749,7 +1757,8 @@ function departureRow({ id, color, badge, title, sub, time, tz, status, statusCl
   const statusHtml = status ? `<span class="status-t ${statusCls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(status)}</span>` : "";
   const inner = `${plate(badge, color, "sm")}
     <span class="what"><span class="title">${esc(title)}</span><span class="sub">${[statusHtml, esc(sub || "")].filter(Boolean).join(" · ")}</span></span>
-    ${track ? `<span class="trk" title="${esc(T("Track {n}", { n: track }))}" aria-label="${esc(T("Track {n}", { n: track }))}">${esc(track)}</span>` : "<span></span>"}
+    ${track ? `<span class="trk" title="${esc(T("Track {n}", { n: track }))}" aria-label="${esc(T("Track {n}", { n: track }))}">${esc(track)}</span>`
+      : likely ? `<span class="trk likely" title="${esc(likely.title)}" aria-label="${esc(likely.title)}">${esc(likely.tracks.join("/"))}</span>` : "<span></span>"}
     <span class="cd${statusCls === "warn" || statusCls === "bad" ? ` ${statusCls}` : ""}${min >= 60 ? " far" : ""}"><strong>${big}</strong>${small ? `<span>${esc(small)}</span>` : ""}</span>`;
   return id
     ? `<button class="dep" data-select="${esc(id)}">${inner}</button>`
@@ -1803,14 +1812,18 @@ function renderStation() {
     const t = d.train, a = AGENCIES[t.agency];
     const time = (arrivals ? d.arr : d.dep) ?? d.time;
     const late = d.here ? { text: T("At station"), cls: "good" } : lateText(d.lateMin);
+    const track = d.track || (t.agency === "njt" && extras?.tracks?.get(String(t.number))) || null;
+    const likely = track ? null : usualTrack(st, t);
     rows.push({
       sort: time ?? Date.now(),
+      likely: Boolean(likely),
       html: departureRow({
         id: t.id, color: a.color, badge: t.number || a.short,
         title: arrivals ? (t.origin ? T("from {place}", { place: t.origin }) : trainTitle(t)) : t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t),
-        sub: [a.short, t.route].filter(Boolean).join(" · "),
+        // Arrivals say where the train is now, for whoever's meeting it.
+        sub: [arrivals && !d.here ? whereNow(t, st) : "", a.short, arrivals ? "" : t.route].filter(Boolean).join(" · "),
         time, tz: d.tz, status: late.text, statusCls: late.cls, inferred: Boolean(t.inferred) && !d.here,
-        track: d.track || (t.agency === "njt" && extras?.tracks?.get(String(t.number))) || null,
+        track, likely,
       }),
     });
   }
@@ -1866,6 +1879,57 @@ function renderStation() {
     ${noticesBlock(extras?.notices || [], null, T("Station notices"))}
     ${nextTrainsSection(rows, arrivals, loading)}
     ${atStation(st, extras)}`;
+}
+
+// Where an arriving train is now: standing at a station, or its next stop.
+function whereNow(t, st) {
+  const at = t.stops?.find((s) => s.here) || (t.statusText?.startsWith("At ") && { name: t.statusText.slice(3) });
+  if (at && !st.names.has(norm(at.name))) return T("now at {place}", { place: at.name });
+  const next = t.stops?.find((s) => s.status === "next")?.name || t.nextStop;
+  if (!next) return "";
+  return st.names.has(norm(next)) ? T("coming here next") : T("next stop {place}", { place: next });
+}
+
+// Usual tracks: at the big terminals a track goes up only minutes before a
+// train leaves. The relay notes the tracks posted there every day (GET
+// /tracks/:railroad/:stop); until a train's real one is posted, its row
+// shows the track it has used on most of its recent days, dashed.
+const USUAL_TRACK_STOPS = { lirr: ["237", "349", "241", "102"], mnr: ["1"], njt: ["NY", "HB", "NP", "SE"] };
+const usualTracks = new Map(); // "railroad:stop" -> { at, trains: { number: [[track, days], ...] } }
+const usualStop = (m) => (m.agency === "njt" ? m.code : m.id);
+function loadUsualTracks(st) {
+  if (!RELAY) return;
+  for (const m of st.members) {
+    const stop = usualStop(m), key = `${m.agency}:${stop}`, had = usualTracks.get(key);
+    if (!USUAL_TRACK_STOPS[m.agency]?.includes(stop) || (had && Date.now() - had.at < 30 * 60 * 1000)) continue;
+    usualTracks.set(key, { at: Date.now(), trains: had?.trains || {} }); // asked; not again for a while
+    fetch(`${RELAY.replace(/\/$/, "")}/tracks/${m.agency}/${encodeURIComponent(stop)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!json?.trains) return;
+        usualTracks.set(key, { at: Date.now(), trains: json.trains });
+        if (state.station === st.id) renderDetail();
+      })
+      .catch(() => {});
+  }
+}
+// One track it has used on at least 60% of its last days (three or more), or
+// two between them on 80%.
+function usualTrack(st, t) {
+  const m = t.number && st.members.find((x) => x.agency === t.agency);
+  const days = m && usualTracks.get(`${m.agency}:${usualStop(m)}`)?.trains?.[String(t.number)];
+  if (!days) return null;
+  const of = days.reduce((sum, [, n]) => sum + n, 0);
+  if (of < 3) return null;
+  const [a, b] = days;
+  if (a[1] / of >= 0.6) {
+    return { tracks: [a[0]], title: T("Not posted yet. Usually track {track}: {n} of its last {of} days.", { track: a[0], n: a[1], of }) };
+  }
+  if (b && (a[1] + b[1]) / of >= 0.8) {
+    const two = [a[0], b[0]].sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+    return { tracks: two, title: T("Not posted yet. Usually track {a} or {b}: {n} of its last {of} days.", { a: two[0], b: two[1], n: a[1] + b[1], of }) };
+  }
+  return null;
 }
 
 // At the station: what it has, from OpenStreetMap (data/amenities.json,
@@ -2425,7 +2489,8 @@ function nextTrainsSection(rows, arrivals, loading) {
       ${rows.length ? rows.slice(0, 14).map((r) => r.html).join("")
         : loading ? skeletonRows() : `<p class="empty">${T(arrivals ? "No live trains are reporting an arrival here right now." : "No live trains are reporting a departure here right now.")}</p>`}
     </div>
-    <p class="estimate-note">${T("Times are live predictions from each railroad.")}</p>` : ""}
+    <p class="estimate-note">${T("Times are live predictions from each railroad.")}${rows.slice(0, 14).some((r) => r.likely)
+      ? ` ${T("A dashed track isn't posted yet: it's where that train has usually been on recent days.")}` : ""}</p>` : ""}
   </section>`;
 }
 
@@ -2551,13 +2616,17 @@ function trackTo(t, key) {
     return renderDetail();
   }
   if (key === pick.from) { state.trackPick = null; return renderDetail(); }
-  // An earlier stop: that's where they got on instead.
-  if (at(key) < at(pick.from)) { state.trackPick = { id: t.id, from: key }; return renderDetail(); }
+  // An earlier stop: that's where they got on instead. (Picking started
+  // from "Which train am I on?" has none yet: a stop it has left is one.)
+  if (pick.from == null ? t.stops[at(key)]?.status === "past" : at(key) < at(pick.from)) {
+    state.trackPick = { id: t.id, from: key };
+    return renderDetail();
+  }
   state.trackPick = null;
-  const stop = t.stops[at(key)], start = t.stops[at(pick.from)];
+  const stop = t.stops[at(key)], start = pick.from == null ? null : t.stops[at(pick.from)];
   if (!rec) return startTracking(t, key, pick.from);
   // Already tracked: this ride replaces the last.
-  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, fromKey: start.key, fromName: start.name, eta: Date.parse(stop.time) || null });
+  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, fromKey: start?.key || null, fromName: start?.name || null, eta: Date.parse(stop.time) || null });
   saveTracked();
   checkTracked();
   renderAll();
@@ -2566,8 +2635,9 @@ function trackTo(t, key) {
 function renderTracked() {
   const el = $("tracked");
   if (!el) return;
-  el.hidden = !state.tracked.length;
-  el.innerHTML = state.tracked.map((rec) => {
+  const guess = rideGuessCard();
+  el.hidden = !state.tracked.length && !guess;
+  el.innerHTML = guess + state.tracked.map((rec) => {
     const t = trackedTrain(rec);
     const a = AGENCIES[rec.agency] || { color: "#888", short: "" };
     let where = "", status = "", warn = "";
@@ -2613,14 +2683,15 @@ function renderTracked() {
   // A train just tracked grows out of a pill, like the Dynamic Island. A
   // redraw midway picks the animation up where it was.
   const now = Date.now();
+  const keyOf = (card) => card.dataset.trackOpen || `guess:${card.dataset.rideGuess}`;
   for (const card of el.children) {
-    const since = now - (islandsShown.get(card.dataset.trackOpen) ?? now);
+    const since = now - (islandsShown.get(keyOf(card)) ?? now);
     if (since < 600) {
       card.classList.add("enter");
       card.style.setProperty("--enter-at", `${-since}ms`);
     }
   }
-  islandsShown = new Map(state.tracked.map((r) => [r.id, islandsShown.get(r.id) ?? now]));
+  islandsShown = new Map([...el.children].map((card) => [keyOf(card), islandsShown.get(keyOf(card)) ?? now]));
   // On phones, keep the cards visible when the sheet is collapsed.
   document.documentElement.style.setProperty("--tracked-h", `${el.hidden || !isPhone ? 0 : el.offsetHeight}px`);
 }
@@ -2649,6 +2720,105 @@ async function shareRide(rec) {
     toast(T("Link copied."));
   } catch {
     toast(url);
+  }
+}
+
+// ---------- Which train am I on? ----------
+// Pressing locate while riding: if the rider is moving at train speed and a
+// train on the map is where they are, going their way (and about as fast,
+// where it reports a speed), Trainsheet offers to track it. One fix rarely
+// has a speed, so fixes are watched for up to 30 seconds after the press.
+// Nothing is kept or sent anywhere.
+const RIDE_MIN_MPS = 6.7;    // 15 mph: slower than this isn't riding a train
+const RIDE_WATCH_MS = 30000;
+const RIDE_GUESS_MS = 10 * 60 * 1000; // an unanswered guess goes away after this
+const MPS_PER_MPH = 0.44704;
+let rideWatch = null;                 // { id, timer, fixes }
+const rideDismissed = new Set();      // trains the rider said they're not on, this visit
+
+function watchRide() {
+  if (rideWatch || !navigator.geolocation) return;
+  rideWatch = { fixes: [], timer: setTimeout(stopRideWatch, RIDE_WATCH_MS) };
+  rideWatch.id = navigator.geolocation.watchPosition(onRideFix, stopRideWatch, { enableHighAccuracy: true, maximumAge: 0, timeout: RIDE_WATCH_MS });
+}
+function stopRideWatch() {
+  if (!rideWatch) return;
+  navigator.geolocation.clearWatch(rideWatch.id);
+  clearTimeout(rideWatch.timer);
+  rideWatch = null;
+}
+const compassBearing = (a, b) => {
+  const r = Math.PI / 180, y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+};
+function onRideFix(pos) {
+  const c = pos.coords, w = rideWatch;
+  if (!w || !(c.accuracy <= 500)) return;
+  const fix = { lat: c.latitude, lon: c.longitude, at: pos.timestamp || Date.now(), acc: c.accuracy };
+  w.fixes.push(fix);
+  // Speed and heading as the device reports them, else from the first fix.
+  let speed = Number.isFinite(c.speed) ? c.speed : null, heading = Number.isFinite(c.heading) && speed > 1 ? c.heading : null;
+  const first = w.fixes[0], secs = (fix.at - first.at) / 1000, moved = meters(first, fix);
+  if (speed == null && secs >= 4) speed = moved / secs;
+  if (heading == null && secs >= 4 && moved > 30) heading = compassBearing(first, fix);
+  if (speed == null || speed < RIDE_MIN_MPS) return;
+  const t = trainHere(fix, speed, heading);
+  if (!t) return;
+  stopRideWatch();
+  state.rideGuess = { id: t.id, mph: speed / MPS_PER_MPH, at: Date.now() };
+  renderTracked();
+}
+// The train nearest the rider that could be the one they're on. A train's
+// position can be a minute or two old, so the rider may be that much
+// further along.
+function trainHere(fix, speed, heading) {
+  let best = null;
+  for (const t of state.trains.values()) {
+    if (!inLists(t) || rideDismissed.has(t.id) || state.tracked.some((r) => r.id === t.id)) continue;
+    const p = state.display.get(t.id) || targetOf(t);
+    const age = Math.min(120, Math.max(0, (Date.now() - (t.fixAt || t.updated || Date.now())) / 1000));
+    const allowed = Math.min(3000, 400 + fix.acc + age * speed);
+    const d = meters(fix, p);
+    if (d > allowed) continue;
+    const b = t.bearing ?? state.est.get(t.id)?.bearing;
+    if (heading != null && b != null && Math.abs(((heading - b) % 360 + 540) % 360 - 180) > 50) continue;
+    if (t.speedMph != null && !t.estimated && Math.abs(t.speedMph * MPS_PER_MPH - speed) > Math.max(4.5, 0.35 * speed)) continue;
+    if (!best || d / allowed < best.score) best = { t, score: d / allowed };
+  }
+  return best?.t || null;
+}
+// The guess, as an island over the tracked trains: track it, or say no.
+function rideGuessCard() {
+  const g = state.rideGuess, t = g && state.trains.get(g.id);
+  if (!t || Date.now() - g.at > RIDE_GUESS_MS || state.tracked.some((r) => r.id === t.id)) {
+    state.rideGuess = null;
+    return "";
+  }
+  const a = AGENCIES[t.agency], km = state.units === "km";
+  const speed = `${Math.round(km ? g.mph * KM_PER_MI : g.mph)} ${km ? "km/h" : T("mph")}`;
+  const next = t.stops?.find((s) => s.status === "next")?.name || t.nextStop;
+  return `<div class="track-card live guess" style="--c:${t.routeColor || a.color}" data-ride-guess="${esc(t.id)}">
+      <div class="la-top">${plate(t.number || a.short, a.color, "xs")}<span class="la-route">${esc(T("Are you on this train?"))}</span>
+        <button class="tc-x" data-ride-no aria-label="${T("Not this train")}" title="${T("Not this train")}">×</button></div>
+      <div class="la-where">${esc(T("Moving with you at {speed}", { speed }))}${next ? ` · ${T("Next:")} <strong>${esc(next)}</strong>` : ""}</div>
+      <button type="button" class="guess-go" data-ride-yes>${T("Track this ride")}</button>
+    </div>`;
+}
+function answerRideGuess(id, answer) {
+  const t = state.trains.get(id);
+  state.rideGuess = null;
+  if (answer === "no") rideDismissed.add(id);
+  if (!t || answer === "no") return renderTracked();
+  if (answer === "open") { renderTracked(); return select(id); }
+  // With a stop list, the rider taps where they're getting off (or where
+  // they got on, then that); otherwise it's tracked to the end.
+  if (t.stops?.some((s) => s.status !== "past")) {
+    state.trackPick = { id, from: null };
+    renderTracked();
+    select(id);
+  } else {
+    startTracking(t, null);
   }
 }
 
@@ -2817,6 +2987,7 @@ async function refreshPredictions(st) {
 // A station's notices, and its NJ Transit departure board for the tracks
 // (through the relay).
 async function refreshStationExtras(st) {
+  loadUsualTracks(st);
   const njt = st.members.find((m) => m.agency === "njt" && m.code);
   const mbta = st.members.find((m) => m.agency === "mbta");
   const amtrak = st.members.find((m) => m.agency === "amtrak");
@@ -3026,6 +3197,8 @@ map.on("dragstart", () => state.follow && setFollow(false));
 
 on("back-btn", "click", closeDetail);
 on("tracked", "click", (e) => {
+  const guess = e.target.closest("[data-ride-guess]");
+  if (guess) return answerRideGuess(guess.dataset.rideGuess, e.target.closest("[data-ride-no]") ? "no" : e.target.closest("[data-ride-yes]") ? "yes" : "open");
   const share = e.target.closest("[data-share-ride]");
   if (share) return shareRide(state.tracked.find((r) => r.id === share.dataset.shareRide));
   const x = e.target.closest("[data-untrack]");
@@ -3331,6 +3504,11 @@ on("only-tracked-toggle", "change", (e) => {
   redraw();
   renderAll();
 });
+on("colorblind-toggle", "change", (e) => {
+  state.colorblind = e.target.checked;
+  store.set("tt-colorblind", state.colorblind);
+  document.documentElement.toggleAttribute("data-colorblind", state.colorblind);
+});
 on("clock-toggle", "change", (e) => {
   state.clock24 = e.target.checked;
   store.set("tt-clock24", state.clock24);
@@ -3494,6 +3672,7 @@ applyUnits();
 setChecked("stations-toggle", state.showStations);
 setChecked("estimated-toggle", state.hideEstimated);
 setChecked("clock-toggle", state.clock24);
+setChecked("colorblind-toggle", state.colorblind);
 setChecked("only-tracked-toggle", state.onlyTracked);
 applyLabels();
 setChecked("infer-toggle", state.inferDelays);

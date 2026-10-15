@@ -9,6 +9,8 @@
 //   GET /status      -> { feeds: { septa: true, metra: false, ... } }
 //   GET /njt-board/:code -> one NJ Transit station's DepartureVision board
 //                       (tracks and statuses), as JSON.
+//   GET /tracks/:railroad/:stop -> the tracks each train has left a big
+//                       terminal from on recent days (see Usual tracks).
 //   GET /feed/:id    -> the upstream feed, byte for byte. For railroads that
 //                       publish positions and predicted stop times as two
 //                       GTFS-realtime feeds, both, back to back: concatenated
@@ -17,7 +19,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (mta consists)";
+const RELAY_VERSION = "2026-10-14 (usual tracks)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -534,19 +536,150 @@ async function fetchNjtDv(ctx, env) {
   return Response.json(njtMem.json);
 }
 
-// Shared storage for every copy of the relay: a small JSON record.
+// ---------- Usual tracks ----------
+// At the big terminals a train's track goes up only minutes before it
+// leaves. Every five minutes (a Cron Trigger, wrangler.toml) the relay notes
+// the tracks posted for trains about to leave them, one per train per day,
+// in the Store; a station's page asks which tracks each train has left from
+// on its last ten recorded days, to show until the real one is posted.
+// Amtrak isn't covered: Amtraker almost never has its platforms.
+const TRACK_STOPS = { lirr: ["237", "349", "241", "102"], mnr: ["1"], njt: ["NY", "HB", "NP", "SE"] };
+const MTA_RT = {
+  lirr: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/lirr%2Fgtfs-lirr",
+  mnr: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/mnr%2Fgtfs-mnr",
+};
+const TRACK_KEEP_DAYS = 21;
+const TRACK_LAST_DAYS = 10;
+const tracksMem = new Map(); // "railroad:stop" -> { at, json }
+const tracksStore = (env) => env.STORE.get(env.STORE.idFromName("tracks"));
+
+// The service day a departure belongs to, in New York: trains after
+// midnight count with the day before.
+const nyDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+const serviceDay = (ms) => nyDate.format(new Date(ms - 3 * 3600 * 1000));
+
+// Reading the GTFS-realtime protobuf with the helpers above.
+const pbText = (b, x) => (x ? new TextDecoder().decode(b.subarray(x.vs, x.ve)) : "");
+const intField = (b, from, to, f) => { for (const x of fieldsOf(b, from, to)) if (x.f === f && x.w === 0) return varint(b, x.vs)[0]; return 0; };
+// The train number, as the site reads it (js/sources.js): from LIRR's trip
+// id, or Metro-North's vehicle label.
+const lirrNumber = (id) => id.match(/^[A-Z]+\d*_\d+_(\d+)/)?.[1] || id.match(/^(\d+)[A-Z]?_\d{4}-\d{2}-\d{2}$/)?.[1] || id.split("_").pop();
+
+// Tracks posted at the watched stations for departures between 8 minutes
+// ago and 20 minutes from now (the MTA's railroad extension, field 1005).
+function mtaTracks(rr, b, now) {
+  const stops = new Set(TRACK_STOPS[rr]), out = [];
+  const entities = [...fieldsOf(b)].filter((x) => x.f === 2 && x.w === 2);
+  const labels = new Map(); // trip id -> vehicle label
+  for (const e of entities) {
+    const v = child(b, e.vs, e.ve, 4);
+    const trip = v && child(b, v.vs, v.ve, 1), veh = v && child(b, v.vs, v.ve, 8);
+    const label = veh && pbText(b, child(b, veh.vs, veh.ve, 2));
+    if (trip && label) labels.set(pbText(b, child(b, trip.vs, trip.ve, 1)), label);
+  }
+  for (const e of entities) {
+    const tu = child(b, e.vs, e.ve, 3);
+    if (!tu) continue;
+    // The label is on the trip update, the vehicle in the same entity, or
+    // a vehicle entity of its own.
+    const trip = child(b, tu.vs, tu.ve, 1), own = child(b, e.vs, e.ve, 4);
+    const veh = child(b, tu.vs, tu.ve, 3) || (own && child(b, own.vs, own.ve, 8));
+    const tripId = trip ? pbText(b, child(b, trip.vs, trip.ve, 1)) : "";
+    const label = (veh && pbText(b, child(b, veh.vs, veh.ve, 2))) || labels.get(tripId) || "";
+    const train = rr === "mnr" ? label : lirrNumber(tripId);
+    if (!train || /^[A-Z]+\d/.test(train)) continue; // Metro-North's buses ("EB1973")
+    for (const s of fieldsOf(b, tu.vs, tu.ve)) {
+      if (s.f !== 2 || s.w !== 2) continue;
+      const stop = pbText(b, child(b, s.vs, s.ve, 4));
+      if (!stops.has(stop)) continue;
+      const ext = child(b, s.vs, s.ve, 1005);
+      const track = ext ? pbText(b, child(b, ext.vs, ext.ve, 1)).trim() : "";
+      const ev = child(b, s.vs, s.ve, 3) || child(b, s.vs, s.ve, 2);
+      const at = ev ? intField(b, ev.vs, ev.ve, 2) * 1000 : 0;
+      if (track && at > now - 8 * 60000 && at < now + 20 * 60000) out.push({ rr, stop, train, day: serviceDay(at), track });
+    }
+  }
+  return out;
+}
+
+// NJ Transit's boards: a track shows once the train is boarding.
+async function njtTracks(now) {
+  const out = [];
+  const boards = await Promise.allSettled(TRACK_STOPS.njt.map((s) => njtGql(BOARD_FULL_Q, { s })));
+  boards.forEach((r, i) => {
+    for (const it of r.value?.getTrainDepartureScreens?.items || []) {
+      const mins = minutesUntil(it.departureDate, now), track = String(it.track || "").trim();
+      if (!it.trainID || !track || mins == null || mins < -8 || mins > 20) continue;
+      out.push({ rr: "njt", stop: TRACK_STOPS.njt[i], train: String(it.trainID), day: serviceDay(now + mins * 60000), track });
+    }
+  });
+  return out;
+}
+
+async function recordTracks(env) {
+  if (!env.STORE) return;
+  const now = Date.now();
+  const found = await Promise.allSettled([
+    ...Object.entries(MTA_RT).map(async ([rr, url]) => {
+      const res = await fetch(url, { headers: { "User-Agent": "Trainsheet relay" } });
+      if (!res.ok) throw new Error(`${rr} HTTP ${res.status}`);
+      return mtaTracks(rr, new Uint8Array(await res.arrayBuffer()), now);
+    }),
+    njtTracks(now),
+  ]);
+  for (const r of found) if (r.status === "rejected") console.warn("tracks", r.reason?.message);
+  const rows = found.flatMap((r) => r.value || []);
+  if (rows.length) await tracksStore(env).fetch("https://store/tracks/record", { method: "POST", body: JSON.stringify(rows) });
+}
+
+// Shared storage for every copy of the relay: a small JSON record (NJ
+// Transit's token), and in its own copy a table of the usual tracks.
 export class Store {
   constructor(ctx) { this.ctx = ctx; }
   async fetch(request) {
+    const { pathname, searchParams } = new URL(request.url);
+    if (pathname === "/tracks/record") return this.recordTracks(await request.json());
+    if (pathname === "/tracks/query") return Response.json(this.queryTracks(searchParams.get("rr"), searchParams.get("stop")));
     if (request.method === "POST") {
       await this.ctx.storage.put("data", await request.json());
       return new Response("ok");
     }
     return Response.json((await this.ctx.storage.get("data")) || {});
   }
+  tracks() {
+    const sql = this.ctx.storage.sql;
+    sql.exec("CREATE TABLE IF NOT EXISTS tracks (rr TEXT, stop TEXT, train TEXT, day TEXT, track TEXT, PRIMARY KEY (rr, stop, train, day))");
+    sql.exec("CREATE INDEX IF NOT EXISTS tracks_day ON tracks (day)");
+    return sql;
+  }
+  // The latest track seen for each train's departure that day; a row is only
+  // written when it's new or the track changed.
+  recordTracks(rows) {
+    const sql = this.tracks();
+    for (const r of rows) {
+      sql.exec("INSERT INTO tracks VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET track = excluded.track WHERE track <> excluded.track",
+        r.rr, r.stop, r.train, r.day, r.track);
+    }
+    sql.exec("DELETE FROM tracks WHERE day < ?", serviceDay(Date.now() - TRACK_KEEP_DAYS * 86400000));
+    return new Response("ok");
+  }
+  // Each train's tracks on its last ten recorded days, most used first:
+  // { "1514": [["3", 8], ["5", 2]] }.
+  queryTracks(rr, stop) {
+    const rows = this.tracks().exec(`SELECT train, track, COUNT(*) AS n FROM (
+        SELECT train, track, ROW_NUMBER() OVER (PARTITION BY train ORDER BY day DESC) AS k FROM tracks WHERE rr = ? AND stop = ?
+      ) WHERE k <= ? GROUP BY train, track ORDER BY train, n DESC`, rr, stop, TRACK_LAST_DAYS).toArray();
+    const trains = {};
+    for (const r of rows) (trains[r.train] ||= []).push([r.track, r.n]);
+    return { trains };
+  }
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(recordTracks(env).catch((err) => console.warn("tracks", err.message)));
+  },
+
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
     const { pathname } = new URL(request.url);
@@ -555,7 +688,7 @@ export default {
       const feeds = Object.fromEntries(Object.entries(FEEDS).map(([id, f]) => [id, Boolean(f(env))]));
       // Which code is deployed, and whether optional keys are visible to it
       // (true/false only), for checking a deploy.
-      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD) };
+      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD), tracks: Boolean(env.STORE) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
     }
 
@@ -614,6 +747,23 @@ export default {
         return Response.json({ configured: list != null, server: njtServer, vehicles: list?.length ?? 0, sample: list?.[0] ? { id: list[0].id, line: list[0].line, next: list[0].next } : null }, { headers: CORS });
       } catch (err) {
         return Response.json({ configured: true, error: err.message }, { status: 502, headers: CORS });
+      }
+    }
+
+    const usual = pathname.match(/^\/tracks\/(lirr|mnr|njt)\/([A-Z0-9]{1,4})$/);
+    if (usual) {
+      const [, rr, stop] = usual, key = `${rr}:${stop}`;
+      if (!env.STORE || !TRACK_STOPS[rr].includes(stop)) return new Response("Not recorded", { status: 404, headers: CORS });
+      const headers = { ...CORS, "Cache-Control": "public, max-age=600" };
+      const hit = tracksMem.get(key);
+      if (hit && Date.now() - hit.at < 10 * 60 * 1000) return Response.json(hit.json, { headers });
+      try {
+        const q = new URLSearchParams({ rr, stop });
+        const json = { at: Date.now(), ...(await (await tracksStore(env).fetch(`https://store/tracks/query?${q}`)).json()) };
+        tracksMem.set(key, { at: json.at, json });
+        return Response.json(json, { headers });
+      } catch (err) {
+        return new Response(`Store error: ${err.message}`, { status: 502, headers: CORS });
       }
     }
 

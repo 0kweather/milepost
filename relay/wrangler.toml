@@ -13,3 +13,8 @@ class_name = "Store"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Store"]
+
+# Every five minutes: note the tracks posted at the big terminals, for each
+# station's usual tracks (GET /tracks/...).
+[triggers]
+crons = ["*/5 * * * *"]

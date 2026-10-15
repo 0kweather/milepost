@@ -322,4 +322,20 @@ export default {
     "La page d’une gare liste les prochains départs et arrivées de tous les réseaux qui y passent, avec les voies, les avis de service et l’accès de plain-pied lorsque les réseaux les publient.",
   "That's the tour": "Fin de la visite",
   "Enjoy the trains. You can take the tour again from Settings.": "Bon voyage! Vous pouvez refaire la visite depuis les Réglages.",
+
+  // ----- Colorblind-friendly, usual tracks, arrivals, which train -----
+  "Colorblind-friendly": "Adapté au daltonisme",
+  "Late and on-time trains told apart by shape as well as color, in colors that work with red-green colorblindness":
+    "Trains à l’heure et en retard distingués par la forme autant que par la couleur, dans des couleurs adaptées au daltonisme rouge-vert",
+  "Not posted yet. Usually track {track}: {n} of its last {of} days.": "Pas encore affichée. D’habitude voie {track} : {n} de ses {of} derniers jours.",
+  "Not posted yet. Usually track {a} or {b}: {n} of its last {of} days.": "Pas encore affichée. D’habitude voie {a} ou {b} : {n} de ses {of} derniers jours.",
+  "A dashed track isn't posted yet: it's where that train has usually been on recent days.":
+    "Une voie en pointillé n’est pas encore affichée : c’est celle que ce train a eue le plus souvent ces derniers jours.",
+  "now at {place}": "maintenant à {place}",
+  "coming here next": "prochain arrêt ici",
+  "next stop {place}": "prochain arrêt {place}",
+  "Are you on this train?": "Êtes-vous dans ce train?",
+  "Not this train": "Pas ce train",
+  "Moving with you at {speed}": "Roule avec vous à {speed}",
+  "Track this ride": "Suivre ce trajet",
 };

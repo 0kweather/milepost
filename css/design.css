@@ -234,6 +234,8 @@ html, body {
   background: #121417; color: #fff; font-size: 13px; font-weight: 800; letter-spacing: 0;
 }
 :root[data-theme="dark"] .trk { background: #f2f2f7; color: #121417; }
+/* A usual track, not yet posted: the same sign, dashed and empty. */
+:root .trk.likely { background: transparent; color: var(--muted); border: 1.5px dashed var(--faint); }
 .cd { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cd strong { font-family: var(--font-rounded); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
 .cd strong small { font-size: 11px; font-weight: 600; margin-left: 1px; color: var(--muted); }
@@ -618,3 +620,33 @@ kbd {
 .crowd { overflow: hidden; }
 .crowd-cars { min-width: 0; }
 .cc { min-width: 0; }
+
+/* ---------- Which train am I on? ----------
+ * The guess sits with the tracked trains as one more island: a question,
+ * how fast the rider is going, and a button to track it. */
+.tracked .live.guess { cursor: default; }
+.live .guess-go {
+  justify-self: start; margin-top: 2px; padding: 7px 14px; border: 0; border-radius: var(--r-pill, 999px);
+  background: #fff; color: #000; font: inherit; font-size: var(--fs-sm); font-weight: 700; cursor: pointer;
+}
+.live .guess-go:hover { background: rgba(255, 255, 255, 0.86); }
+.live .guess-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Colorblind-friendly ----------
+ * Settings, Appearance. Green, orange and red are hard to tell apart with
+ * red-green colorblindness, so statuses take blue, orange and magenta
+ * (Paul Tol's "vibrant" colors), and each gets a shape too: a circle for on
+ * time, a triangle for late, a diamond for very late. */
+:root[data-colorblind] { --good: #0077bb; --warn: #c25a00; --bad: #cc3377; }
+:root[data-colorblind][data-theme="dark"] { --good: #33bbee; --warn: #ee7733; --bad: #ee3377; }
+:root[data-colorblind] :is(.status, .pill, .status-t):is(.good, .warn, .bad)::before {
+  content: ""; display: inline-block; width: 0.62em; height: 0.62em; margin-right: 0.32em; vertical-align: 0.04em;
+  background: currentColor;
+}
+:root[data-colorblind] :is(.status, .pill, .status-t).good::before { border-radius: 50%; }
+:root[data-colorblind] :is(.status, .pill, .status-t).warn::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); width: 0.7em; }
+:root[data-colorblind] :is(.status, .pill, .status-t).bad::before { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); width: 0.72em; height: 0.72em; vertical-align: -0.02em; }
+/* The tracked cards are always dark, with their own status colors. */
+:root[data-colorblind] .la-where .status.good { color: #33bbee; }
+:root[data-colorblind] .la-where .status.warn { color: #ee7733; }
+:root[data-colorblind] .la-where .status.bad { color: #ee3377; }
