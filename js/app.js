@@ -818,8 +818,13 @@ function railCollection() {
 
 function redrawRail() {
   map.getSource("rail")?.setData(railCollection());
-  map.getSource("disruptions")?.setData({ type: "FeatureCollection", features: disruptionFeatures() });
+  redrawDisruptions();
   applyFocus();
+}
+// Only the disruptions' own small source: redrawing the rail source would
+// re-send every track to the map (and, during startup, hold up its load).
+function redrawDisruptions() {
+  map.getSource("disruptions")?.setData({ type: "FeatureCollection", features: disruptionFeatures() });
 }
 
 // ---------- Disruptions ----------
@@ -835,7 +840,7 @@ let disruptionGeo = null;  // their features, traced once the track and stations
 async function refreshDisruptions() {
   disruptions = await loadDisruptions().catch(() => disruptions);
   disruptionGeo = null;
-  redrawRail();
+  redrawDisruptions();
 }
 setInterval(() => !document.hidden && refreshDisruptions(), 5 * 60 * 1000);
 
@@ -971,6 +976,7 @@ function loadRail() {
       redrawRail();
       state.rail = new RailIndex(geojson);
       disruptionGeo = null;
+      redrawDisruptions(); // traced along the track, now it's indexed
       snapCache.clear();
       snapStations();
       computePositions();
