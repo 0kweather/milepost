@@ -1,6 +1,6 @@
 """Build data/schedules/<railroad>.json: two weeks of timetable for railroads
 whose live data gives a train's number but not its stops (South Shore Line,
-SunRail), or no live data at all (Rail Runner, placed from the timetable).
+SunRail, SEPTA), or no live data at all (Rail Runner, placed from the timetable).
 
 Output: {"start": "YYYY-MM-DD", "tz": IANA zone, "stops": {stop id: [name, lat, lon]},
          "trips": {train number: [[days, line, [[stop id, arr, dep], ...]], ...]}}
@@ -27,6 +27,10 @@ FEEDS = {
     # "102 Express" -> "102"
     "railrunner": ("https://mjcaction.com/MJC_GTFS_Public/nmrailrunner_google_transit.zip", lambda r: r["route_id"] == "rr",
                    lambda r: "Rail Runner", lambda t: t["trip_short_name"].split()[0] if t["trip_short_name"] else None),
+    # SEPTA Regional Rail: its live feed names each train's next stop only.
+    "septa": ("https://files.mobilitydatabase.org/mdb-503/latest.zip", lambda r: True,
+              lambda r: (lambda n: n if n.endswith("Line") else n + " Line")(r["route_long_name"].strip()),
+              lambda t: re.sub(r"^[A-Z]+", "", t["trip_short_name"]) or None),
     # exo: platforms fold into stations by name (as in build_stations.py).
     "exo": ("https://exo.quebec/uploads/ressources-telechargeables/a-propos/donnees-ouvertes/trains/google_transit.zip",
             lambda r: r["route_type"] == "2", lambda r: re.sub(r"^\d+\s*-\s*", "", r["route_long_name"]).replace("/", "-"),
@@ -35,6 +39,8 @@ FEEDS = {
 # Live feeds that name a train only by its trip id, or stops only by code, get
 # lookups for them: "ids" {trip id: number}, "codes" {stop code: station id}.
 LOOKUPS = {"exo"}
+# Railroads whose trains through the city are split into a trip per line.
+JOIN = {"septa"}
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
@@ -91,6 +97,24 @@ def build(agency, url, keep, line_name, number_of, stations, station_by=None):
             if sid in stations:
                 times[st["trip_id"]].append((int(st["stop_sequence"]), sid, minutes(st["arrival_time"] or st["departure_time"]),
                                              minutes(st["departure_time"] or st["arrival_time"])))
+    # A train through the city is two trips (one per line) with one number
+    # (SEPTA's PAO3549 then WTR3549): joined into one run, in time order.
+    if agency in JOIN:
+        joined = {}
+        for trip_id, seq in times.items():
+            t = trips[trip_id]
+            k = (number_of(t), t["service_id"])
+            joined.setdefault(k, (trip_id, []))[1].extend(seq)
+        times = {}
+        for trip_id, seq in joined.values():
+            seq.sort(key=lambda x: (x[2], x[3]))
+            out_seq = []
+            for i, (seq_no, sid, arr, dep) in enumerate(seq):
+                if out_seq and out_seq[-1][1] == sid:
+                    out_seq[-1] = (out_seq[-1][0], sid, out_seq[-1][2], max(dep, out_seq[-1][3]))
+                else:
+                    out_seq.append((i, sid, arr, dep))
+            times[trip_id] = out_seq
     patterns = defaultdict(dict)  # number -> {(line, stops): mask}
     for trip_id, seq in times.items():
         t = trips[trip_id]

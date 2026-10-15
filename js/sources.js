@@ -995,25 +995,33 @@ function gtfsVehicles(agency, buf, { keep = () => true, route, number, destinati
 
 // ---------- SEPTA ----------
 
-function parseSepta(json) {
+// TrainView gives each train's position, next stop and delay; its stops and
+// their times come from SEPTA's timetable (data/schedules/septa.json, by train
+// number), shifted by the delay.
+async function parseSepta(json) {
+  const tt = await loadSchedule("septa").catch(() => null);
+  const now = nowSec();
+  const idOf = tt ? new Map(Object.entries(tt.stops).map(([id, [name]]) => [nameKey(name), id])) : new Map();
   return json
     // TrainView keeps some parked trains listed as many hours "late"; skip them.
     .filter((t) => valid(+t.lat, +t.lon) && !(t.late > 600))
-    .map((t) => train({
-      id: `septa:${t.trainno}`,
-      agency: "septa",
-      number: t.trainno,
-      route: /line$/i.test(t.line) ? t.line : `${t.line} Line`,
-      lat: +t.lat, lon: +t.lon,
-      bearing: t.heading != null && t.heading !== "" ? +t.heading : null,
-      origin: t.SOURCE,
-      destination: t.dest,
-      nextStop: t.nextstop,
-      currentStop: t.currentstop,
-      delayMin: t.late,
-      statusText: delayText(t.late),
-      cars: t.consist ? { numbers: t.consist.split(",").map((c) => c.trim()).filter(Boolean), complete: true } : null,
-    }));
+    .map((t) => {
+      const number = String(t.trainno);
+      const fields = {
+        route: /line$/i.test(t.line) ? t.line : `${t.line} Line`,
+        lat: +t.lat, lon: +t.lon,
+        bearing: t.heading != null && t.heading !== "" ? +t.heading : null,
+        destination: t.dest,
+        nextStop: t.nextstop,
+        currentStop: t.currentstop,
+        delayMin: t.late,
+        statusText: delayText(t.late),
+        cars: t.consist ? { numbers: t.consist.split(",").map((c) => c.trim()).filter(Boolean), complete: true } : null,
+      };
+      const run = tt && runNow(tt, number, now, 3 * 3600);
+      if (!run) return train({ id: `septa:${number}`, agency: "septa", number, origin: t.SOURCE, ...fields });
+      return gpsRunTrain("septa", tt, number, run, fields, { delay: (+t.late || 0) * 60, nextId: idOf.get(nameKey(t.nextstop)) || null, now });
+    });
 }
 
 // ---------- Source table ----------

@@ -1572,11 +1572,11 @@ function renderDetail() {
       </div>
       ${consistSection(t)}
     </div>
-    ${onBoardFor(t)}
     ${crowdSection(t)}
     ${noticesHtml(t)}
     ${tiles}
-    ${stops}`;
+    ${stops}
+    ${onBoardFor(t)}`;
   el.scrollTop = keepScroll;
   const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
   if (strip) strip.scrollLeft = stripScroll.get(t.id) || 0;
