@@ -17,7 +17,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (mta crowd)";
+const RELAY_VERSION = "2026-10-14 (mta consists)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -557,6 +557,19 @@ export default {
       // (true/false only), for checking a deploy.
       const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
+    }
+
+    // Every LIRR and Metro-North train's cars, in order: [number, model,
+    // locomotive?], for drawing the real trains.
+    if (pathname === "/mta-consists") {
+      try {
+        await mtaCrowd("LIRR", "");
+        const trains = {};
+        for (const [k, c] of traintimeMem.byKey) trains[k] = c.cars.map((x) => [x.no, x.type, x.loco ? 1 : 0]);
+        return Response.json({ at: traintimeMem.at, trains }, { headers: { ...CORS, "Cache-Control": "public, max-age=30" } });
+      } catch (err) {
+        return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
+      }
     }
 
     const mta = pathname.match(/^\/mta-crowd\/(lirr|mnr)\/(\w{1,8})$/);
