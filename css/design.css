@@ -589,7 +589,6 @@ kbd {
 .cc-icons { position: absolute; top: 3px; left: 0; right: 0; display: flex; justify-content: center; gap: 1px; color: var(--muted); line-height: 0; }
 .cc.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 .crowd-ends { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
-.crowd-tip { margin: 8px 0 0; font-size: var(--fs-sm); }
 
 /* ---------- A line's mark: a short stretch of line in its color ---------- */
 

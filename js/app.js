@@ -1357,7 +1357,7 @@ const KM_PER_MI = 1.609344;
 // LIRR's and Metro-North's (their TrainTime app's data), through the relay.
 // Read when the train is opened, then every minute while it stays open.
 // Each car: { no, level (0 nearly empty .. 3 standing room), pct?, color?,
-// count?, rest, quiet }, front first.
+// rest, quiet }, front first.
 
 const CROWD_LEVELS = ["Nearly empty", "Plenty of seats", "Few seats left", "Standing room only"];
 const CROWD_COLORS = ["var(--good)", "var(--good)", "var(--warn)", "var(--bad)"];
@@ -1369,15 +1369,14 @@ function crowdFrom(agency, d) {
   if (!c) return null;
   if (agency === "njt") {
     const cars = (c.sections || []).flatMap((x) => x.cars).filter((k) => k.position != null).sort((x, y) => x.position - y.position)
-      .map((k) => ({ no: k.no, level: levelOfPct(k.pct), pct: k.pct, color: k.color, count: k.count, rest: k.rest, quiet: false }));
-    return { level: levelOfPct(c.pct), count: c.count, at: c.at || d.at, cars };
+      .map((k) => ({ no: k.no, level: levelOfPct(k.pct), pct: k.pct, color: k.color, rest: k.rest, quiet: false }));
+    return { level: levelOfPct(c.pct), at: c.at || d.at, cars };
   }
-  const cars = c.cars.filter((k) => !k.loco).map((k) => ({ no: k.no, level: MTA_LEVEL[k.level] ?? null, count: k.count, rest: k.rest, quiet: k.quiet }));
+  const cars = c.cars.filter((k) => !k.loco).map((k) => ({ no: k.no, level: MTA_LEVEL[k.level] ?? null, rest: k.rest, quiet: k.quiet }));
   const known = cars.filter((k) => k.level != null);
   if (!known.length) return null;
-  const counted = cars.filter((k) => k.count != null);
   // (No time: TrainTime doesn't say when its counts were taken.)
-  return { level: Math.round(known.reduce((n, k) => n + k.level, 0) / known.length), count: counted.length ? counted.reduce((n, k) => n + k.count, 0) : null, at: null, cars };
+  return { level: Math.round(known.reduce((n, k) => n + k.level, 0) / known.length), at: null, cars };
 }
 
 function loadCrowd(t) {
@@ -1404,17 +1403,9 @@ function crowdSection(t) {
   const c = state.crowd?.id === t.id && state.crowd.data;
   if (!c || c.level == null) return "";
   const cars = c.cars || [];
-  // Where there's most room, when the train is busy enough for it to matter:
-  // its front third against its rear third.
-  const third = Math.max(1, Math.floor(cars.length / 3));
-  const avg = (list) => { const k = list.filter((x) => x.level != null); return k.length ? k.reduce((n, x) => n + (x.pct ?? x.level * 30), 0) / k.length : null; };
-  const front = avg(cars.slice(0, third)), rear = avg(cars.slice(-third));
-  const tip = c.level >= 1 && cars.length > 2 && front != null && rear != null && Math.abs(front - rear) >= 15
-    ? T(front < rear ? "Most room toward the front." : "Most room toward the back.") : "";
   return `<section class="crowd" aria-label="${T("How full")}">
-    <h3 class="on-board-title">${T("How full")}</h3>
     <div class="crowd-head"><span class="crowd-dot" style="--c:${CROWD_COLORS[c.level]}"></span><strong>${T(CROWD_LEVELS[c.level])}</strong>
-      <span class="crowd-sub">${[c.count != null ? Tn(c.count, "about {n} person on board", "about {n} people on board") : "", c.at ? fmtAgo(c.at) : ""].filter(Boolean).map(esc).join(" · ")}</span></div>
+      ${c.at ? `<span class="crowd-sub">${esc(fmtAgo(c.at))}</span>` : ""}</div>
     ${cars.length ? `<div class="crowd-cars">${cars.map((k) => {
       const h = k.level == null ? 0 : Math.max(6, Math.min(100, k.pct ?? [8, 35, 70, 100][k.level]));
       const what = k.level == null ? T("no count") : k.pct != null ? T("{pct}% full", { pct: k.pct }) : T(CROWD_LEVELS[k.level]);
@@ -1423,7 +1414,6 @@ function crowdSection(t) {
         <span class="cc-icons">${k.rest ? RESTROOM_ICON : ""}${k.quiet ? QUIET_ICON : ""}</span></div>`;
     }).join("")}</div>
       <div class="crowd-ends"><span>${T("Front")}</span><span>${T("Rear")}</span></div>` : ""}
-    ${tip ? `<p class="crowd-tip">${esc(tip)}</p>` : ""}
   </section>`;
 }
 

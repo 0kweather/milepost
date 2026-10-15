@@ -174,14 +174,9 @@ export default {
   "Car {n}": "Voiture {n}",
   "no count": "pas de comptage",
   "Quiet car": "Voiture silencieuse",
-  "about {n} person on board": "environ {n} personne à bord",
-  "about {n} people on board": "environ {n} personnes à bord",
   "Restroom": "Toilettes",
   "Front": "Avant",
   "Rear": "Arrière",
-  "Most room toward the front.": "Plus de place vers l’avant.",
-  "Most room in the middle.": "Plus de place au milieu.",
-  "Most room toward the back.": "Plus de place vers l’arrière.",
 
   // ----- Cars and models -----
   "Built": "Construction",
