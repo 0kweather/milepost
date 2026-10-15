@@ -747,6 +747,8 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .hero .dot { width: 9px; height: 9px; border-radius: 50%; }
 .hero-title { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s2); }
 .hero h2 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.015em; line-height: 1.15; }
+/* Beside the number plate the title may shrink and wrap, never run past the panel. */
+.hero-title h2 { min-width: 0; overflow-wrap: break-word; }
 .hero .od { margin: var(--s2) 0 0; font-size: var(--fs-md); }
 .hero .od .arrow { color: var(--faint); margin: 0 var(--s1); }
 

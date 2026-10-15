@@ -28,6 +28,9 @@ const setChecked = (id, value) => { const el = $(id); if (el) el.checked = value
 // Number plate: a train's number on a white sign, railroad color on top.
 const plate = (text, color, size = "") => `<span class="plate ${size}" style="--c:${color}"><span>${esc(text)}</span></span>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// A title that may break after a slash ("Framingham/Worcester Line"), which
+// browsers otherwise treat as one unbreakable word.
+const escTitle = (s) => esc(s).replace(/\//g, "/<wbr>");
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -1571,8 +1574,8 @@ function renderDetail() {
       <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route && !singleLine(t.agency)
         // The title is the train's line: it opens the line's page (or, with
         // no line or just the one, the railroad's).
-        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
-        : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${esc(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
+        ? `<button type="button" class="hero-link" data-open-line="${esc(t.route)}" data-line-railroad="${t.agency}" style="--hc:${t.routeColor || a.color}">${escTitle(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`
+        : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${escTitle(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : `${T("to")} `}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
         ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(statusLabel(t.statusText))}</span>` : ""}
@@ -2459,7 +2462,7 @@ function renderLine() {
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
-      <h2>${esc(name)}</h2>
+      <h2>${escTitle(name)}</h2>
       ${stations.length ? `<p class="station-facts"><span>${esc(T("{n} stations", { n: stations.length }))} · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
       ${consistSection(typical)}
     </div>
