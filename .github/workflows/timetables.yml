@@ -1,0 +1,60 @@
+name: Refresh timetables
+
+# The timetable files cover two weeks from the day they're built, so they're
+# rebuilt every Monday (early morning in North America): CT Rail's, the
+# railroads placed or given stops from their timetables (South Shore, SunRail,
+# Rail Runner, exo, SEPTA), and each railroad's first trains (quiet hours).
+# Each build runs on its own, so one railroad's download failing doesn't stop
+# the rest. Run it by hand from the Actions tab too.
+on:
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit the new files
+  actions: write    # start the site's deploy afterwards
+
+concurrency:
+  group: timetables
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: CT Rail
+        continue-on-error: true
+        run: python3 scripts/build_ct.py
+
+      - name: Timetables for South Shore, SunRail, Rail Runner, exo and SEPTA
+        run: |
+          for railroad in southshore sunrail railrunner exo septa; do
+            python3 scripts/build_schedules.py "$railroad" || echo "::warning::$railroad timetable failed; keeping the last one"
+          done
+
+      - name: First trains (quiet hours)
+        continue-on-error: true
+        run: python3 scripts/build_firsts.py
+
+      - name: Commit and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "trainsheet-bot"
+          git config user.email "trainsheet-bot@users.noreply.github.com"
+          git add data/ctrail.json data/stations.json data/schedules data/firsts.json
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git commit -m "Timetables refreshed for the next two weeks ($(date -u +%F))"
+          git push
+          # A push from a workflow doesn't start other workflows, so start the deploy.
+          gh workflow run pages.yml --ref main
