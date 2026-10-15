@@ -611,6 +611,10 @@ kbd {
 #train-detail > .rr-sec > .deps-head { margin-top: 0; }
 #train-detail > .rr-sec > .deps-head .section-title { margin: 0; }
 #train-detail > :is(.notices, .rr-sec):not(.collapsed) > .section-title { margin-bottom: 8px; }
+/* The page scrolls as one flex column: sections keep their full height
+ * rather than being squeezed to fit the panel (the crowding strip, whose
+ * overflow is hidden, would otherwise shrink until its text is cut off). */
+#train-detail > * { flex-shrink: 0; }
 .crowd { overflow: hidden; }
 .crowd-cars { min-width: 0; }
 .cc { min-width: 0; }
