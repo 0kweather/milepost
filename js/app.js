@@ -1607,7 +1607,8 @@ const AMENITY_ICON = {
 };
 const AMENITIES = [
   ["dining", "Dining car", ["superlinerDiner", "viewlinerDiner", "buddDiner", "renaissanceDiner"]],
-  ["cafe", "Café", ["amfleetCafe", "superlinerLounge", "skyline"]],
+  // Every Acela has a café car (its cars are drawn as one type).
+  ["cafe", "Café", ["amfleetCafe", "superlinerLounge", "skyline", "acelaCoach"]],
   ["sleepers", "Sleeping cars", ["superlinerSleeper", "viewlinerSleeper", "buddSleeper", "renaissanceSleeper"]],
   ["lounge", "Lounge with a view", ["superlinerLounge", "skyline", "parkCar"]],
   ["business", "Business class", ["amfleetBusiness", "acelaCoach"]],
