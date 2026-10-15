@@ -676,6 +676,8 @@ kbd {
 .track-btn, .tracking-btn { display: inline-flex; align-items: center; gap: 6px; }
 .tracking-btn { color: var(--good); }
 .track-sheet { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: flex-end; border-radius: inherit; overflow: hidden; }
+/* Closed, it must take no room at all: it sits over the whole panel. */
+.track-sheet[hidden] { display: none; }
 .ts-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.28); animation: ts-fade 0.2s ease both; }
 .ts-card {
   position: relative; max-height: 78%; display: flex; flex-direction: column; gap: 12px;
