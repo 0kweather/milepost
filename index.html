@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Trainsheet</title>
   <meta name="description" content="Live map of passenger trains across the United States — Amtrak, Brightline and commuter railroads in one place.">
+  <!-- Light or dark before anything draws (js/app.js keeps it up to date). -->
+  <script>
+    try {
+      var pref = JSON.parse(localStorage.getItem("tt-theme") || '"auto"');
+      document.documentElement.dataset.theme = pref === "light" || pref === "dark" ? pref
+        : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    } catch (e) {}
+  </script>
   <link rel="icon" type="image/svg+xml" href="img/icon.svg">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -22,7 +30,6 @@
 </head>
 <body>
   <div id="loading" class="loading" role="status" aria-label="Loading Trainsheet" data-i18n-aria="Loading Trainsheet">
-    <h1 class="loading-name">Trainsheet</h1>
     <div class="loading-track" aria-hidden="true"><div class="loading-train" id="loading-train" inert></div></div>
   </div>
   <div id="map" aria-label="Map of live train positions" data-i18n-aria="Map of live train positions"></div>
