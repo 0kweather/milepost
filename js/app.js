@@ -6,6 +6,8 @@ import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
+import { sunSpells, viewsOnRide } from "./sides.js?v=dev";
+import { stationLifts } from "./lifts.js?v=dev";
 import { t as T, tn as Tn, lang, langPref, locale, translatePage } from "./i18n.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
@@ -92,6 +94,7 @@ const state = {
   // Railroad page sections folded to their heading (remembered).
   rrCollapsed: new Set(store.get("tt-rr-collapsed", [])),
   servedOpen: new Set(),  // railroads whose lines are unfolded on station pages
+  liftsOpen: false,      // a station's working elevators and escalators unfolded
   notices: { id: null, list: [], at: 0 }, // official notices for the selected train
   crowd: null,           // { id, at, data }: the selected NJ Transit train's crowding (relay /njt-crowd)
   est: new Map(),        // train id -> position on the track { lat, lon, bearing }
@@ -1529,6 +1532,7 @@ function renderDetail() {
   if (state.car?.page && state.car.id === t.id) return renderModelPage(t, el);
   loadNotices(t);
   loadCrowd(t);
+  loadHistory(t);
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
   const tiles = factTiles(t);
@@ -1586,8 +1590,10 @@ function renderDetail() {
     ${crowdSection(t)}
     ${noticesHtml(t)}
     ${tiles}
+    ${sideSection(t, Math.max(0, from), dest >= 0 ? dest : (t.stops?.length || 0) - 1)}
     ${stops}
-    ${onBoardFor(t)}`;
+    ${onBoardFor(t)}
+    ${historySection(t)}`;
   el.scrollTop = keepScroll;
   const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
   if (strip) strip.scrollLeft = stripScroll.get(t.id) || 0;
@@ -1648,6 +1654,152 @@ function onBoard(c) {
     <h3 class="on-board-title">${title}</h3>
     <ul class="chips">${has.map(([id, label]) => `<li class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg><span>${T(label)}</span></li>`).join("")}</ul>
   </section>`;
+}
+
+// ---------- Where to sit ----------
+// Which side the sun will be on for the rest of the ride (or the part being
+// tracked), and which side the views are on (js/sides.js, data/views.json).
+// Worked out along the track from each stop's time, at most every few
+// minutes per train.
+
+let viewsData = null;
+function views() {
+  if (!viewsData) {
+    viewsData = [];
+    fetch("data/views.json?v=dev").then((r) => r.json()).then((d) => {
+      viewsData = d.views || [];
+      sideCache.clear();
+      if (state.selected) renderDetail();
+    }).catch((err) => console.warn("views", err));
+  }
+  return viewsData;
+}
+
+const SIDE_STEP_MS = 3 * 60 * 1000;
+// Points along the ride from stop i0 to stop i1, every few minutes, on the
+// track where it can be routed: [{ at, lat, lon, bearing, tz }].
+function ridePoints(t, i0, i1) {
+  const out = [];
+  for (let i = i0; i < i1; i++) {
+    const a = t.stops[i], b = t.stops[i + 1];
+    const pa = state.stopPos.get(a.key), pb = state.stopPos.get(b.key);
+    const ta = Date.parse(a.dep || a.time), tb = Date.parse(b.arr || b.time);
+    if (!pa || !pb || !(tb > ta)) continue;
+    const straight = meters(pa, pb);
+    let path = null;
+    if (state.rail && straight > 150) {
+      const r = state.rail.route(state.rail.snap([pa.lon, pa.lat], 1500, t.agency), state.rail.snap([pb.lon, pb.lat], 1500, t.agency), t.agency);
+      if (r && r.length < straight * 2.5 + 2000) path = r;
+    }
+    const dy = pb.lat - pa.lat, dx = (pb.lon - pa.lon) * Math.cos((pa.lat * Math.PI) / 180);
+    const flat = (Math.atan2(dx, dy) * 180) / Math.PI;
+    const n = Math.max(1, Math.ceil((tb - ta) / SIDE_STEP_MS));
+    for (let k = 0; k < n; k++) {
+      const f = k / n;
+      const at = path?.at(f * path.length);
+      const [lon, lat] = at?.point || [pa.lon + (pb.lon - pa.lon) * f, pa.lat + (pb.lat - pa.lat) * f];
+      out.push({ at: ta + f * (tb - ta), lat, lon, bearing: at?.bearing ?? (flat + 360) % 360, tz: b.tz || a.tz });
+    }
+  }
+  return out;
+}
+
+const sideCache = new Map(); // train id -> { key, at, sun, views }
+function sideGuide(t, i0, i1) {
+  if (!t.stops?.length || i1 <= i0) return null;
+  const key = `${i0}|${i1}|${t.stops[i0].time}|${t.stops[i1].time}|${Boolean(state.rail)}`;
+  const hit = sideCache.get(t.id);
+  if (hit?.key === key && Date.now() - hit.at < 5 * 60 * 1000) return hit;
+  const now = Date.now();
+  const points = ridePoints(t, i0, i1).filter((p) => p.at >= now);
+  const zoneAt = (ms) => points.find((p) => p.at >= ms)?.tz || t.stops[i1].tz;
+  const guide = { key, at: now, sun: sunSpells(points), views: viewsOnRide(points, views()), zoneAt };
+  if (sideCache.size > 20) sideCache.clear();
+  sideCache.set(t.id, guide);
+  return guide;
+}
+
+const SUN_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>';
+const VIEW_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l5-7 3 4 3-5 7 8M3 21h18"/></svg>';
+function sideSection(t, i0, i1) {
+  const g = sideGuide(t, i0, i1);
+  if (!g || (!g.sun.length && !g.views.length)) return "";
+  // Times on a later day (long-distance trains) carry the weekday.
+  const clock = (ms) => {
+    const tz = g.zoneAt(ms), zone = (state.timeZone === "station" ? tz : state.timeZone) || undefined;
+    const day = (x) => { try { return new Date(x).toLocaleDateString(locale, { weekday: "short", timeZone: zone }); } catch { return ""; } };
+    const time = fmtTime(new Date(ms).toISOString(), tz);
+    return day(ms) === day(Date.now()) ? time : `${day(ms)} ${time}`;
+  };
+  const soon = Date.now() + 5 * 60 * 1000;
+  const sideTag = (side) => `<span class="side-tag">${T(side === "left" ? "Left side" : "Right side")}</span>`;
+  const rows = [
+    ...g.sun.map((s) => ({ from: s.from, html: `<li>${SUN_ICON}${sideTag(s.side)}<span>${esc(s.from <= soon
+      ? T("Sun until {time}", { time: clock(s.to) })
+      : T("Sun from {from} to {to}", { from: clock(s.from), to: clock(s.to) }))}</span></li>` })),
+    ...g.views.map((v) => ({ from: v.from, html: `<li>${VIEW_ICON}${sideTag(v.side)}<span>${esc(v.name)}</span><span class="am-detail">${esc(v.dark ? T("after dark") : v.from <= soon ? T("until {time}", { time: clock(v.to) }) : clock(v.from))}</span></li>` })),
+  ].sort((a, b) => a.from - b.from);
+  return rrSection("sit", T("Where to sit"), null, `<ul class="amenities sides">${rows.map((r) => r.html).join("")}</ul>
+    <p class="estimate-note">${T("Facing the way the train is going.")}</p>`);
+}
+
+// ---------- Track record ----------
+// How late this train number has reached its last stop lately: the relay
+// records every Amtrak, VIA and Brightline trip as it finishes (relay/worker.js,
+// GET /history). Shown once a few trips are in.
+
+const HISTORY_RR = new Set(["amtrak", "via", "brightline"]);
+const historyCache = new Map(); // "agency:number" -> { at, runs }
+function loadHistory(t) {
+  if (!RELAY || !HISTORY_RR.has(t.agency) || !t.number) return;
+  const k = `${t.agency}:${t.number}`, hit = historyCache.get(k);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return;
+  historyCache.set(k, { at: Date.now(), runs: hit?.runs || null });
+  fetch(`${RELAY.replace(/\/$/, "")}/history/${t.agency}/${encodeURIComponent(t.number)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d?.runs) return;
+      historyCache.set(k, { at: Date.now(), runs: d.runs });
+      if (state.selected === t.id) renderDetail();
+    })
+    .catch(() => {});
+}
+
+const HISTORY_DAYS = 14;
+const ON_TIME_MIN = 10;
+function historySection(t) {
+  const runs = historyCache.get(`${t.agency}:${t.number}`)?.runs;
+  if (!runs || runs.length < 3) return "";
+  const list = runs.slice(0, HISTORY_DAYS).reverse(); // oldest first
+  const late = list.map((r) => Math.max(0, r.delay)).sort((a, b) => a - b);
+  const median = late.length % 2 ? late[(late.length - 1) / 2] : Math.round((late[late.length / 2 - 1] + late[late.length / 2]) / 2);
+  const worst = list.reduce((w, r) => (r.delay > w.delay ? r : w), list[0]);
+  const onTime = list.filter((r) => r.delay <= ON_TIME_MIN).length;
+  const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString(locale, { month: "short", day: "numeric" });
+  // Bars to one scale (at least an hour tall, so a quiet fortnight looks quiet).
+  const W = 300, H = 92, top = 8, base = 72, max = Math.max(60, ...late);
+  const y = (min) => base - ((base - top) * Math.min(min, max)) / max;
+  const slot = W / list.length, bw = Math.max(4, Math.min(16, slot * 0.66));
+  const color = (d) => `var(--${d <= ON_TIME_MIN ? "good" : d <= 30 ? "warn" : "bad"})`;
+  const bars = list.map((r, i) => {
+    const d = Math.max(0, r.delay), h = Math.max(1.5, base - y(d));
+    return `<rect x="${(i * slot + (slot - bw) / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${color(d)}"><title>${esc(`${dayLabel(r.day)}: ${r.delay <= 1 ? T("On time") : lateText(r.delay).text}`)}</title></rect>`;
+  }).join("");
+  const svg = `<svg class="history-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(T("How late it reached {place} on each of the last {n} trips", { place: list[list.length - 1].dest, n: list.length }))}">
+    <line x1="0" x2="${W}" y1="${y(ON_TIME_MIN).toFixed(1)}" y2="${y(ON_TIME_MIN).toFixed(1)}" class="hc-mark"/>
+    <text x="${W}" y="${(y(ON_TIME_MIN) - 3).toFixed(1)}" text-anchor="end" class="hc-label">${esc(T("{n} min", { n: ON_TIME_MIN }))}</text>
+    <line x1="0" x2="${W}" y1="${base}" y2="${base}" class="hc-base"/>
+    ${bars}
+    <text x="0" y="${H - 4}" class="hc-label">${esc(dayLabel(list[0].day))}</text>
+    <text x="${W}" y="${H - 4}" text-anchor="end" class="hc-label">${esc(dayLabel(list[list.length - 1].day))}</text>
+  </svg>`;
+  const tiles = `<div class="rr-stats">
+    ${statTile(`${onTime}/${list.length}`, T("within {n} min", { n: ON_TIME_MIN }), onTime >= list.length * 0.8 ? "good" : "warn")}
+    ${statTile(median, T("median min late"))}
+    ${statTile(Math.max(0, worst.delay), T("worst, {day}", { day: dayLabel(worst.day) }), worst.delay > 30 ? "bad" : worst.delay > ON_TIME_MIN ? "warn" : "good")}
+  </div>`;
+  return rrSection("history", T("Track record"), null, `${tiles}${svg}
+    <p class="estimate-note">${esc(T("How late it reached {place} on its last {n} trips, as recorded by Trainsheet.", { place: list[list.length - 1].dest, n: list.length }))}</p>`);
 }
 
 // ---------- Train models ----------
@@ -1869,6 +2021,8 @@ function renderStation() {
   const access = st.access === 1 ? `<span class="access yes">${WHEELCHAIR_ICON}${T("Step-free access")}</span>`
     : st.access === 0 ? `<span class="access no">${WHEELCHAIR_ICON}${T("Not step-free")}</span>` : "";
 
+  const liftsOut = extras?.lifts?.lifts.some((l) => l.out);
+  const liftsHtml = liftsSection(extras?.lifts);
   el.innerHTML = `
     <div class="hero">
       <div class="agency-name" style="color:var(--muted)">
@@ -1880,8 +2034,10 @@ function renderStation() {
     </div>
     ${rrSection("served", T("Served by"), st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
     ${noticesBlock(extras?.notices || [], null, T("Station notices"))}
+    ${liftsOut ? liftsHtml : ""}
     ${nextTrainsSection(rows, arrivals, loading)}
-    ${atStation(st, extras)}`;
+    ${atStation(st, extras)}
+    ${liftsOut ? "" : liftsHtml}`;
 }
 
 // Where an arriving train is now: standing at a station, or its next stop.
@@ -1993,6 +2149,39 @@ function atStation(st, extras) {
   return rrSection("at-station", T("At the station"), null, `${rows.length ? `<ul class="amenities">${rows.join("")}</ul>` : ""}
     ${address ? `<a class="st-address" href="${esc(map)}" target="_blank" rel="noopener"><span>${esc(address)}</span><span aria-hidden="true">↗</span></a>` : ""}
     ${rows.length ? `<p class="estimate-note">${T(f ? "From the MBTA and OpenStreetMap; may be incomplete." : "From OpenStreetMap; may be incomplete.").replace("OpenStreetMap", '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>')}</p>` : ""}`);
+}
+
+// Elevators and escalators (js/lifts.js): any that are out first, with when
+// they went out and when they're due back; the working ones folded into one
+// line that opens to the list. Shown above the next trains while something's
+// out, at the bottom of the page otherwise.
+const ESCALATOR_ICON = '<path d="M3 19h4l9-11h5M3 19v2h18V8"/>';
+function liftsSection(data) {
+  if (!data?.lifts.length) return "";
+  const out = data.lifts.filter((l) => l.out), working = data.lifts.filter((l) => !l.out);
+  const when = (ms) => {
+    if (!ms) return "";
+    const d = new Date(ms), today = new Date().toDateString() === d.toDateString();
+    return today ? fmtTime(d.toISOString()) : d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  };
+  const icon = (l) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${l.kind === "escalator" ? ESCALATOR_ICON : AMENITY_ROW_ICON.elevator}</svg>`;
+  const what = (l) => T(l.kind === "escalator" ? "Escalator" : "Elevator");
+  const outRow = (l) => {
+    const sub = [l.since ? T("Out since {time}", { time: when(l.since) }) : T("Out of service"),
+      l.until && l.until > Date.now() ? T("due back {time}", { time: when(l.until) }) : "", l.note].filter(Boolean).join(" · ");
+    return `<li class="lift out">${icon(l)}<span class="lift-what"><strong>${esc(l.name)}</strong><span class="lift-sub">${esc(`${what(l)} · ${sub}`)}</span></span></li>`;
+  };
+  const workingRows = working.map((l) => `<li class="lift">${icon(l)}<span class="lift-what"><span>${esc(l.name)}</span><span class="lift-sub">${esc(what(l))}</span></span></li>`).join("");
+  // (A toggle the page remembers, not <details>: the page redraws every 30 seconds.)
+  const open = state.liftsOpen;
+  const summary = !working.length ? ""
+    : `<div class="lifts-ok${open ? " open" : ""}"><button type="button" class="lifts-ok-toggle" data-lifts-toggle aria-expanded="${open}"><span class="lift-dot" aria-hidden="true"></span>${esc(out.length ? Tn(working.length, "{n} other working", "{n} others working") : Tn(working.length, "{n} working", "All {n} working"))}</button>${open ? `<ul class="amenities lifts">${workingRows}</ul>` : ""}</div>`;
+  const source = data.outagesOnly
+    ? T("From {source}, which reports only what's out of service.", { source: data.source.map((x) => T(x)).join(T(" and ")) })
+    : T("From {source}.", { source: data.source.map((x) => T(x)).join(T(" and ")) });
+  return rrSection("lifts", T("Elevators and escalators"), out.length || null, `${out.length ? `<ul class="amenities lifts">${out.map(outRow).join("")}</ul>` : ""}
+    ${summary}
+    <p class="estimate-note">${esc(source)}</p>`);
 }
 
 // ---------- Railroad and line pages ----------
@@ -2994,15 +3183,16 @@ async function refreshStationExtras(st) {
   const njt = st.members.find((m) => m.agency === "njt" && m.code);
   const mbta = st.members.find((m) => m.agency === "mbta");
   const amtrak = st.members.find((m) => m.agency === "amtrak");
-  const [notices, board, facilities, address] = await Promise.all([
+  const [notices, board, facilities, address, lifts] = await Promise.all([
     stationNotices(st).catch(() => []),
     njt && RELAY ? fetch(`${RELAY.replace(/\/$/, "")}/njt-board/${encodeURIComponent(njt.code)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
     mbta ? mbtaFacilities(mbta.id).catch(() => null) : null,
     amtrak ? amtrakAddress(amtrak.code || amtrak.id).catch(() => null) : null,
+    stationLifts(st, RELAY).catch(() => null),
   ]);
   if (state.station !== st.id) return;
   const tracks = new Map((board?.items || []).filter((x) => x.track).map((x) => [String(x.trainID), x.track]));
-  state.stationExtras = { id: st.id, notices, tracks, facilities, address };
+  state.stationExtras = { id: st.id, notices, tracks, facilities, address, lifts };
   renderDetail();
 }
 
@@ -3292,6 +3482,10 @@ on("train-detail", "click", (e) => {
   }
   const lineBtn = e.target.closest("button[data-line]");
   if (lineBtn && state.railroad) return openLine(state.railroad, lineBtn.dataset.line);
+  if (e.target.closest("[data-lifts-toggle]")) {
+    state.liftsOpen = !state.liftsOpen;
+    return renderDetail();
+  }
   const servedToggle = e.target.closest("[data-served-toggle]");
   if (servedToggle) {
     const id = servedToggle.dataset.servedToggle;

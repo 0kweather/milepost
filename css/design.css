@@ -650,3 +650,39 @@ kbd {
 :root[data-colorblind] .la-where .status.good { color: #33bbee; }
 :root[data-colorblind] .la-where .status.warn { color: #ee7733; }
 :root[data-colorblind] .la-where .status.bad { color: #ee3377; }
+/* ---------- Where to sit, elevators, track record ----------
+ * Lists drawn like the station's amenities: an icon, then the text. */
+.side-tag {
+  flex: none; padding: 2px 7px; white-space: nowrap; border-radius: 6px; text-align: center;
+  background: var(--fill); color: var(--text); font-size: var(--fs-xs); font-weight: 700;
+}
+.sides li > span:not(.side-tag):not(.am-detail) { min-width: 0; }
+.sides svg { color: var(--warn); }
+.sides li:has(.am-detail) svg { color: var(--accent); }
+
+.lifts { margin-top: 0; }
+.lift { align-items: flex-start !important; }
+.lift svg { margin-top: 1px; }
+.lift.out svg { color: var(--bad); }
+.lift-what { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lift-what strong { font-weight: 600; }
+.lift-sub { color: var(--muted); font-size: var(--fs-sm); }
+.lift.out .lift-sub { color: var(--bad); }
+.lifts-ok { margin-top: 8px; }
+.lifts-ok-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 14px; border: 0; border-radius: var(--r-card);
+  background: var(--group); color: var(--text); font: 500 var(--fs-base) var(--font); text-align: left; cursor: pointer;
+}
+.lifts-ok-toggle::after { content: "›"; margin-left: auto; color: var(--faint); transition: transform 0.15s; }
+.lifts-ok.open .lifts-ok-toggle::after { transform: rotate(90deg); }
+.lifts-ok.open .lifts-ok-toggle { border-radius: var(--r-card) var(--r-card) 0 0; }
+.lifts-ok.open > .lifts { border-radius: 0 0 var(--r-card) var(--r-card); border-top: 0.5px solid var(--line); }
+.lift-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
+
+.rr-sec .rr-stats { margin-top: 0; }
+.rr-stat.bad strong { color: var(--bad); }
+.history-chart { display: block; width: 100%; height: auto; margin-top: 10px; overflow: visible; }
+.history-chart .hc-base { stroke: var(--line); stroke-width: 1; }
+.history-chart .hc-mark { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; }
+.history-chart .hc-label { fill: var(--muted); font: 600 10px var(--font); }
+@media (prefers-reduced-motion: reduce) { .lifts-ok-toggle::after { transition: none; } }

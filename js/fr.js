@@ -338,4 +338,38 @@ export default {
   "Not this train": "Pas ce train",
   "Moving with you at {speed}": "Roule avec vous à {speed}",
   "Track this ride": "Suivre ce trajet",
+  // ----- Where to sit -----
+  "Where to sit": "Où s’asseoir",
+  "Left side": "Côté gauche",
+  "Right side": "Côté droit",
+  "Sun until {time}": "Soleil jusqu’à {time}",
+  "Sun from {from} to {to}": "Soleil de {from} à {to}",
+  "after dark": "à la nuit tombée",
+  "until {time}": "jusqu’à {time}",
+  "Facing the way the train is going.": "Face au sens de la marche.",
+
+  // ----- Elevators and escalators -----
+  "Elevators and escalators": "Ascenseurs et escaliers mécaniques",
+  "Escalator": "Escalier mécanique",
+  "Out since {time}": "Hors service depuis {time}",
+  "Out of service": "Hors service",
+  "due back {time}": "retour prévu {time}",
+  "{n} other working": "{n} autre en service",
+  "{n} others working": "{n} autres en service",
+  "{n} working": "{n} en service",
+  "All {n} working": "Les {n} en service",
+  "From {source}.": "Source : {source}.",
+  " and ": " et ",
+  "the MBTA": "la MBTA",
+  "the MTA": "la MTA",
+  "From {source}, which reports only what's out of service.": "Source : {source}, qui ne signale que ce qui est hors service.",
+
+  // ----- Track record -----
+  "Track record": "Ponctualité récente",
+  "within {n} min": "à {n} min près",
+  "median min late": "min de retard (médiane)",
+  "worst, {day}": "pire, le {day}",
+  "{n} min": "{n} min",
+  "How late it reached {place} on each of the last {n} trips": "Retard à l’arrivée à {place} lors de chacun des {n} derniers trajets",
+  "How late it reached {place} on its last {n} trips, as recorded by Trainsheet.": "Retard à l’arrivée à {place} lors de ses {n} derniers trajets, enregistré par Trainsheet.",
 };

@@ -11,6 +11,10 @@
 //                       (tracks and statuses), as JSON.
 //   GET /tracks/:railroad/:stop -> the tracks each train has left a big
 //                       terminal from on recent days (see Usual tracks).
+//   GET /septa-elevators -> SEPTA's elevator outages, as JSON.
+//   GET /history/:railroad/:number -> how late an Amtrak, VIA or Brightline
+//                       train number reached its last stop, day by day (the
+//                       last 30 trips recorded; see "Track record" below).
 //   GET /feed/:id    -> the upstream feed, byte for byte. For railroads that
 //                       publish positions and predicted stop times as two
 //                       GTFS-realtime feeds, both, back to back: concatenated
@@ -19,7 +23,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-14 (usual tracks)";
+const RELAY_VERSION = "2026-10-15 (usual tracks, track record, septa elevators)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -536,6 +540,59 @@ async function fetchNjtDv(ctx, env) {
   return Response.json(njtMem.json);
 }
 
+// ---------- Track record ----------
+// Every five minutes (a Cron Trigger, wrangler.toml) the relay reads
+// Amtraker's trains and keeps, for each trip that has finished, how late it
+// reached its last stop: one row per train number per day, in the Store's
+// SQLite (its own copy, "runs"). A trip counts from the day it left its
+// first stop, in that stop's time zone.
+
+const HISTORY_RAILROADS = { Amtrak: "amtrak", Via: "via", Brightline: "brightline" };
+const runsStore = (env) => env.STORE?.get(env.STORE.idFromName("runs"));
+
+// The finished trips in one read of Amtraker: [{ rr, num, day, origin, dest, sch, delay }].
+function finishedRuns(json) {
+  const out = [];
+  for (const list of Object.values(json || {})) {
+    for (const t of list) {
+      const rr = HISTORY_RAILROADS[t.provider];
+      const first = t.stations?.[0], last = t.stations?.[t.stations.length - 1];
+      // Amtraker marks a train Completed once it has reached its last stop,
+      // whose arr is then when it got there.
+      if (!rr || !first || !last || t.trainState !== "Completed" || !last.arr || !last.schArr) continue;
+      const delay = Math.round((Date.parse(last.arr) - Date.parse(last.schArr)) / 60000);
+      if (!Number.isFinite(delay) || delay < -60 || delay > 48 * 60) continue;
+      const left = Date.parse(first.schDep || first.schArr);
+      if (!Number.isFinite(left)) continue;
+      const day = new Date(left).toLocaleDateString("en-CA", { timeZone: first.tz || "America/New_York" });
+      out.push({ rr, num: String(t.trainNum), day, origin: first.name, dest: last.name, sch: last.schArr, delay });
+    }
+  }
+  return out;
+}
+
+async function recordRuns(env) {
+  const store = runsStore(env);
+  if (!store) return 0;
+  const res = await fetch("https://api-v3.amtraker.com/v3/trains", { headers: { "User-Agent": "Trainsheet relay" } });
+  if (!res.ok) throw new Error(`Amtraker HTTP ${res.status}`);
+  const runs = finishedRuns(await res.json());
+  if (runs.length) await store.fetch("https://store/history/record", { method: "POST", body: JSON.stringify(runs) });
+  return runs.length;
+}
+
+// SEPTA's elevator outages (its API sends no CORS headers), kept two minutes.
+let septaLifts = null; // { at, body }
+async function fetchSeptaLifts() {
+  if (septaLifts && Date.now() - septaLifts.at < 120 * 1000) return septaLifts.body;
+  const res = await fetch("https://www3.septa.org/api/elevator/index.php", { headers: { "User-Agent": "Trainsheet relay" } });
+  if (!res.ok) throw new Error(`SEPTA HTTP ${res.status}`);
+  const body = await res.text();
+  septaLifts = { at: Date.now(), body };
+  return body;
+}
+
+
 // ---------- Usual tracks ----------
 // At the big terminals a train's track goes up only minutes before it
 // leaves. Every five minutes (a Cron Trigger, wrangler.toml) the relay notes
@@ -633,13 +690,16 @@ async function recordTracks(env) {
 }
 
 // Shared storage for every copy of the relay: a small JSON record (NJ
-// Transit's token), and in its own copy a table of the usual tracks.
+// Transit's token), and in their own copies a table of the usual tracks and
+// one of finished trips.
 export class Store {
   constructor(ctx) { this.ctx = ctx; }
   async fetch(request) {
     const { pathname, searchParams } = new URL(request.url);
     if (pathname === "/tracks/record") return this.recordTracks(await request.json());
     if (pathname === "/tracks/query") return Response.json(this.queryTracks(searchParams.get("rr"), searchParams.get("stop")));
+    if (pathname === "/history/record") return this.recordRuns(await request.json());
+    if (pathname === "/history/query") return Response.json(this.queryRuns(searchParams.get("rr"), searchParams.get("num")));
     if (request.method === "POST") {
       await this.ctx.storage.put("data", await request.json());
       return new Response("ok");
@@ -673,11 +733,30 @@ export class Store {
     for (const r of rows) (trains[r.train] ||= []).push([r.track, r.n]);
     return { trains };
   }
+  // Finished trips (Track record), kept four months. The first report of a
+  // trip stands; later reads of the same finished train only repeat it.
+  runs() {
+    const sql = this.ctx.storage.sql;
+    sql.exec("CREATE TABLE IF NOT EXISTS runs (rr TEXT, num TEXT, day TEXT, origin TEXT, dest TEXT, sch TEXT, delay INTEGER, at INTEGER, PRIMARY KEY (rr, num, day))");
+    return sql;
+  }
+  recordRuns(rows) {
+    const sql = this.runs(), now = Date.now();
+    for (const r of rows) sql.exec("INSERT OR IGNORE INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)", r.rr, r.num, r.day, r.origin, r.dest, r.sch, r.delay, now);
+    if (Math.random() < 0.02) sql.exec("DELETE FROM runs WHERE at < ?", now - 120 * 86400 * 1000);
+    return new Response("ok");
+  }
+  queryRuns(rr, num) {
+    return { runs: this.runs().exec("SELECT day, origin, dest, delay FROM runs WHERE rr = ? AND num = ? ORDER BY day DESC LIMIT 30", rr, num).toArray() };
+  }
 }
 
 export default {
+  // The Cron Trigger, every five minutes: the tracks posted at the big
+  // terminals (Usual tracks) and the trips that have finished (Track record).
   async scheduled(event, env, ctx) {
     ctx.waitUntil(recordTracks(env).catch((err) => console.warn("tracks", err.message)));
+    ctx.waitUntil(recordRuns(env).catch((err) => console.warn("history", err.message)));
   },
 
   async fetch(request, env, ctx) {
@@ -688,7 +767,7 @@ export default {
       const feeds = Object.fromEntries(Object.entries(FEEDS).map(([id, f]) => [id, Boolean(f(env))]));
       // Which code is deployed, and whether optional keys are visible to it
       // (true/false only), for checking a deploy.
-      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD), tracks: Boolean(env.STORE) };
+      const check = { version: RELAY_VERSION, transitland: Boolean(env.TRANSITLAND_API_KEY), njt: Boolean(env.NJT_USERNAME && env.NJT_PASSWORD), tracks: Boolean(env.STORE), history: Boolean(env.STORE) };
       return Response.json({ feeds, check }, { headers: { ...CORS, "Cache-Control": "max-age=300" } });
     }
 
@@ -764,6 +843,26 @@ export default {
         return Response.json(json, { headers });
       } catch (err) {
         return new Response(`Store error: ${err.message}`, { status: 502, headers: CORS });
+      }
+    }
+
+    if (pathname === "/septa-elevators") {
+      try {
+        return new Response(await fetchSeptaLifts(), { headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "public, max-age=120" } });
+      } catch (err) {
+        return new Response(`Upstream error: ${err.message}`, { status: 502, headers: CORS });
+      }
+    }
+
+    const hist = pathname.match(/^\/history\/(amtrak|via|brightline)\/(\w{1,6})$/);
+    if (hist) {
+      const store = runsStore(env);
+      if (!store) return new Response("Not configured", { status: 404, headers: CORS });
+      try {
+        const r = await store.fetch(`https://store/history/query?rr=${hist[1]}&num=${encodeURIComponent(hist[2])}`);
+        return new Response(r.body, { headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "public, max-age=600" } });
+      } catch (err) {
+        return new Response(`Storage error: ${err.message}`, { status: 502, headers: CORS });
       }
     }
 
