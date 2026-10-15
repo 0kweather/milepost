@@ -583,9 +583,6 @@ function addLayers() {
   }, "tt-station-ping");
 
   map.addSource("trains", { type: "geojson", data: featureCollection() });
-  // Zoomed out, each city's commuter trains are one tag ("New York · 87"),
-  // until they spread apart at METRO_ZOOM (redrawMetros).
-  map.addSource("metros", { type: "geojson", data: metroCollection() });
 
   // Selected and tracked trains: a ping ring under an enlarged marker.
   const trainSel = ["==", ["get", "id"], ""];
@@ -638,24 +635,6 @@ function addLayers() {
     paint: { "text-color": "#121417" },
   });
 
-  map.addLayer({
-    id: "tt-metros",
-    type: "symbol",
-    source: "metros",
-    maxzoom: METRO_ZOOM,
-    layout: {
-      "text-field": ["concat", ["get", "name"], " · ", ["to-string", ["get", "count"]]],
-      "text-font": ["Noto Sans Bold"],
-      "text-size": 12,
-      "icon-image": "tt-tag-station",
-      "icon-text-fit": "both",
-      "icon-text-fit-padding": [3, 8, 3, 8],
-      "text-allow-overlap": false,
-      "text-padding": 1,
-      "symbol-sort-key": ["-", ["get", "count"]],
-    },
-    paint: { "text-color": theme === "dark" ? "#16181c" : "#ffffff" },
-  });
   map.addLayer({
     id: "tt-station-selected-label",
     type: "symbol",
@@ -736,7 +715,6 @@ function featureCollection() {
         stale: Date.now() - t.updated > STALE_MS && !t.estimated,
         drawOrder: intercity ? 1 : 0,
         labelOrder: intercity ? 0 : 1,
-        ic: intercity ? 1 : 0,
       },
     });
   }
@@ -745,56 +723,6 @@ function featureCollection() {
 
 function redraw() {
   map.getSource("trains")?.setData(featureCollection());
-}
-
-// ---------- Cities, zoomed out ----------
-// Below METRO_ZOOM a city's commuter trains are one tag with how many are
-// running, placed at the middle of its railroads' stations; intercity
-// trains stay on the map one by one. Tapping a tag zooms to the city.
-const METRO_ZOOM = 6;
-const METROS = {
-  lirr: "New York", mnr: "New York", njt: "New York", ctrail: "Connecticut", mbta: "Boston", septa: "Philadelphia",
-  marc: "Washington", vre: "Washington", metra: "Chicago", southshore: "Chicago", go: "Toronto", exo: "Montréal",
-  rtd: "Denver", frontrunner: "Salt Lake City", railrunner: "New Mexico", capmetro: "Austin", trirail: "South Florida",
-  sunrail: "Orlando", caltrain: "Bay Area", ace: "Bay Area", smart: "Bay Area", metrolink: "Los Angeles", sounder: "Seattle",
-};
-let metroCenters = null; // city -> { lon, lat }, from its railroads' stations
-function metroCollection() {
-  if (!metroCenters && state.stations.size) {
-    const sums = {};
-    for (const st of state.stations.values()) {
-      for (const m of st.members) {
-        const name = METROS[m.agency];
-        if (!name) continue;
-        const x = (sums[name] ||= { lon: 0, lat: 0, n: 0 });
-        x.lon += m.lon; x.lat += m.lat; x.n++;
-      }
-    }
-    metroCenters = Object.fromEntries(Object.entries(sums).map(([k, v]) => [k, { lon: v.lon / v.n, lat: v.lat / v.n }]));
-  }
-  if (!metroCenters) return { type: "FeatureCollection", features: [] };
-  const counts = {};
-  for (const t of state.trains.values()) {
-    const name = METROS[t.agency];
-    if (name && visible(t)) counts[name] = (counts[name] || 0) + 1;
-  }
-  return {
-    type: "FeatureCollection",
-    features: Object.entries(counts).filter(([name]) => metroCenters[name]).map(([name, count]) => ({
-      type: "Feature", geometry: { type: "Point", coordinates: [metroCenters[name].lon, metroCenters[name].lat] }, properties: { name, count },
-    })),
-  };
-}
-function redrawMetros() {
-  map.getSource("metros")?.setData(metroCollection());
-}
-// Zoom to a city's trains.
-function openMetro(name) {
-  const pts = [...state.trains.values()].filter((t) => METROS[t.agency] === name && visible(t)).map((t) => state.display.get(t.id) || targetOf(t));
-  if (!pts.length) return;
-  const lons = pts.map((p) => p.lon), lats = pts.map((p) => p.lat);
-  map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-    { padding: panelPadding(), maxZoom: 10, minZoom: METRO_ZOOM + 0.5, duration: 900 });
 }
 
 // ---------- The selected train's route ----------
@@ -1150,7 +1078,6 @@ function glidePath(t, from, to) {
 
 function animateTo(duration = ANIM_MS) {
   cancelAnimationFrame(anim);
-  redrawMetros();
   redrawRoute();
   const targets = new Map();
   for (const t of state.trains.values()) targets.set(t.id, targetOf(t));
@@ -3242,14 +3169,7 @@ function applySelectionFilter() {
   const highlighted = ["in", ["get", "id"], ["literal", ids]];
   const selected = ["==", ["get", "id"], id];
   map.setFilter("tt-ping", highlighted);
-  // Zoomed out, commuter trains are in their city's tag (tt-metros); the
-  // selected and tracked ones always show.
-  map.setFilter("tt-trains", ["any", [">=", ["zoom"], METRO_ZOOM], ["==", ["get", "ic"], 1], highlighted]);
-  // A train selected: the others, and the track, step back.
-  map.setPaintProperty("tt-trains", "icon-opacity", ["case", ["get", "stale"], 0.45, !id ? 1 : ["case", highlighted, 1, 0.3]]);
-  for (const l of RAIL_LAYERS) map.setPaintProperty(l, "line-opacity", themeColors().railOpacity * (id ? 0.45 : 1));
   redrawRoute();
-  redrawMetros();
   map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(selected));
   map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
@@ -3539,8 +3459,6 @@ map.on("click", (e) => {
   }).sort((a, b) => a[1] - b[1])[0]?.[0];
   const train = nearest(map.queryRenderedFeatures(box, { layers: ["tt-trains", "tt-labels"].filter((l) => map.getLayer(l)) }));
   if (train) return select(train.properties.id);
-  const metro = map.getLayer("tt-metros") && map.queryRenderedFeatures(box, { layers: ["tt-metros"] })[0];
-  if (metro) return openMetro(metro.properties.name);
   const station = map.queryRenderedFeatures(box, { layers: [...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l)) })[0];
   if (station) return selectStation(station.properties.id);
   // A disruption, tapped (phones have no hover): its card, until the next tap.
@@ -3561,8 +3479,6 @@ function goHome() {
   closeDetail();
 }
 
-map.on("mousemove", "tt-metros", () => { map.getCanvas().style.cursor = "pointer"; });
-map.on("mouseleave", "tt-metros", () => { map.getCanvas().style.cursor = ""; });
 for (const layer of STATION_LAYERS) {
   map.on("mousemove", layer, (e) => {
     if (map.queryRenderedFeatures(e.point, { layers: ["tt-trains"] }).length) return;
