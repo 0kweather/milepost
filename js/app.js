@@ -414,23 +414,44 @@ function addLayers() {
     layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": ["get", "color"], "line-width": byZoom((w) => w * 1.8) },
   }, firstSymbol);
-  // Disruptions: where a railroad says no trains are running right now, a
-  // red band with a broken red line along it, over the track's strands.
+  // Disruptions: where a railroad says no trains are running right now, the
+  // track's colored strands give way to a thin broken line in the
+  // railroad's color, as a line with no service is drawn on transit maps. A
+  // strip in the map's own background color covers the strands first, so
+  // nothing shows between the dashes; from city zoom a label says what's
+  // happening ("Buses replace trains").
+  const land = baseLayers.find((l) => l.type === "background")?.paint?.["background-color"] || (theme === "dark" ? "#0c0c0c" : "#f2f3f0");
   map.addSource("disruptions", { type: "geojson", data: { type: "FeatureCollection", features: disruptionFeatures() } });
   map.addLayer({
-    id: "tt-disruption-band",
+    id: "tt-disruption-gap",
     type: "line",
     source: "disruptions",
-    layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#ff3b30", "line-opacity": 0.22, "line-width": byZoom((w) => w * 5 + 4) },
+    layout: { "line-join": "round", "line-cap": "butt" },
+    paint: { "line-color": land, "line-width": byZoom((w) => w * 3 + 3) },
   }, firstSymbol);
   map.addLayer({
     id: "tt-disruption-line",
     type: "line",
     source: "disruptions",
     layout: { "line-join": "round", "line-cap": "butt" },
-    paint: { "line-color": "#ff3b30", "line-width": byZoom((w) => w * 1.4 + 1), "line-dasharray": [1.4, 1.1] },
+    paint: { "line-color": ["get", "color"], "line-opacity": 0.7, "line-width": byZoom((w) => w * 0.8 + 0.5), "line-dasharray": [2, 1.6] },
   }, firstSymbol);
+  map.addLayer({
+    id: "tt-disruption-label",
+    type: "symbol",
+    source: "disruptions",
+    minzoom: 9,
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 320,
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 11,
+      "text-offset": [0, -1.1],
+      "text-max-angle": 30,
+    },
+    paint: { "text-color": colors.stationText, "text-halo-color": colors.halo, "text-halo-width": 1.5 },
+  });
   // The selected train's route: the part it has run faded, the part ahead
   // solid, in its line's color, over the track (redrawRoute).
   map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -946,7 +967,7 @@ function disruptionFeatures() {
     // A route far longer than the gap went some other way: better not drawn.
     if (!path || path.coords.length < 2 || path.length > meters(p, q) * 2.5 + 5000) return [];
     const coords = d.routes.length ? ownStretch(d, path) : path.coords;
-    return coords ? [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: d.id, agency: d.agency } }] : [];
+    return coords ? [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: d.id, agency: d.agency, color: AGENCIES[d.agency].color, label: T(d.buses ? "Buses replace trains" : "No trains") } }] : [];
   });
   return disruptionGeo.filter((f) => agencyShown(f.properties.agency));
 }
@@ -3408,7 +3429,7 @@ map.on("mousemove", (e) => {
     popup._railHover = false;
     return;
   }
-  const broken = map.getLayer("tt-disruption-band") && map.queryRenderedFeatures(box, { layers: ["tt-disruption-band"] })[0];
+  const broken = map.getLayer("tt-disruption-gap") && map.queryRenderedFeatures(box, { layers: ["tt-disruption-gap"] })[0];
   if (broken) {
     popup.setLngLat(e.lngLat).setHTML(disruptionCard(broken.properties.id)).addTo(map);
     popup._railHover = true;
@@ -3462,7 +3483,7 @@ map.on("click", (e) => {
   const station = map.queryRenderedFeatures(box, { layers: [...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l)) })[0];
   if (station) return selectStation(station.properties.id);
   // A disruption, tapped (phones have no hover): its card, until the next tap.
-  const broken = map.getLayer("tt-disruption-band") && map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: ["tt-disruption-band"] })[0];
+  const broken = map.getLayer("tt-disruption-gap") && map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]], { layers: ["tt-disruption-gap"] })[0];
   if (broken) {
     popup.setLngLat(e.lngLat).setHTML(disruptionCard(broken.properties.id)).addTo(map);
     popup._railHover = true;
