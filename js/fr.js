@@ -299,6 +299,8 @@ export default {
   "Track this ride": "Suivre ce trajet",
   "Buses replace trains": "Autobus au lieu des trains",
   "No trains": "Aucun train",
+  "No {railroad} trains here right now": "Aucun train {railroad} ici en ce moment",
+  "No trains right now": "Aucun train en ce moment",
   // ----- Elevators and escalators -----
   "Elevators and escalators": "Ascenseurs et escaliers mécaniques",
   "Escalator": "Escalier mécanique",

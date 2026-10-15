@@ -929,6 +929,7 @@ async function refreshDisruptions() {
   disruptions = await loadDisruptions().catch(() => disruptions);
   disruptionGeo = null;
   redrawDisruptions();
+  if (state.station) renderDetail(); // its "No trains here" note
 }
 setInterval(() => !document.hidden && refreshDisruptions(), 5 * 60 * 1000);
 
@@ -957,8 +958,10 @@ function disruptionEnds(d) {
   return best && best[2] > 300 ? [best[0], best[1]] : null;
 }
 
+const unservedAt = new Map(); // station id -> disruptions that leave it with no trains of their railroad
 function disruptionFeatures() {
   if (!state.rail || !state.stations.size) return [];
+  if (!disruptionGeo) unservedAt.clear();
   disruptionGeo ??= disruptions.flatMap((d) => {
     const ends = disruptionEnds(d);
     if (!ends) return [];
@@ -967,9 +970,47 @@ function disruptionFeatures() {
     // A route far longer than the gap went some other way: better not drawn.
     if (!path || path.coords.length < 2 || path.length > meters(p, q) * 2.5 + 5000) return [];
     const coords = d.routes.length ? ownStretch(d, path) : path.coords;
+    if (coords) markUnserved(d, coords, ends);
     return coords ? [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: d.id, agency: d.agency, color: AGENCIES[d.agency].color, label: T(d.buses ? "Buses replace trains" : "No trains") } }] : [];
   });
   return disruptionGeo.filter((f) => agencyShown(f.properties.agency));
+}
+
+// The stations along a disruption's stretch that no train of its railroad
+// reaches right now: all of them, except an end the notice names that the
+// line carries on past, with another of its stops just beyond, off the
+// stretch. "Buses replace trains between Southeast and Wassaic": trains
+// still come up to Southeast from the south; every stop from Patterson to
+// Wassaic has none. A stretch trimmed to the stations only its lines serve
+// ("between Bridgeport and Waterbury" starts at Derby-Shelton) has none at
+// either end.
+function markUnserved(d, coords, ends) {
+  const lons = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
+  const box = { w: Math.min(...lons) - 0.02, e: Math.max(...lons) + 0.02, s: Math.min(...lats) - 0.02, n: Math.max(...lats) + 0.02 };
+  const kx = Math.cos((lats[0] * Math.PI) / 180);
+  const gap = (c, m) => Math.hypot((c[0] - m.lon) * kx, c[1] - m.lat) * 111320;
+  const on = [];
+  for (const st of state.stations.values()) {
+    const m = st.members.find((x) => x.agency === d.agency);
+    if (!m || m.lon < box.w || m.lon > box.e || m.lat < box.s || m.lat > box.n) continue;
+    if (coords.some((c) => gap(c, m) < 400)) on.push({ st, m });
+  }
+  const ids = new Set(on.map((x) => x.st.id));
+  const onItsLine = (x) => x.agency === d.agency && (!d.routes.length || (x.lines || []).some((l) => aboutLine(d, l)));
+  for (const { st, m } of on) {
+    const atEnd = gap(coords[0], m) < 600 || gap(coords[coords.length - 1], m) < 600;
+    if (atEnd && ends.some((e) => meters(e, m) < 600)) {
+      const beyond = [...state.stations.values()].some((o) => !ids.has(o.id) && o.members.some((x) => onItsLine(x) && meters(x, m) < 15000));
+      if (beyond) continue;
+    }
+    if (!unservedAt.has(st.id)) unservedAt.set(st.id, []);
+    unservedAt.get(st.id).push(d);
+  }
+}
+// The disruptions leaving a station with no trains of a railroad shown.
+function unservedHere(st) {
+  disruptionFeatures(); // traced, and the stations marked, if they weren't yet
+  return (unservedAt.get(st.id) || []).filter((d) => agencyShown(d.agency));
 }
 
 // The part of a disruption's path between the first and last stations along
@@ -996,6 +1037,9 @@ function ownStretch(d, path) {
   out.push(path.at(to).point);
   return out;
 }
+
+const BUS_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="14" rx="3"/><path d="M4.5 10.5h15M8 20.5v-3M16 20.5v-3"/><circle cx="8.5" cy="14" r="0.9" fill="currentColor"/><circle cx="15.5" cy="14" r="0.9" fill="currentColor"/></svg>';
+const NO_SERVICE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg>';
 
 // A disruption's card, on hover or tap: its railroad and its notice.
 function disruptionCard(id) {
@@ -2095,13 +2139,15 @@ function renderStation() {
   const lineRow = (l) => {
     return `<li><button type="button" class="rr-line" data-open-line="${esc(l.name)}" data-line-railroad="${l.agency}"><span class="served-name">${lineMark(l.agency, l.name)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`;
   };
+  const outHere = unservedHere(st);
   const servedBy = st.members.map((m) => {
     const a = AGENCIES[m.agency];
+    const out = outHere.some((d) => d.agency === m.agency);
     const lines = [...onLines.values()].filter((l) => l.agency === m.agency).sort((x, y) => y.running - x.running || x.name.localeCompare(y.name));
     const open = state.servedOpen.has(m.agency);
     const sub = [m.daily ? Tn(m.daily, "{n} train a weekday", "{n} trains a weekday") : a.kind === "intercity" ? T("Intercity trains") : "",
       lines.length ? Tn(lines.length, "{n} line", "{n} lines") : ""].filter(Boolean).join(" · ");
-    const name = `<span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>`;
+    const name = `<span class="dot" style="background:${a.color}"></span><span><strong>${esc(a.name)}</strong>${sub || out ? `<br><span class="sub">${out ? `<span class="sb-out">${T("No trains right now")}</span>${sub ? " · " : ""}` : ""}${esc(sub)}</span>` : ""}</span>`;
     return `<li class="sb${open ? " open" : ""}">
       <div class="sb-row">
         ${lines.length
@@ -2125,6 +2171,8 @@ function renderStation() {
       </div>
       <h2>${esc(st.name)}</h2>
       ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
+      ${outHere.map((d) => `<div class="oos-note" style="--c:${AGENCIES[d.agency].color}">${d.buses ? BUS_ICON : NO_SERVICE_ICON}
+        <span><strong>${esc(T("No {railroad} trains here right now", { railroad: AGENCIES[d.agency].short }))}</strong><span>${esc(d.header)}</span></span></div>`).join("")}
     </div>
     ${rrSection("served", T("Served by"), st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
     ${noticesBlock(extras?.notices || [], null, T("Station notices"))}

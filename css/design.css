@@ -707,3 +707,14 @@ kbd {
 @keyframes ts-up { from { transform: translateY(100%); } }
 @keyframes ts-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ts-card, .ts-scrim { animation: none; } }
+
+/* A station a disruption leaves with no trains of a railroad: a note under
+ * its name, with the railroad's notice, and its row in Served by says so. */
+.oos-note {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 10px 12px;
+  border-radius: var(--r-card); background: color-mix(in srgb, var(--warn) 12%, var(--group));
+}
+.oos-note svg { flex: none; margin-top: 1px; color: var(--warn); }
+.oos-note > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--fs-sm); color: var(--muted); }
+.oos-note strong { color: var(--text); font-size: var(--fs-base); font-weight: 600; }
+.sb-out { color: var(--warn); font-weight: 600; }
