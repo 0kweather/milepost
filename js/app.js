@@ -6,7 +6,6 @@ import { trainNotices, stationNotices } from "./notices.js?v=dev";
 import { loadDisruptions, aboutLine } from "./disruptions.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
-import { startTour } from "./tour.js?v=dev";
 import { stationLifts } from "./lifts.js?v=dev";
 import { t as T, tn as Tn, lang, langPref, locale, translatePage } from "./i18n.js?v=dev";
 
@@ -52,7 +51,7 @@ const state = {
   stations: new Map(),   // merged station id -> station
   station: null,         // selected station id
   railroad: null,        // railroad whose page is open
-  trackPick: null,       // { id, from }: the stop a rider got on at, tapped first when tracking
+  trackSheet: null,      // { id, key }: the "Where are you getting off?" sheet, open for a train, and the stop chosen
   line: null,            // ...and the line, on a line's page
   predictions: null,     // live MBTA predictions for the selected station
   showStations: store.get("tt-stations", true),
@@ -326,6 +325,7 @@ function discRadiusAt(z) {
   return s[s.length - 1][1];
 }
 
+const MUTED_LAYERS = /^(transportation|building|landuse|landcover|park|aeroway)$/;
 function addLayers() {
   addImages();
   const colors = themeColors();
@@ -345,6 +345,11 @@ function addLayers() {
     const keepLabel = l.type === "symbol" && /^(label|place)_(country|state)/.test(l.id);
     if ((l.type === "symbol" && !keepLabel) || /^railway/.test(l.id) || /^boundary_(3|state)$/.test(l.id)) {
       map.setLayoutProperty(l.id, "visibility", "none");
+    } else if (MUTED_LAYERS.test(l["source-layer"] || "")) {
+      // Roads, buildings and land use stay in the background, so the rail
+      // lines carry the color.
+      if (l.type === "line") map.setPaintProperty(l.id, "line-opacity", 0.4);
+      else if (l.type === "fill") map.setPaintProperty(l.id, "fill-opacity", 0.35);
     }
   }
   map.addLayer({
@@ -425,6 +430,25 @@ function addLayers() {
     source: "disruptions",
     layout: { "line-join": "round", "line-cap": "butt" },
     paint: { "line-color": "#ff3b30", "line-width": byZoom((w) => w * 1.4 + 1), "line-dasharray": [1.4, 1.1] },
+  }, firstSymbol);
+  // The selected train's route: the part it has run faded, the part ahead
+  // solid, in its line's color, over the track (redrawRoute).
+  map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({
+    id: "tt-route-behind",
+    type: "line",
+    source: "route",
+    filter: ["==", ["get", "part"], "behind"],
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["get", "color"], "line-opacity": 0.35, "line-width": byZoom((w) => w * 1.6 + 1) },
+  }, firstSymbol);
+  map.addLayer({
+    id: "tt-route-ahead",
+    type: "line",
+    source: "route",
+    filter: ["==", ["get", "part"], "ahead"],
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["get", "color"], "line-width": byZoom((w) => w * 2.2 + 1.5) },
   }, firstSymbol);
   // Other main-line track (freight) from the basemap, faintly, when zoomed in.
   // Yards, sidings and spurs are left out; they turn terminals into a tangle.
@@ -559,6 +583,9 @@ function addLayers() {
   }, "tt-station-ping");
 
   map.addSource("trains", { type: "geojson", data: featureCollection() });
+  // Zoomed out, each city's commuter trains are one tag ("New York · 87"),
+  // until they spread apart at METRO_ZOOM (redrawMetros).
+  map.addSource("metros", { type: "geojson", data: metroCollection() });
 
   // Selected and tracked trains: a ping ring under an enlarged marker.
   const trainSel = ["==", ["get", "id"], ""];
@@ -611,6 +638,24 @@ function addLayers() {
     paint: { "text-color": "#121417" },
   });
 
+  map.addLayer({
+    id: "tt-metros",
+    type: "symbol",
+    source: "metros",
+    maxzoom: METRO_ZOOM,
+    layout: {
+      "text-field": ["concat", ["get", "name"], " · ", ["to-string", ["get", "count"]]],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 12,
+      "icon-image": "tt-tag-station",
+      "icon-text-fit": "both",
+      "icon-text-fit-padding": [3, 8, 3, 8],
+      "text-allow-overlap": false,
+      "text-padding": 1,
+      "symbol-sort-key": ["-", ["get", "count"]],
+    },
+    paint: { "text-color": theme === "dark" ? "#16181c" : "#ffffff" },
+  });
   map.addLayer({
     id: "tt-station-selected-label",
     type: "symbol",
@@ -691,6 +736,7 @@ function featureCollection() {
         stale: Date.now() - t.updated > STALE_MS && !t.estimated,
         drawOrder: intercity ? 1 : 0,
         labelOrder: intercity ? 0 : 1,
+        ic: intercity ? 1 : 0,
       },
     });
   }
@@ -699,6 +745,100 @@ function featureCollection() {
 
 function redraw() {
   map.getSource("trains")?.setData(featureCollection());
+}
+
+// ---------- Cities, zoomed out ----------
+// Below METRO_ZOOM a city's commuter trains are one tag with how many are
+// running, placed at the middle of its railroads' stations; intercity
+// trains stay on the map one by one. Tapping a tag zooms to the city.
+const METRO_ZOOM = 6;
+const METROS = {
+  lirr: "New York", mnr: "New York", njt: "New York", ctrail: "Connecticut", mbta: "Boston", septa: "Philadelphia",
+  marc: "Washington", vre: "Washington", metra: "Chicago", southshore: "Chicago", go: "Toronto", exo: "Montréal",
+  rtd: "Denver", frontrunner: "Salt Lake City", railrunner: "New Mexico", capmetro: "Austin", trirail: "South Florida",
+  sunrail: "Orlando", caltrain: "Bay Area", ace: "Bay Area", smart: "Bay Area", metrolink: "Los Angeles", sounder: "Seattle",
+};
+let metroCenters = null; // city -> { lon, lat }, from its railroads' stations
+function metroCollection() {
+  if (!metroCenters && state.stations.size) {
+    const sums = {};
+    for (const st of state.stations.values()) {
+      for (const m of st.members) {
+        const name = METROS[m.agency];
+        if (!name) continue;
+        const x = (sums[name] ||= { lon: 0, lat: 0, n: 0 });
+        x.lon += m.lon; x.lat += m.lat; x.n++;
+      }
+    }
+    metroCenters = Object.fromEntries(Object.entries(sums).map(([k, v]) => [k, { lon: v.lon / v.n, lat: v.lat / v.n }]));
+  }
+  if (!metroCenters) return { type: "FeatureCollection", features: [] };
+  const counts = {};
+  for (const t of state.trains.values()) {
+    const name = METROS[t.agency];
+    if (name && visible(t)) counts[name] = (counts[name] || 0) + 1;
+  }
+  return {
+    type: "FeatureCollection",
+    features: Object.entries(counts).filter(([name]) => metroCenters[name]).map(([name, count]) => ({
+      type: "Feature", geometry: { type: "Point", coordinates: [metroCenters[name].lon, metroCenters[name].lat] }, properties: { name, count },
+    })),
+  };
+}
+function redrawMetros() {
+  map.getSource("metros")?.setData(metroCollection());
+}
+// Zoom to a city's trains.
+function openMetro(name) {
+  const pts = [...state.trains.values()].filter((t) => METROS[t.agency] === name && visible(t)).map((t) => state.display.get(t.id) || targetOf(t));
+  if (!pts.length) return;
+  const lons = pts.map((p) => p.lon), lats = pts.map((p) => p.lat);
+  map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+    { padding: panelPadding(), maxZoom: 10, minZoom: METRO_ZOOM + 0.5, duration: 900 });
+}
+
+// ---------- The selected train's route ----------
+// Its stops joined along the track, split where the train is: behind it
+// faded, ahead solid. Traced once per train (and stop list), split again on
+// every update.
+const routeCache = { key: "", coords: [] };
+function redrawRoute() {
+  const src = map.getSource("route");
+  if (!src) return;
+  const t = state.selected && state.trains.get(state.selected);
+  const empty = { type: "FeatureCollection", features: [] };
+  if (!t?.stops?.length || !state.rail) return src.setData(empty);
+  const key = `${t.id}|${t.stops.length}|${t.stops[0].key}|${t.stops[t.stops.length - 1].key}`;
+  if (routeCache.key !== key) {
+    const coords = [];
+    let prev = null;
+    for (const s of t.stops) {
+      const p = state.stopPos.get(s.key);
+      if (!p) continue;
+      if (prev) {
+        const path = state.rail.route(state.rail.snap([prev.lon, prev.lat], 1500, t.agency), state.rail.snap([p.lon, p.lat], 1500, t.agency), t.agency);
+        const leg = path && path.length < meters(prev, p) * 2.5 + 2000 ? path.coords : [[prev.lon, prev.lat], [p.lon, p.lat]];
+        coords.push(...(coords.length ? leg.slice(1) : leg));
+      }
+      prev = p;
+    }
+    Object.assign(routeCache, { key, coords });
+  }
+  const coords = routeCache.coords;
+  if (coords.length < 2) return src.setData(empty);
+  // Where the train is along it: the nearest point.
+  const here = state.display.get(t.id) || targetOf(t);
+  let at = 0, best = Infinity;
+  coords.forEach((c, i) => {
+    const d = (c[0] - here.lon) ** 2 + (c[1] - here.lat) ** 2;
+    if (d < best) { best = d; at = i; }
+  });
+  const color = t.routeColor || AGENCIES[t.agency].color;
+  const line = (part, cs) => ({ type: "Feature", geometry: { type: "LineString", coordinates: cs }, properties: { part, color } });
+  const parts = [];
+  if (at > 0) parts.push(line("behind", [...coords.slice(0, at + 1), [here.lon, here.lat]]));
+  if (at < coords.length - 1) parts.push(line("ahead", [[here.lon, here.lat], ...coords.slice(at + 1)]));
+  src.setData({ type: "FeatureCollection", features: parts });
 }
 
 function agencyShown(agency) {
@@ -1010,6 +1150,8 @@ function glidePath(t, from, to) {
 
 function animateTo(duration = ANIM_MS) {
   cancelAnimationFrame(anim);
+  redrawMetros();
+  redrawRoute();
   const targets = new Map();
   for (const t of state.trains.values()) targets.set(t.id, targetOf(t));
   for (const id of [...state.display.keys()]) if (!targets.has(id)) state.display.delete(id);
@@ -1294,11 +1436,22 @@ function renderCredits() {
     `. ${T("Map")} © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.`;
 }
 
-function statusClass(t) {
-  if (t.delayMin == null) return "neutral";
-  if (t.delayMin <= 5) return "good";
-  if (t.delayMin <= 20) return "warn";
-  return "bad";
+// A train's status, said the same way everywhere (lists, its page, the
+// map's card): how late it is, by lateText(); without a delay, what its
+// railroad says if that isn't about lateness ("Held at New Haven", in
+// orange; "At Yonkers"), else nothing.
+function trainStatus(t) {
+  if (t.delayMin != null && !Number.isNaN(t.delayMin)) return lateText(t.delayMin);
+  if (!t.statusText || /^On time$|late$/.test(t.statusText)) return { text: "", cls: "neutral" };
+  return { text: statusLabel(t.statusText), cls: /^Held /.test(t.statusText) ? "warn" : "neutral" };
+}
+// As a span: "status" in lists, "pill" on a train's page, "status-t" on
+// the map's card. A delay Trainsheet worked out from GPS is underlined.
+function statusSpan(t, kind) {
+  const st = trainStatus(t);
+  if (!st.text) return "";
+  const inferred = Boolean(t.inferred) && t.delayMin != null;
+  return `<span class="${kind} ${st.cls}${inferred ? " inferred" : ""}"${inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(st.text)}</span>`;
 }
 
 // The train's live card: the next stop (how soon, and its time) in one
@@ -1443,7 +1596,7 @@ function renderResults() {
     return `<button class="result" data-select="${esc(t.id)}">
       ${plate(t.number || a.short, a.color, "sm")}
       <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc(a.short)} · ${esc(sub)}</span></span>
-      ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : ""}
+      ${statusSpan(t, "status")}
     </button>`;
   }).join("");
 }
@@ -1618,34 +1771,29 @@ function renderDetail() {
   const a = AGENCIES[t.agency];
   const lineColor = t.routeColor || a.color;
   const tiles = factTiles(t);
-  // Tracking: the rider taps the stop they got on at, then the one they're
-  // getting off at. The ride between is drawn in the line's color; the stops
-  // before and after it are greyed out.
+  // A tracked train: the rest of the ride, from the station it's at (or the
+  // last it left) to the stop being tracked to, is drawn in the line's color;
+  // the stops before and after are greyed out.
   const rec = state.tracked.find((r) => r.id === t.id);
-  const pick = state.trackPick?.id === t.id ? state.trackPick : null;
   const ahead = t.stops?.findIndex((s) => s.status !== "past") ?? -1;
   const indexOf = (key) => (key ? t.stops?.findIndex((s) => s.key === key) ?? -1 : -1);
   const dest = !rec || !t.stops ? -1 : rec.stopKey ? indexOf(rec.stopKey) : t.stops.length - 1;
-  // Where the ride starts: where they got on; for a ride tracked without one,
-  // the station the train is standing at, else the last one it left.
   const at = ahead >= 0 && t.stops[ahead].here;
-  const from = rec?.fromKey && indexOf(rec.fromKey) >= 0 ? indexOf(rec.fromKey) : at ? ahead : ahead - 1;
-  const pickFrom = pick ? indexOf(pick.from) : -1;
-  const leg = (i) => pick ? (i === pickFrom ? " pick-from" : "")
-    : dest < 0 ? ""
+  const from = at ? ahead : ahead - 1;
+  const leg = (i) => dest < 0 ? ""
     : i === dest ? " dest" : i > dest ? " beyond" : i === from ? " ride-from" : i < from ? " before" : " ride";
-  const hint = pick ? T("Now tap the stop where you’re getting off.")
-    : !rec && t.stops?.length ? T("Tap the stop you got on at, then the one you’re getting off at.") : "";
   const stops = t.stops?.length
-    ? rrSection("stops", T("Stops"), t.stops.length, `${hint ? `<p class="stops-hint">${hint}</p>` : ""}<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
+    ? rrSection("stops", T("Stops"), t.stops.length, `<div class="stops-scroll"><ol class="stops" style="--line-color:${lineColor}">${t.stops.map((s, i) => {
+        // Late by five minutes or more: the new time, with the timetable's
+        // beside it, smaller and struck through.
         const lateMin = s.scheduled && s.time ? Math.round((Date.parse(s.time) - Date.parse(s.scheduled)) / 60000) : 0;
-        const late = lateMin > 1
-          ? ` <span class="late">+${lateMin < 60 ? `${lateMin}m` : `${Math.floor(lateMin / 60)}h${String(lateMin % 60).padStart(2, "0")}`}</span>`
-          : "";
+        const time = lateMin >= LATE_MIN
+          ? `<span class="late">${fmtTime(s.time, s.tz)}</span><s class="was" aria-label="${esc(T("scheduled {time}", { time: fmtTime(s.scheduled, s.tz) }))}">${fmtTime(s.scheduled, s.tz)}</s>`
+          : fmtTime(s.time, s.tz);
         // Each stop opens its station's page ("back" returns to this train).
         const sid = s.key && state.stationOfKey?.get(s.key);
         const link = sid ? ` data-stop-station="${esc(sid)}" role="button" tabindex="0" title="${esc(T("{name} station", { name: s.name }))}"` : "";
-        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}>${stopDot(s, { isDest: !pick && i === dest, isFrom: i === pickFrom, picking: Boolean(pick) })}<span>${esc(s.name)}</span><span class="time">${fmtTime(s.time, s.tz)}${late}</span></li>`;
+        return `<li class="${s.status}${s.here ? " here" : ""}${leg(i)}${sid ? " link" : ""}"${link}><span class="stop-dot" aria-hidden="true"></span><span>${esc(s.name)}</span><span class="time">${time}</span></li>`;
       }).join("")}</ol></div>`)
     : "";
   // Re-rendering replaces the content; keep the reader where they were in
@@ -1664,7 +1812,7 @@ function renderDetail() {
         : `<button type="button" class="hero-link" data-railroad="${t.agency}" style="--hc:${a.color}">${escTitle(trainTitle(t))}<span class="hero-go" aria-hidden="true">›</span></button>`}</h2></div>
       ${t.destination ? `<p class="od">${t.origin ? `${esc(t.origin)}<span class="arrow">→</span>` : `${T("to")} `}<strong>${esc(t.destination)}</strong></p>` : ""}
       <div class="hero-actions">
-        ${t.statusText ? `<span class="pill ${statusClass(t)}${t.inferred ? " inferred" : ""}"${t.inferred ? ` title="${INFERRED_TITLE}"` : ""}>${esc(statusLabel(t.statusText))}</span>` : ""}
+        ${statusSpan(t, "pill")}
         ${trackButton(t)}
       </div>
       ${consistSection(t)}
@@ -1777,7 +1925,7 @@ function historySection(t) {
   const color = (d) => `var(--${d <= ON_TIME_MIN ? "good" : d <= 30 ? "warn" : "bad"})`;
   const bars = list.map((r, i) => {
     const d = Math.max(0, r.delay), h = Math.max(1.5, base - y(d));
-    return `<rect x="${(i * slot + (slot - bw) / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${color(d)}"><title>${esc(`${dayLabel(r.day)}: ${r.delay <= 1 ? T("On time") : lateText(r.delay).text}`)}</title></rect>`;
+    return `<rect x="${(i * slot + (slot - bw) / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${color(d)}"><title>${esc(`${dayLabel(r.day)}: ${lateText(r.delay).text}`)}</title></rect>`;
   }).join("");
   const svg = `<svg class="history-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(T("How late it reached {place} on each of the last {n} trips", { place: list[list.length - 1].dest, n: list.length }))}">
     <line x1="0" x2="${W}" y1="${y(ON_TIME_MIN).toFixed(1)}" y2="${y(ON_TIME_MIN).toFixed(1)}" class="hc-mark"/>
@@ -1876,11 +2024,15 @@ function fmtIn(ms) {
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
+// How late, one way everywhere: under five minutes is on time (green); five
+// or more is late (orange). Red is kept for a train that isn't running.
+const LATE_MIN = 5;
 function lateText(min) {
-  if (min == null) return { text: "", cls: "neutral" };
-  if (min <= 1) return { text: T("On time"), cls: "good" };
-  const text = min < 60 ? T("{n} min late", { n: Math.round(min) }) : T("{h} h {m} min late", { h: Math.floor(min / 60), m: Math.round(min % 60) });
-  return { text, cls: min <= 20 ? "warn" : "bad" };
+  if (min == null || Number.isNaN(min)) return { text: "", cls: "neutral" };
+  if (min < LATE_MIN) return { text: T("On time"), cls: "good" };
+  const m = Math.round(min);
+  const text = m < 60 ? T("{n} min late", { n: m }) : T("{h} h {m} min late", { h: Math.floor(m / 60), m: m % 60 });
+  return { text, cls: "warn" };
 }
 
 // A train's status as its feed parser wrote it ("On time", "12 min late",
@@ -2517,7 +2669,7 @@ function runningList(a, trains) {
   return `<div class="rr-trains">${running.length ? running.slice(0, 40).map((t) => `<button class="result" data-select="${esc(t.id)}">
         ${plate(t.number || a.short, a.color, "sm")}
         <span><span class="title">${esc(t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t))}</span><br><span class="sub">${esc(t.nextStop ? T("next {place}", { place: t.nextStop }) : "")}</span></span>
-        ${t.statusText ? `<span class="status ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "<span></span>"}
+        ${statusSpan(t, "status") || "<span></span>"}
       </button>`).join("") + (running.length > 40 ? `<p class="sub">${T("and {n} more", { n: running.length - 40 })}</p>` : "")
       : `<p class="empty">${esc(T("None of its trains are running right now."))}</p>`}</div>`;
 }
@@ -2742,14 +2894,13 @@ function checkTracked() {
   if (changed) saveTracked();
 }
 
-function startTracking(t, stopKey, fromKey = null) {
+function startTracking(t, stopKey) {
   if (state.tracked.some((r) => r.id === t.id)) return;
   if (state.tracked.length >= MAX_TRACKED) return toast(T("You can track up to three trains at once."));
   const stop = stopKey ? t.stops?.find((s) => s.key === stopKey) : null;
   state.tracked.push({
     id: t.id, agency: t.agency, number: t.number, route: t.route,
     stopKey: stop?.key || null, stopName: stop?.name || null,
-    fromKey, fromName: fromKey ? t.stops?.find((s) => s.key === fromKey)?.name || null : null,
     eta: stop ? Date.parse(stop.time) : null, lastSeen: Date.now(),
   });
   saveTracked();
@@ -2766,57 +2917,113 @@ function untrack(id, message) {
   renderAll();
 }
 
-// Under the train's name: where it's being tracked to (stopped from the
-// tracked card's × or the stop's circle). Trains with a stop list are tracked
-// from a stop's circle; the rest (most GPS-only railroads) keep a button that
-// tracks without a destination.
+// Under the train's name: one button. Not tracked: "Track", which opens
+// the sheet asking where you're getting off (a train with no stops ahead
+// listed is tracked to the end at once). Tracked: "Tracking to Manassas",
+// which opens the same sheet to change the stop or stop tracking.
+const BELL_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3.5a5 5 0 0 0-5 5v3.2l-1.6 2.9A1 1 0 0 0 6.3 16h11.4a1 1 0 0 0 .9-1.4L17 11.7V8.5a5 5 0 0 0-5-5ZM9.8 18.5a2.3 2.3 0 0 0 4.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function trackButton(t) {
   const rec = state.tracked.find((r) => r.id === t.id);
-  if (rec) return `<span class="tracking-note">${esc(rec.fromName && rec.stopName ? T("Tracking from {from} to {to}", { from: rec.fromName, to: rec.stopName })
-    : rec.stopName ? T("Tracking to {to}", { to: rec.stopName }) : rec.fromName ? T("Tracking from {from}", { from: rec.fromName }) : T("Tracking"))}</span>`;
-  if (t.stops?.some((s) => s.status !== "past")) return "";
-  return `<button class="btn primary small" data-track="${esc(t.id)}">${T("Track this train")}</button>`;
+  if (rec) {
+    return `<button type="button" class="btn small tracking-btn" data-track="${esc(t.id)}">${BELL_ICON}${esc(rec.stopName ? T("Tracking to {to}", { to: rec.stopName }) : T("Tracking"))}</button>`;
+  }
+  return `<button type="button" class="btn primary small track-btn" data-track="${esc(t.id)}">${BELL_ICON}${T("Track")}</button>`;
 }
 
-// Each stop's circle on the stop list. On a stop still ahead it's a button
-// that tracks the train until there; on the stop it's tracked to, tapping
-// it again stops tracking.
-// Each stop's circle on the stop list: a button for tracking. The first tap
-// marks where the rider got on (it can be a stop the train has left), the
-// second where they're getting off; the destination's circle, tapped again,
-// stops tracking.
-function stopDot(s, { isDest, isFrom, picking }) {
-  if (!s.key) return '<span class="stop-dot" aria-hidden="true"></span>';
-  const label = T(isDest ? "Stop tracking to {place}" : isFrom ? "Not from {place}"
-    : picking ? "Getting off at {place}" : "Got on at {place}", { place: s.name });
-  return `<button type="button" class="stop-dot" data-track-to="${esc(s.key)}" aria-pressed="${Boolean(isDest || isFrom)}" aria-label="${esc(label)}" title="${esc(label)}"></button>`;
-}
+// The stops still ahead, for the sheet: the one it's at or coming to next,
+// and every one after.
+const stopsAhead = (t) => (t.stops || []).filter((s) => s.status !== "past" && s.key);
 
-function trackTo(t, key) {
+function openTrackSheet(t) {
+  const left = stopsAhead(t);
   const rec = state.tracked.find((r) => r.id === t.id);
-  const pick = state.trackPick?.id === t.id ? state.trackPick : null;
-  const at = (k) => t.stops.findIndex((x) => x.key === k);
-  if (!pick) {
-    if (rec?.stopKey === key) return untrack(t.id); // the destination again: stop
-    state.trackPick = { id: t.id, from: key };       // where they got on
-    return renderDetail();
+  if (!left.length) {
+    if (rec) return untrack(t.id);
+    return startTracking(t, null);
   }
-  if (key === pick.from) { state.trackPick = null; return renderDetail(); }
-  // An earlier stop: that's where they got on instead. (Picking started
-  // from "Which train am I on?" has none yet: a stop it has left is one.)
-  if (pick.from == null ? t.stops[at(key)]?.status === "past" : at(key) < at(pick.from)) {
-    state.trackPick = { id: t.id, from: key };
-    return renderDetail();
+  const chosen = rec?.stopKey && left.some((s) => s.key === rec.stopKey) ? rec.stopKey : left[left.length - 1].key;
+  state.trackSheet = { id: t.id, key: chosen };
+  renderTrackSheet();
+}
+function closeTrackSheet() {
+  if (!state.trackSheet) return;
+  state.trackSheet = null;
+  renderTrackSheet();
+}
+// "Where are you getting off?": the stops ahead, the train's last one
+// chosen to begin with; Start tracking (or, once tracked, Done and Stop
+// tracking). Drawn over the train's page.
+function renderTrackSheet() {
+  const el = $("track-sheet");
+  if (!el) return;
+  const sh = state.trackSheet, t = sh && state.trains.get(sh.id);
+  if (!t || state.selected !== t.id) {
+    if (state.trackSheet && !t) state.trackSheet = null;
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
   }
-  state.trackPick = null;
-  const stop = t.stops[at(key)], start = pick.from == null ? null : t.stops[at(pick.from)];
-  if (!rec) return startTracking(t, key, pick.from);
-  // Already tracked: this ride replaces the last.
-  Object.assign(rec, { stopKey: stop.key, stopName: stop.name, fromKey: start?.key || null, fromName: start?.name || null, eta: Date.parse(stop.time) || null });
+  const rec = state.tracked.find((r) => r.id === t.id);
+  const rows = stopsAhead(t).map((s) => {
+    const on = s.key === sh.key;
+    return `<button type="button" class="ts-stop${on ? " on" : ""}" role="radio" aria-checked="${on}" data-sheet-stop="${esc(s.key)}">
+      <span class="ts-check" aria-hidden="true"></span><span class="ts-name">${esc(s.name)}</span><span class="ts-time">${s.time ? esc(fmtTime(s.time, s.tz)) : ""}</span></button>`;
+  }).join("");
+  el.hidden = false;
+  el.innerHTML = `<div class="ts-scrim" data-sheet-close></div>
+    <div class="ts-card" role="dialog" aria-modal="true" aria-labelledby="ts-title">
+      <div class="ts-head"><h3 id="ts-title">${T("Where are you getting off?")}</h3><button type="button" class="tc-x ts-x" data-sheet-close aria-label="${T("Close")}">×</button></div>
+      <div class="ts-list" role="radiogroup" aria-labelledby="ts-title">${rows}</div>
+      <div class="ts-actions">
+        ${rec ? `<button type="button" class="btn small" data-sheet-untrack>${T("Stop tracking")}</button>` : ""}
+        <button type="button" class="btn primary" data-sheet-start>${T(rec ? "Done" : "Start tracking")}</button>
+      </div>
+    </div>`;
+  el.querySelector(".ts-stop.on")?.scrollIntoView({ block: "nearest" });
+  el.querySelector(".ts-stop.on")?.focus({ preventScroll: true });
+}
+function startFromSheet() {
+  const sh = state.trackSheet, t = sh && state.trains.get(sh.id);
+  state.trackSheet = null;
+  renderTrackSheet();
+  if (!t) return;
+  const rec = state.tracked.find((r) => r.id === t.id);
+  if (!rec) return startTracking(t, sh.key);
+  const stop = t.stops?.find((s) => s.key === sh.key);
+  Object.assign(rec, { stopKey: stop?.key || null, stopName: stop?.name || null, eta: stop ? Date.parse(stop.time) : null });
   saveTracked();
   checkTracked();
   renderAll();
 }
+on("track-sheet", "click", (e) => {
+  if (e.target.closest("[data-sheet-close]")) return closeTrackSheet();
+  const row = e.target.closest("[data-sheet-stop]");
+  if (row && state.trackSheet) {
+    state.trackSheet.key = row.dataset.sheetStop;
+    for (const b of document.querySelectorAll("#track-sheet .ts-stop")) {
+      const on = b === row;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-checked", String(on));
+    }
+    return;
+  }
+  if (e.target.closest("[data-sheet-start]")) return startFromSheet();
+  if (e.target.closest("[data-sheet-untrack]")) {
+    const id = state.trackSheet?.id;
+    closeTrackSheet();
+    if (id) untrack(id);
+  }
+});
+on("track-sheet", "keydown", (e) => {
+  if (e.key === "Escape") { e.stopPropagation(); return closeTrackSheet(); }
+  // Up and down move the choice, as in a list of radio buttons.
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.closest(".ts-stop")) {
+    e.preventDefault();
+    const all = [...document.querySelectorAll("#track-sheet .ts-stop")];
+    const next = all[all.indexOf(e.target.closest(".ts-stop")) + (e.key === "ArrowDown" ? 1 : -1)];
+    if (next) { next.click(); next.focus(); }
+  }
+});
 
 function renderTracked() {
   const el = $("tracked");
@@ -2846,14 +3053,11 @@ function renderTracked() {
       where = rec.stopName ? `${T("to")} <strong>${esc(rec.stopName)}</strong>` : "";
       warn = `<span class="stale">${T("Not reporting · last seen {ago}", { ago: fmtAgo(rec.lastSeen) })}</span>`;
     }
-    // Live Activity: a countdown to the stop it's tracked to, and how far
-    // along the ride it is (from where they got on to that stop, by time).
-    let eta = "", pct = null;
+    // Live Activity: a countdown to the stop it's tracked to.
+    let eta = "";
     if (t?.stops?.length) {
       const dest = (rec.stopKey && t.stops.find((s) => s.key === rec.stopKey)) || t.stops[t.stops.length - 1];
-      const board = (rec.fromKey && t.stops.find((s) => s.key === rec.fromKey)) || t.stops[0]; // where they got on
-      const start = Date.parse(board.time), end = Date.parse(dest.time);
-      if (start && end && end > start) pct = Math.max(0, Math.min(1, (Date.now() - start) / (end - start)));
+      const end = Date.parse(dest.time);
       const min = end ? Math.round((end - Date.now()) / 60000) : null;
       if (min != null) eta = min <= 0 ? T("Now") : min < 60 ? `${min}<small>min</small>` : `${Math.floor(min / 60)}<small>h</small> ${min % 60}<small>m</small>`;
     }
@@ -2863,7 +3067,6 @@ function renderTracked() {
         <button class="tc-x tc-share" data-share-ride="${esc(rec.id)}" aria-label="${T("Share this ride")}" title="${T("Share this ride")}">${SHARE_ICON}</button>
         <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="${esc(T("Stop tracking {train}", { train: trainLabel(rec) }))}" title="${T("Stop tracking")}">×</button></div>
       ${where || status || warn ? `<div class="la-where">${[where, status, warn].filter(Boolean).join(" · ")}</div>` : ""}
-      ${pct != null ? `<div class="la-track" style="--p:${pct.toFixed(3)}" aria-hidden="true"><span class="la-fill"></span><span class="la-end"></span><span class="la-dot"></span></div>` : ""}
     </div>`;
   }).join("");
   // A train just tracked grows out of a pill, like the Dynamic Island. A
@@ -2889,7 +3092,6 @@ async function shareRide(rec) {
   if (!rec) return;
   const q = new URLSearchParams({ train: rec.id, ride: "1" });
   if (rec.stopKey) q.set("to", rec.stopKey);
-  if (rec.fromKey) q.set("from", rec.fromKey);
   const url = `${location.origin}${location.pathname}?${q}`;
   const name = trainLabel(rec), when = rec.eta ? fmtTime(new Date(rec.eta).toISOString()) : "";
   const text = rec.stopName && when ? T("I'm on {train}, arriving at {place} at {time}.", { train: name, place: rec.stopName, time: when })
@@ -2997,15 +3199,11 @@ function answerRideGuess(id, answer) {
   if (answer === "no") rideDismissed.add(id);
   if (!t || answer === "no") return renderTracked();
   if (answer === "open") { renderTracked(); return select(id); }
-  // With a stop list, the rider taps where they're getting off (or where
-  // they got on, then that); otherwise it's tracked to the end.
-  if (t.stops?.some((s) => s.status !== "past")) {
-    state.trackPick = { id, from: null };
-    renderTracked();
-    select(id);
-  } else {
-    startTracking(t, null);
-  }
+  // With stops ahead, the sheet asks where they're getting off; otherwise
+  // it's tracked to the end.
+  renderTracked();
+  select(id);
+  openTrackSheet(t);
 }
 
 function openTracked(id) {
@@ -3044,7 +3242,14 @@ function applySelectionFilter() {
   const highlighted = ["in", ["get", "id"], ["literal", ids]];
   const selected = ["==", ["get", "id"], id];
   map.setFilter("tt-ping", highlighted);
-  map.setLayoutProperty("tt-trains", "icon-size", trainIconSize(selected));
+  // Zoomed out, commuter trains are in their city's tag (tt-metros); the
+  // selected and tracked ones always show.
+  map.setFilter("tt-trains", ["any", [">=", ["zoom"], METRO_ZOOM], ["==", ["get", "ic"], 1], highlighted]);
+  // A train selected: the others, and the track, step back.
+  map.setPaintProperty("tt-trains", "icon-opacity", ["case", ["get", "stale"], 0.45, !id ? 1 : ["case", highlighted, 1, 0.3]]);
+  for (const l of RAIL_LAYERS) map.setPaintProperty(l, "line-opacity", themeColors().railOpacity * (id ? 0.45 : 1));
+  redrawRoute();
+  redrawMetros();
   map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(selected));
   map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
   map.setLayoutProperty("tt-labels", "symbol-sort-key", ["case", highlighted, -1, ["get", "labelOrder"]]);
@@ -3130,7 +3335,7 @@ function select(id, { fly = true } = {}) {
   const opened = id && state.trains.get(id);
   if (opened) remember({ kind: "train", id, agency: opened.agency, name: trainTitle(opened), number: opened.number || "" });
   state.returnTo = null;
-  if (state.trackPick?.id !== id) state.trackPick = null;
+  if (state.trackSheet?.id !== id) closeTrackSheet();
   state.railroad = null;
   state.line = null;
   setBack(T("All trains"));
@@ -3229,6 +3434,7 @@ function closeDetail() {
 }
 function closeDetailTo() {
   clearInterval(predictionTimer);
+  closeTrackSheet();
   const back = state.returnTo;
   state.returnTo = null;
   setBack(T("All trains"));
@@ -3266,6 +3472,7 @@ function setFollow(on) {
 // ---------- Events ----------
 
 const canHover = matchMedia("(hover: hover)").matches;
+const coarsePointer = matchMedia("(pointer: coarse)").matches;
 const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, focusAfterOpen: false, offset: 14, className: "hover-card" });
 
 // Hovering a track names the railroads that run on it.
@@ -3322,9 +3529,18 @@ function hoverStationTo(id) {
 
 // One click handler so a train sitting on a station wins over the station.
 map.on("click", (e) => {
-  const box = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
-  const train = map.queryRenderedFeatures(box, { layers: ["tt-trains", "tt-labels"].filter((l) => map.getLayer(l)) })[0];
+  // A finger's width on touch screens, a little less with a mouse; of the
+  // trains under it, the nearest.
+  const r = coarsePointer ? 22 : 10;
+  const box = [[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]];
+  const nearest = (fs) => fs.map((f) => {
+    const p = map.project(f.geometry.coordinates);
+    return [f, (p.x - e.point.x) ** 2 + (p.y - e.point.y) ** 2];
+  }).sort((a, b) => a[1] - b[1])[0]?.[0];
+  const train = nearest(map.queryRenderedFeatures(box, { layers: ["tt-trains", "tt-labels"].filter((l) => map.getLayer(l)) }));
   if (train) return select(train.properties.id);
+  const metro = map.getLayer("tt-metros") && map.queryRenderedFeatures(box, { layers: ["tt-metros"] })[0];
+  if (metro) return openMetro(metro.properties.name);
   const station = map.queryRenderedFeatures(box, { layers: [...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l)) })[0];
   if (station) return selectStation(station.properties.id);
   // A disruption, tapped (phones have no hover): its card, until the next tap.
@@ -3345,6 +3561,8 @@ function goHome() {
   closeDetail();
 }
 
+map.on("mousemove", "tt-metros", () => { map.getCanvas().style.cursor = "pointer"; });
+map.on("mouseleave", "tt-metros", () => { map.getCanvas().style.cursor = ""; });
 for (const layer of STATION_LAYERS) {
   map.on("mousemove", layer, (e) => {
     if (map.queryRenderedFeatures(e.point, { layers: ["tt-trains"] }).length) return;
@@ -3378,7 +3596,7 @@ function hoverCard(t) {
   const a = AGENCIES[t.agency];
   const c = consistOf(t);
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
-  const status = t.statusText ? `<span class="status-t ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "";
+  const status = statusSpan(t, "status-t");
   const where = next
     ? `<span class="hc-k">${T("Next")}</span> <strong>${esc(next.name)}</strong>${next.time ? ` · ${esc(fmtTime(next.time, next.tz))}` : ""}`
     // Railroads that give only the next stop's name (SEPTA, GO...).
@@ -3424,7 +3642,6 @@ function openCar(fig) {
   renderDetail();
 }
 on("train-detail", "keydown", (e) => {
-  if (e.target.closest?.("[data-track-to]")) return; // the pin is its own button
   const stationLi = e.target.closest?.("li[data-station]");
   if (stationLi && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return stationLi.click(); }
   const stopLink = e.target.closest?.("[data-stop-station]");
@@ -3439,33 +3656,7 @@ function openStop(li) {
   state.returnTo = { train: t.id }; // "back" from this station goes to the train
   setBack(t.number ? T("Train {n}", { n: t.number }) : T("Train"));
 }
-// Hovering a stop's circle previews the trip to it: the line from the train
-// and the stops on the way, in a lighter shade of the line's color.
-let previewing = null;
-on("train-detail", "mouseover", (e) => {
-  const dot = e.target.closest("button.stop-dot");
-  if (dot === previewing) return;
-  previewing = dot;
-  for (const li of document.querySelectorAll(".stops li.pv-from, .stops li.pv-ride, .stops li.pv-dest")) li.classList.remove("pv-from", "pv-ride", "pv-dest");
-  if (!dot) return;
-  const rows = [...dot.closest(".stops").children];
-  // Once they've tapped where they got on: the ride from there to here.
-  const start = rows.findIndex((li) => li.classList.contains("pick-from"));
-  const to = rows.indexOf(dot.closest("li"));
-  if (start < 0 || to <= start) return;
-  rows.forEach((li, i) => {
-    if (i === start) li.classList.add("pv-from");
-    else if (i > start && i < to) li.classList.add("pv-ride");
-    else if (i === to) li.classList.add("pv-dest");
-  });
-});
 on("train-detail", "click", (e) => {
-  const pin = e.target.closest("[data-track-to]");
-  if (pin) {
-    const t = state.trains.get(state.selected);
-    if (t) trackTo(t, pin.dataset.trackTo);
-    return;
-  }
   const stopLink = e.target.closest("[data-stop-station]");
   if (stopLink) return openStop(stopLink);
   const view = e.target.closest("[data-station-view]");
@@ -3527,7 +3718,7 @@ on("train-detail", "click", (e) => {
   const track = e.target.closest("[data-track]");
   if (track) {
     const t = state.trains.get(track.dataset.track);
-    if (t) startTracking(t, null);
+    if (t) openTrackSheet(t);
     return;
   }
   const stop = e.target.closest("[data-untrack]");
@@ -3835,7 +4026,6 @@ function toggleShortcuts(open = !document.querySelector(".keys-sheet")) {
 on("keys-btn", "click", () => { toggleMenu(false); toggleShortcuts(); });
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
-  if (document.querySelector(".tour-card")) return; // the tour has its own keys
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
   const sheet = document.querySelector(".keys-sheet");
   if (e.key === "Escape") {
@@ -3913,14 +4103,6 @@ addEventListener("appinstalled", () => {
 on("install-btn", "click", () => { toggleMenu(false); install(); });
 showInstall();
 
-// The guided tour (js/tour.js), from Settings (Help).
-function takeTour() {
-  toggleMenu(false);
-  startTour({ state, map, select, selectStation, closeDetail, setSheet, isPhone, targetOf, visible,
-              padding: panelPadding });
-}
-on("tour-btn", "click", takeTour);
-
 // Phone bottom sheet: collapsed / normal / expanded.
 function setSheet(mode) {
   const p = $("panel");
@@ -3950,7 +4132,7 @@ const wanted = new URL(location.href).searchParams.get("train");
 // A shared ride (?ride=1, with its stops): the train, tracked here too.
 const sharedRide = (() => {
   const q = new URL(location.href).searchParams;
-  return q.get("ride") ? { to: q.get("to"), from: q.get("from") } : null;
+  return q.get("ride") ? { to: q.get("to") } : null;
 })();
 if (wanted) {
   const wait = setInterval(() => {
@@ -3958,7 +4140,7 @@ if (wanted) {
       clearInterval(wait);
       const t = state.trains.get(wanted);
       if (sharedRide && !state.tracked.some((r) => r.id === wanted)) {
-        startTracking(t, sharedRide.to || null, sharedRide.from || null);
+        startTracking(t, sharedRide.to || null);
         const to = sharedRide.to && t.stops?.find((s) => s.key === sharedRide.to);
         toast(to ? T("Following a shared ride to {place}.", { place: to.name }) : T("Following a shared ride."));
       }

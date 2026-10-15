@@ -863,8 +863,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
 .stops li:first-child::before { top: 50%; }
 .stops li:last-child::before { bottom: 50%; }
 
-/* The stop's circle; on stops still ahead, a button: tap to track the
-   train until there. The button is bigger than the circle, for fingers. */
+/* The stop's circle. */
 .stop-dot {
   position: absolute;
   left: -5px;
@@ -890,16 +889,7 @@ button.dep:hover .what .title, button.dep:focus-visible .what .title {
   border: 2px solid var(--faint);
   transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
-button.stop-dot { cursor: pointer; }
-button.stop-dot:hover::before, button.stop-dot:focus-visible::before {
-  transform: scale(1.5);
-  border-color: var(--line-color, var(--accent));
-  background: color-mix(in srgb, var(--line-color, var(--accent)) 22%, var(--panel-solid));
-}
-button.stop-dot:active::before { transform: scale(1.2); }
-button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-.stops-hint { margin: 2px 0 0; font-size: var(--fs-xs); color: var(--muted); }
 
 /* Each stop opens its station. */
 .stops li.link { cursor: pointer; border-radius: var(--r-sm); }
@@ -916,6 +906,7 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
 .stops li.next .stop-dot::before { border-color: var(--line-color, var(--accent)); background: var(--line-color, var(--accent)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--line-color, var(--accent)) 25%, transparent); }
 .stops .time { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .stops .time .late { color: var(--warn); }
+.stops .time .was { margin-left: 6px; font-size: var(--fs-xs); color: var(--faint); }
 
 /* Tracking to a stop: the line from the train to it is drawn in the line's
    color and the stops after it are greyed out. */
@@ -939,45 +930,13 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
   background: var(--panel-solid);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--line-color, var(--accent)) 28%, transparent);
 }
-.stops li.dest button.stop-dot:hover::before { transform: scale(1.55); }
 .stops li.beyond, .stops li.beyond .time, .stops li.beyond .time .late { color: var(--faint); }
 .stops li.beyond .stop-dot::before, .stops li.before .stop-dot::before { border-color: var(--line); }
 .stops li.before, .stops li.before .time, .stops li.before .time .late { color: var(--faint); }
-/* The stop a rider got on at, tapped first: filled in the line's color. */
-.stops li.pick-from { font-weight: 650; }
-.stops li.pick-from .stop-dot::before {
-  transform: scale(1.4);
-  border: 3px solid var(--line-color, var(--accent));
-  background: var(--line-color, var(--accent));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--line-color, var(--accent)) 28%, transparent);
-}
 /* The stops on the way are ringed in the line's color too. */
 .stops li.ride:not(.next) .stop-dot::before { border-color: var(--line-color, var(--accent)); }
 /* Stops of the ride the train has already passed: filled in, like steps done. */
 .stops li.past.ride .stop-dot::before, .stops li.past.ride-from .stop-dot::before { background: var(--line-color, var(--accent)); border-color: var(--line-color, var(--accent)); }
-
-/* Hovering a later stop's circle previews the trip to it, lighter. */
-.stops { --pv: color-mix(in srgb, var(--line-color, var(--accent)) 38%, var(--panel-solid)); }
-.stops li.pv-ride:not(.ride):not(.dest)::before { left: 4.5px; width: 3px; background: var(--pv); }
-.stops li.pv-from:not(.ride-from)::before {
-  left: 4.5px; width: 3px;
-  background: linear-gradient(var(--line), var(--line)) center top / 2px 50% no-repeat,
-    linear-gradient(var(--pv), var(--pv)) center bottom / 3px 50% no-repeat;
-}
-.stops li.pv-dest:not(.dest):not(.ride)::before {
-  left: 4.5px; width: 3px;
-  background: linear-gradient(var(--pv), var(--pv)) center top / 3px 50% no-repeat,
-    linear-gradient(var(--line), var(--line)) center bottom / 2px 50% no-repeat;
-}
-/* Past the stop it's tracked to: its lower half carries on, lighter. */
-.stops li.dest.pv-ride::before {
-  background: linear-gradient(var(--line-color, var(--accent)), var(--line-color, var(--accent))) center top / 3px 50% no-repeat,
-    linear-gradient(var(--pv), var(--pv)) center bottom / 3px 50% no-repeat;
-}
-.stops li.pv-from:not(.ride-from):first-child::before, .stops li.pv-dest:not(.dest):not(.ride):last-child::before { background: var(--pv); }
-.stops li.pv-ride:not(.ride):not(.dest):not(.next) .stop-dot::before { border-color: var(--pv); }
-.stops li.beyond.pv-ride, .stops li.beyond.pv-dest { color: inherit; }
-.stops li.beyond.pv-ride .time, .stops li.beyond.pv-dest .time { color: var(--muted); }
 
 .section-title {
   flex: none;
@@ -1100,44 +1059,6 @@ button.stop-dot:focus-visible { outline: 2px solid var(--accent); outline-offset
   body.sheet-expanded .maplibregl-ctrl-bottom-right { bottom: calc(86vh + 4px); }
   .toast { bottom: calc(46vh + 16px); }
 }
-
-/* ---------- Guided tour (js/tour.js) ---------- */
-
-.tour-link { display: block; margin: 0 0 var(--s2); }
-.tour-menu-btn { width: 100%; margin-bottom: var(--s2); }
-
-/* Catches clicks while the tour is open; dims the page when nothing is
-   spotlit (the ring's shadow dims it otherwise). */
-.tour-shade { position: fixed; inset: 0; z-index: 2000; background: transparent; transition: background 0.2s ease; }
-.tour-shade.on { background: rgba(10, 12, 16, 0.5); }
-.tour-ring {
-  position: fixed;
-  z-index: 2001;
-  border-radius: var(--r-md);
-  box-shadow: 0 0 0 2px var(--accent), 0 0 0 9999px rgba(10, 12, 16, 0.5);
-  pointer-events: none;
-  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease;
-}
-.tour-ring.round { border-radius: 50%; }
-.tour-ring[hidden] { display: none; }
-.tour-card {
-  position: fixed;
-  z-index: 2002;
-  width: min(320px, calc(100vw - 24px));
-  padding: var(--s4);
-  border-radius: var(--r-lg);
-  background: var(--panel-solid);
-  color: var(--text);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--line);
-}
-.tour-head { display: flex; justify-content: space-between; align-items: center; }
-.tour-count { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
-.tour-x { width: 26px; height: 26px; margin: -4px -6px 0 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
-.tour-x:hover { background: var(--hover); color: var(--text); }
-.tour-card h3 { margin: var(--s1) 0 0; font-size: var(--fs-md); }
-.tour-card p { margin: var(--s1) 0 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); }
-.tour-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s3); }
 
 /* ---------- Railroad pages ---------- */
 
