@@ -596,5 +596,21 @@ kbd {
 
 .line-mark { display: inline-block; flex: none; width: 18px; height: 5px; border-radius: 3px; background: var(--c); vertical-align: middle; }
 .served-name:has(> .line-mark) { align-items: center; }
-.facts { padding-bottom: 2px; }
-.facts + .rr-sec > .section-title, .facts + .notices > .section-title { margin-top: 14px; }
+
+/* ---------- One rhythm for the detail pages ----------
+ * Every section under a page's header (on board, crowding, notices, the
+ * live card, stops, a station's or railroad's sections) sits between thin
+ * lines with the same space above and below, its heading flush at its top. */
+#train-detail > :is(.on-board, .crowd, .facts, .notices, .rr-sec) {
+  margin: 0; padding: 12px 0; border-top: 0.5px solid var(--line); border-bottom: 0;
+}
+/* Cards between them (a railroad's stats, quiet hours) keep their own
+ * padding, with the same space around them. */
+#train-detail > :is(.rr-stats, .quiet) { margin: 0 0 12px; }
+#train-detail > :is(.notices, .rr-sec) > .section-title,
+#train-detail > .rr-sec > .deps-head { margin-top: 0; }
+#train-detail > .rr-sec > .deps-head .section-title { margin: 0; }
+#train-detail > :is(.notices, .rr-sec):not(.collapsed) > .section-title { margin-bottom: 8px; }
+.crowd { overflow: hidden; }
+.crowd-cars { min-width: 0; }
+.cc { min-width: 0; }
