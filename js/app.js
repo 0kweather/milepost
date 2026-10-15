@@ -3009,6 +3009,8 @@ function hoverCard(t) {
   const status = t.statusText ? `<span class="status-t ${statusClass(t)}">${esc(statusLabel(t.statusText))}</span>` : "";
   const where = next
     ? `<span class="hc-k">${T("Next")}</span> <strong>${esc(next.name)}</strong>${next.time ? ` · ${esc(fmtTime(next.time, next.tz))}` : ""}`
+    // Railroads that give only the next stop's name (SEPTA, GO...).
+    : t.nextStop ? `<span class="hc-k">${T("Next")}</span> <strong>${esc(t.nextStop)}</strong>`
     : t.destination ? `${T("to")} <strong>${esc(t.destination)}</strong>` : "";
   return `<div class="t">${plate(t.number || a.short, a.color, "xs")}<span>${esc(trainTitle(t))}</span></div>
     ${c ? `<div class="hc-strip" aria-hidden="true">${consistHtml(c, a.color).replaceAll(' role="button" tabindex="0"', "")}</div>` : ""}
