@@ -931,6 +931,7 @@ function animateTo(duration = ANIM_MS) {
 function mergeTrains() {
   state.trains = new Map();
   for (const list of Object.values(state.bySource)) for (const t of list) state.trains.set(t.id, t);
+  applyMtaConsists();
   applyInference();
   computePositions();
   animateTo();
@@ -941,6 +942,41 @@ function mergeTrains() {
     if (t) map.easeTo({ center: [targetOf(t).lon, targetOf(t).lat], duration: ANIM_MS });
   }
 }
+
+// The LIRR's and Metro-North's real trains, car by car (TrainTime's data,
+// through the relay, read every minute), drawn in place of the typical ones.
+let mtaConsists = new Map(); // "lirr:1068" -> { numbers, types }
+const MTA_MODELS = { M7: "m7", M9: "m9", M3: "m3", M3A: "m3", M7A: "m7a", M8: "m8", C3: "c3", SL: "shoreliner", SC: "charger", P32: "p32" };
+function loadMtaConsists() {
+  if (!RELAY || !(agencyShown("lirr") || agencyShown("mnr"))) return;
+  fetch(`${RELAY.replace(/\/$/, "")}/mta-consists`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    if (!d?.trains) return;
+    mtaConsists = new Map(Object.entries(d.trains).map(([k, cars]) => {
+      const types = cars.map(([, type]) => MTA_MODELS[type] || null);
+      // A Shoreliner set's cab car: the end opposite its locomotive.
+      if (types.includes("shoreliner")) {
+        if (cars[0][2] && types[types.length - 1] === "shoreliner") types[types.length - 1] = "shorelinerCab";
+        else if (cars[cars.length - 1][2] && types[0] === "shoreliner") types[0] = "shorelinerCab";
+      }
+      return [k.replace(/^LIRR:/, "lirr:").replace(/^MNR:/, "mnr:"), { numbers: cars.map(([no]) => no), types }];
+    }));
+    if (applyMtaConsists()) renderAll();
+  }).catch(() => {});
+}
+function applyMtaConsists() {
+  let changed = false;
+  for (const t of state.trains.values()) {
+    if (t.agency !== "lirr" && t.agency !== "mnr") continue;
+    const c = mtaConsists.get(`${t.agency}:${t.number}`);
+    if (c && t.cars?.numbers?.join() !== c.numbers.join()) {
+      t.cars = { numbers: c.numbers, types: c.types, complete: true };
+      changed = true;
+    }
+  }
+  return changed;
+}
+setInterval(() => !document.hidden && loadMtaConsists(), 60 * 1000);
+setTimeout(loadMtaConsists, 3000);
 
 // Delays the GPS proves but the railroad hasn't posted yet.
 function applyInference() {

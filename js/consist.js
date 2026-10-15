@@ -453,7 +453,9 @@ export function fleetSamples(agency) {
 }
 
 export function consistOf(t) {
-  const reported = (t.cars?.numbers || []).map((number) => ({ number, key: typeOf(t.agency, number) }));
+  // A feed may name each car's model (t.cars.types, TYPES keys); else its
+  // number says what it is.
+  const reported = (t.cars?.numbers || []).map((number, i) => ({ number, key: typeOf(t.agency, number) || (TYPES[t.cars.types?.[i]] ? t.cars.types[i] : null) }));
   const known = reported.filter((c) => c.key);
   // Every car, straight from the feed.
   if (t.cars?.complete && known.length) {
