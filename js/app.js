@@ -1314,7 +1314,27 @@ function renderResults() {
       <span class="count">${T("{n} running", { n: l.running })} ›</span>
     </button>`;
   }).join("") : "";
-  const before = railroadBlock + lineBlock + stationBlock;
+  // Cars, by number: the trains running with one now, where railroads list
+  // their cars (the LIRR's, Metro-North's, the MBTA's, SEPTA's...).
+  const carHits = [];
+  if (/^[a-z0-9]{2,6}$/.test(q)) {
+    for (const t of state.trains.values()) {
+      if (!inLists(t)) continue;
+      const nums = (t.cars?.numbers || []).map((n) => String(n ?? "").toLowerCase());
+      const i = nums.indexOf(q);
+      if (i >= 0) carHits.push({ t, i, of: nums.length });
+    }
+  }
+  const carBlock = carHits.length ? `<div class="group-title">${T("Cars")}</div>` + carHits.slice(0, 6).map(({ t, i, of }) => {
+    const a = AGENCIES[t.agency], model = consistOf(t)?.cars[i]?.type?.name;
+    const where = t.cars.complete && of > 1 ? T("car {n} of {of} from the front", { n: i + 1, of }) : "";
+    return `<button class="result" data-car-train="${esc(t.id)}" data-car-i="${t.cars.complete ? i : ""}">
+      ${plate(t.number || a.short, a.color, "sm")}
+      <span><span class="title">${esc([T("Car {n}", { n: t.cars.numbers[i] }), model].filter(Boolean).join(" · "))}</span><br><span class="sub">${esc([t.destination ? T("to {place}", { place: t.destination }) : trainTitle(t), where].filter(Boolean).join(" · "))}</span></span>
+      <span></span>
+    </button>`;
+  }).join("") : "";
+  const before = carBlock + railroadBlock + lineBlock + stationBlock;
   if (!matches.length) {
     el.innerHTML = before || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`;
     return;
@@ -2584,6 +2604,7 @@ function renderTracked() {
     const color = t?.routeColor || a.color;
     return `<div class="track-card live" style="--c:${color}" role="button" tabindex="0" data-track-open="${esc(rec.id)}">
       <div class="la-top">${plate(rec.number || a.short, a.color, "xs")}<span class="la-route">${esc(rec.route || AGENCIES[rec.agency]?.name || "")}</span>${eta ? `<span class="la-eta">${eta}</span>` : ""}
+        <button class="tc-x tc-share" data-share-ride="${esc(rec.id)}" aria-label="${T("Share this ride")}" title="${T("Share this ride")}">${SHARE_ICON}</button>
         <button class="tc-x" data-untrack="${esc(rec.id)}" aria-label="${esc(T("Stop tracking {train}", { train: trainLabel(rec) }))}" title="${T("Stop tracking")}">×</button></div>
       ${where || status || warn ? `<div class="la-where">${[where, status, warn].filter(Boolean).join(" · ")}</div>` : ""}
       ${pct != null ? `<div class="la-track" style="--p:${pct.toFixed(3)}" aria-hidden="true"><span class="la-fill"></span><span class="la-end"></span><span class="la-dot"></span></div>` : ""}
@@ -2602,6 +2623,33 @@ function renderTracked() {
   islandsShown = new Map(state.tracked.map((r) => [r.id, islandsShown.get(r.id) ?? now]));
   // On phones, keep the cards visible when the sheet is collapsed.
   document.documentElement.style.setProperty("--tracked-h", `${el.hidden || !isPhone ? 0 : el.offsetHeight}px`);
+}
+
+// Share a tracked ride: a link that, opened, tracks the same train to the
+// same stop (from the same one), with a line saying where it's going.
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 3.5v11M8 7.5l4-4 4 4M7 11H6a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 18 11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+async function shareRide(rec) {
+  if (!rec) return;
+  const q = new URLSearchParams({ train: rec.id, ride: "1" });
+  if (rec.stopKey) q.set("to", rec.stopKey);
+  if (rec.fromKey) q.set("from", rec.fromKey);
+  const url = `${location.origin}${location.pathname}?${q}`;
+  const name = trainLabel(rec), when = rec.eta ? fmtTime(new Date(rec.eta).toISOString()) : "";
+  const text = rec.stopName && when ? T("I'm on {train}, arriving at {place} at {time}.", { train: name, place: rec.stopName, time: when })
+    : T("I'm on {train}.", { train: name });
+  if (navigator.share) {
+    try {
+      return await navigator.share({ title: name, text, url });
+    } catch (err) {
+      if (err.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    toast(T("Link copied."));
+  } catch {
+    toast(url);
+  }
 }
 
 function openTracked(id) {
@@ -2976,6 +3024,8 @@ map.on("dragstart", () => state.follow && setFollow(false));
 
 on("back-btn", "click", closeDetail);
 on("tracked", "click", (e) => {
+  const share = e.target.closest("[data-share-ride]");
+  if (share) return shareRide(state.tracked.find((r) => r.id === share.dataset.shareRide));
   const x = e.target.closest("[data-untrack]");
   if (x) return untrack(x.dataset.untrack);
   const card = e.target.closest("[data-track-open]");
@@ -3159,6 +3209,16 @@ on("search", "keydown", (e) => {
 });
 
 on("results", "click", (e) => {
+  // A car found by its number: its train, with the car's card open.
+  const car = e.target.closest("[data-car-train]");
+  if (car) {
+    select(car.dataset.carTrain);
+    if (car.dataset.carI !== "") {
+      state.car = { id: car.dataset.carTrain, i: Number(car.dataset.carI) };
+      renderDetail();
+    }
+    return;
+  }
   const rr = e.target.closest("[data-railroad]");
   if (rr) return openRailroad(rr.dataset.railroad);
   const ln = e.target.closest("[data-open-line]");
@@ -3501,10 +3561,26 @@ function toast(msg) {
 const wantedStation = new URL(location.href).searchParams.get("station");
 const wantedRailroad = new URL(location.href).searchParams.get("railroad");
 const wanted = new URL(location.href).searchParams.get("train");
+// A shared ride (?ride=1, with its stops): the train, tracked here too.
+const sharedRide = (() => {
+  const q = new URL(location.href).searchParams;
+  return q.get("ride") ? { to: q.get("to"), from: q.get("from") } : null;
+})();
 if (wanted) {
   const wait = setInterval(() => {
     if (state.trains.has(wanted)) {
       clearInterval(wait);
+      const t = state.trains.get(wanted);
+      if (sharedRide && !state.tracked.some((r) => r.id === wanted)) {
+        startTracking(t, sharedRide.to || null, sharedRide.from || null);
+        const to = sharedRide.to && t.stops?.find((s) => s.key === sharedRide.to);
+        toast(to ? T("Following a shared ride to {place}.", { place: to.name }) : T("Following a shared ride."));
+      }
+      if (sharedRide) {
+        const u = new URL(location.href);
+        for (const k of ["ride", "to", "from"]) u.searchParams.delete(k);
+        history.replaceState(null, "", u);
+      }
       select(wanted);
     }
   }, 500);

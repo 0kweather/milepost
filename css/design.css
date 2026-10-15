@@ -350,6 +350,7 @@ html, body {
 .la-end { position: absolute; right: 0; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
 .live .tc-x { position: static; width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.8); font-size: 15px; line-height: 1; }
 .live .tc-x:hover { background: rgba(255, 255, 255, 0.24); color: #fff; }
+.live .tc-share { display: inline-flex; align-items: center; justify-content: center; }
 
 /* ---------- Menu, toast, loading ---------- */
 
