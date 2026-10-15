@@ -1174,32 +1174,33 @@ function statusClass(t) {
 // which way it's heading (a compass), when it left, and how fresh its
 // position is.
 function factTiles(t) {
-  // The first row: the next stop, then speed and heading as small square
-  // dials the same height.
-  const top = [];
+  // One card: the next stop, with speed and heading as small dials on its
+  // right; under it, a line saying when it left and where its position comes
+  // from.
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
   const nextName = next?.name || t.nextStop;
-  if (nextName) {
-    const at = next && Date.parse(next.time);
-    top.push(tile(T("Next stop"), `<span class="ft-name">${esc(nextName)}</span>`,
-      at ? `${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}` : "", "grow"));
-  }
+  const at = next && Date.parse(next.time);
+  const dials = [];
   if (t.speedMph != null && !t.estimated) {
     const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
-    top.push(`<div class="ft dial" title="${esc(`${T("Speed")}: ${v} ${km ? "km/h" : T("mph")}`)}">${speedometerSvg(t.speedMph, km)}</div>`);
+    dials.push(`<span class="ft-dial" title="${esc(`${T("Speed")}: ${v} ${km ? "km/h" : T("mph")}`)}">${speedometerSvg(t.speedMph, km)}</span>`);
   }
   const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
   if (b != null) {
     const inferred = t.bearing == null && est?.inferred;
     const dir = T(HEADINGS[Math.round(b / 45) % 8]);
-    top.push(`<div class="ft dial${inferred ? " inferred" : ""}" title="${esc(`${T("Heading")}: ${dir}${inferred ? ` (${T("Worked out from the train's next stop; its railroad doesn't report a heading")})` : ""}`)}">${compassSvg(b, dir)}</div>`);
+    dials.push(`<span class="ft-dial${inferred ? " inferred" : ""}" title="${esc(`${T("Heading")}: ${dir}${inferred ? ` (${T("Worked out from the train's next stop; its railroad doesn't report a heading")})` : ""}`)}">${compassSvg(b, dir)}</span>`);
   }
-  const rest = [];
-  if (t.departedOn) rest.push(tile(T("Left"), `<span class="ft-name">${esc(t.departedOn)}</span>`));
-  rest.push(t.estimated
-    ? tile(T("Position"), `<span class="ft-name">${T("Estimated")}</span>`, `${T("from predicted times")} · ${esc(fmtAgo(t.updated))}`)
-    : tile(T("GPS"), `<span class="ft-name ft-gps">${SIGNAL_ICON}${esc(fmtAgo(t.updated))}</span>`));
-  return `<div class="facts">${top.length ? `<div class="facts-top">${top.join("")}</div>` : ""}${rest.join("")}</div>`;
+  const card = nextName || dials.length ? `<div class="ft live-card">
+      ${nextName ? `<div class="ft-main"><span class="ft-label">${T("Next stop")}</span><span class="ft-value"><span class="ft-name">${esc(nextName)}</span></span>
+        ${at ? `<span class="ft-sub">${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}</span>` : ""}</div>` : '<div class="ft-main"></div>'}
+      ${dials.join("")}
+    </div>` : "";
+  const note = [
+    t.departedOn ? T("left {day}", { day: t.departedOn }) : "",
+    t.estimated ? `${T("Estimated from predicted times")} · ${fmtAgo(t.updated)}` : `${T("GPS")} · ${fmtAgo(t.updated)}`,
+  ].filter(Boolean).map(esc).join(" · ");
+  return `<div class="facts">${card}<p class="ft-note">${t.estimated ? "" : SIGNAL_ICON}${note.charAt(0).toUpperCase() + note.slice(1)}</p></div>`;
 }
 // A small speedometer: a ring that fills up to the speed (full at 125 mph,
 // 200 km/h), the speed in the middle.
@@ -1229,10 +1230,6 @@ function compassSvg(bearing, dir) {
     <text x="${cx}" y="${cy + 4.5}" text-anchor="middle" class="value">${esc(dir)}</text>
   </svg>`;
 }
-function tile(label, value, sub = "", cls = "", aside = "") {
-  return `<div class="ft${cls ? ` ${cls}` : ""}"><div class="ft-main"><span class="ft-label">${label}</span><span class="ft-value">${value}</span>${sub ? `<span class="ft-sub">${sub}</span>` : ""}</div>${aside}</div>`;
-}
-
 function trainTitle(t) {
   const a = AGENCIES[t.agency];
   return t.route ? `${t.route}` : a.name;
@@ -1564,7 +1561,6 @@ function renderDetail() {
     ${crowdSection(t)}
     ${noticesHtml(t)}
     ${tiles}
-    ${t.estimated ? `<p class="estimate-note">${T("This railroad doesn’t publish GPS positions, so the train is placed between stations using its predicted arrival times.")}</p>` : ""}
     ${stops}`;
   el.scrollTop = keepScroll;
   const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
