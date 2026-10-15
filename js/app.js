@@ -1,8 +1,9 @@
 import { AGENCIES, SOURCES, fetchSource, advanceEstimated } from "./sources.js?v=dev";
-import { loadStations, trainsDue, mbtaPredictions, mbtaFacilities, amtrakAddress, meters, norm } from "./stations.js?v=dev";
+import { loadStations, trainsDue, mbtaPredictions, mbtaFacilities, amtrakAddress, meters, norm, stopKey } from "./stations.js?v=dev";
 import { RailIndex, snapToTrack } from "./estimate.js?v=dev";
 import { NETWORKS, networkColor } from "./networks.js?v=dev";
 import { trainNotices, stationNotices } from "./notices.js?v=dev";
+import { loadDisruptions, aboutLine } from "./disruptions.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
@@ -409,6 +410,23 @@ function addLayers() {
     layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": ["get", "color"], "line-width": byZoom((w) => w * 1.8) },
   }, firstSymbol);
+  // Disruptions: where a railroad says no trains are running right now, a
+  // red band with a broken red line along it, over the track's strands.
+  map.addSource("disruptions", { type: "geojson", data: { type: "FeatureCollection", features: disruptionFeatures() } });
+  map.addLayer({
+    id: "tt-disruption-band",
+    type: "line",
+    source: "disruptions",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#ff3b30", "line-opacity": 0.22, "line-width": byZoom((w) => w * 5 + 4) },
+  }, firstSymbol);
+  map.addLayer({
+    id: "tt-disruption-line",
+    type: "line",
+    source: "disruptions",
+    layout: { "line-join": "round", "line-cap": "butt" },
+    paint: { "line-color": "#ff3b30", "line-width": byZoom((w) => w * 1.4 + 1), "line-dasharray": [1.4, 1.1] },
+  }, firstSymbol);
   // Other main-line track (freight) from the basemap, faintly, when zoomed in.
   // Yards, sidings and spurs are left out; they turn terminals into a tangle.
   map.addLayer({
@@ -800,7 +818,99 @@ function railCollection() {
 
 function redrawRail() {
   map.getSource("rail")?.setData(railCollection());
+  map.getSource("disruptions")?.setData({ type: "FeatureCollection", features: disruptionFeatures() });
   applyFocus();
+}
+
+// ---------- Disruptions ----------
+// Stretches where a railroad says no trains are running right now
+// (js/disruptions.js), traced along its track: between the two stations its
+// notice names, else the two furthest apart of the stations it lists, else
+// (a whole MBTA line) the line's two ends. Then trimmed to the stations that
+// only the lines it's about serve, so track other trains still run on isn't
+// marked: "between Bridgeport and Waterbury" starts at Derby-Shelton, the
+// first station on the Waterbury Branch alone. Refreshed every five minutes.
+let disruptions = [];      // from loadDisruptions()
+let disruptionGeo = null;  // their features, traced once the track and stations are in
+async function refreshDisruptions() {
+  disruptions = await loadDisruptions().catch(() => disruptions);
+  disruptionGeo = null;
+  redrawRail();
+}
+setInterval(() => !document.hidden && refreshDisruptions(), 5 * 60 * 1000);
+
+function disruptionEnds(d) {
+  const named = (name) => {
+    for (const n of [name, name.split("/")[0]]) {
+      const p = state.stopByName.get(`${d.agency}:${norm(n)}`);
+      if (p) return p;
+    }
+    return null;
+  };
+  const between = d.between?.map(named);
+  if (between?.[0] && between[1]) return between;
+  let pts = d.stops.map((id) => state.stopPos.get(stopKey(d.agency, id))).filter(Boolean);
+  if (pts.length < 2 && d.line) {
+    pts = [...state.stations.values()].flatMap((st) => st.members)
+      .filter((m) => m.agency === d.agency && (m.lines || []).some((l) => l.startsWith(d.line)));
+  }
+  let best = null;
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const m = meters(pts[i], pts[j]);
+      if (!best || m > best[2]) best = [pts[i], pts[j], m];
+    }
+  }
+  return best && best[2] > 300 ? [best[0], best[1]] : null;
+}
+
+function disruptionFeatures() {
+  if (!state.rail || !state.stations.size) return [];
+  disruptionGeo ??= disruptions.flatMap((d) => {
+    const ends = disruptionEnds(d);
+    if (!ends) return [];
+    const [p, q] = ends;
+    const path = state.rail.route(state.rail.snap([p.lon, p.lat], 1500, d.agency), state.rail.snap([q.lon, q.lat], 1500, d.agency), d.agency);
+    // A route far longer than the gap went some other way: better not drawn.
+    if (!path || path.coords.length < 2 || path.length > meters(p, q) * 2.5 + 5000) return [];
+    const coords = d.routes.length ? ownStretch(d, path) : path.coords;
+    return coords ? [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: d.id, agency: d.agency } }] : [];
+  });
+  return disruptionGeo.filter((f) => agencyShown(f.properties.agency));
+}
+
+// The part of a disruption's path between the first and last stations along
+// it served only by the lines it's about; none such, nothing drawn.
+function ownStretch(d, path) {
+  const kx = Math.cos((path.coords[0][1] * Math.PI) / 180);
+  const along = [];
+  for (const st of state.stations.values()) {
+    const m = st.members.find((x) => x.agency === d.agency);
+    if (!m?.lines?.length) continue;
+    let best = Infinity, at = 0;
+    path.coords.forEach((c, i) => {
+      const dd = Math.hypot((c[0] - m.lon) * kx, c[1] - m.lat) * 111320;
+      if (dd < best) { best = dd; at = path.cum[i]; }
+    });
+    if (best < 400) along.push({ at, own: m.lines.every((l) => aboutLine(d, l)) });
+  }
+  const own = along.filter((x) => x.own).sort((a, b) => a.at - b.at);
+  if (!own.length) return null;
+  const from = own[0].at, to = own[own.length - 1].at;
+  if (to - from < 300) return null;
+  const out = [path.at(from).point];
+  path.coords.forEach((c, i) => { if (path.cum[i] > from && path.cum[i] < to) out.push(c); });
+  out.push(path.at(to).point);
+  return out;
+}
+
+// A disruption's card, on hover or tap: its railroad and its notice.
+function disruptionCard(id) {
+  const d = disruptions.find((x) => x.id === id);
+  if (!d) return "";
+  const a = AGENCIES[d.agency];
+  return `<div class="rail-net"><span class="dot" style="background:${a.color}"></span>${esc(a.name)} · ${esc(T(d.buses ? "Buses replace trains" : "No trains"))}</div>
+    <div class="disruption-note">${esc(d.header)}</div>`;
 }
 
 function redrawStations() {
@@ -860,6 +970,7 @@ function loadRail() {
       state.railGeo = geojson;
       redrawRail();
       state.rail = new RailIndex(geojson);
+      disruptionGeo = null;
       snapCache.clear();
       snapStations();
       computePositions();
@@ -1057,6 +1168,7 @@ async function start() {
       applyInference();
       computePositions();
       redrawStations();
+      refreshDisruptions();
       if (wantedStation) selectStation(wantedStation);
       else if (AGENCIES[wantedRailroad]) {
         // Framed once the map is ready (a shared link may open before it is).
@@ -3313,6 +3425,12 @@ map.on("mousemove", (e) => {
     popup._railHover = false;
     return;
   }
+  const broken = map.getLayer("tt-disruption-band") && map.queryRenderedFeatures(box, { layers: ["tt-disruption-band"] })[0];
+  if (broken) {
+    popup.setLngLat(e.lngLat).setHTML(disruptionCard(broken.properties.id)).addTo(map);
+    popup._railHover = true;
+    return;
+  }
   const rail = map.queryRenderedFeatures(box, { layers: RAIL_LAYERS })[0];
   if (!rail) {
     if (popup._railHover) popup.remove();
@@ -3353,6 +3471,14 @@ map.on("click", (e) => {
   if (train) return select(train.properties.id);
   const station = map.queryRenderedFeatures(box, { layers: [...STATION_LAYERS, "tt-station-selected-label"].filter((l) => map.getLayer(l)) })[0];
   if (station) return selectStation(station.properties.id);
+  // A disruption, tapped (phones have no hover): its card, until the next tap.
+  const broken = map.getLayer("tt-disruption-band") && map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: ["tt-disruption-band"] })[0];
+  if (broken) {
+    popup.setLngLat(e.lngLat).setHTML(disruptionCard(broken.properties.id)).addTo(map);
+    popup._railHover = true;
+    return;
+  }
+  if (popup._railHover) { popup.remove(); popup._railHover = false; }
   // A tap on the map itself goes home, from whatever page is open.
   if (state.selected || state.station || state.railroad) goHome();
 });

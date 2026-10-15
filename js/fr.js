@@ -338,6 +338,8 @@ export default {
   "Not this train": "Pas ce train",
   "Moving with you at {speed}": "Roule avec vous à {speed}",
   "Track this ride": "Suivre ce trajet",
+  "Buses replace trains": "Autobus au lieu des trains",
+  "No trains": "Aucun train",
   // ----- Where to sit -----
   "Where to sit": "Où s’asseoir",
   "Left side": "Côté gauche",

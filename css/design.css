@@ -689,3 +689,6 @@ kbd {
 .history-chart .hc-mark { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; }
 .history-chart .hc-label { fill: var(--muted); font: 600 10px var(--font); }
 @media (prefers-reduced-motion: reduce) { .lifts-ok-toggle::after { transition: none; } }
+
+/* A disruption's card on the map: the railroad's notice, a few lines. */
+.hover-card .disruption-note { max-width: 260px; margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--text); }
