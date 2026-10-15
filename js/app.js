@@ -1301,61 +1301,27 @@ function statusClass(t) {
   return "bad";
 }
 
-// A train's facts as widget tiles: its next stop and how soon, its speed,
-// which way it's heading (a compass), when it left, and how fresh its
-// position is.
+// The train's live card: the next stop (how soon, and its time) in one
+// tile, and beside it the speed, where the train's GPS reports one; without
+// it, the next stop takes the whole width. Under them, where the position
+// comes from.
 function factTiles(t) {
-  // One card: the next stop, with speed and heading as small dials on its
-  // right; under it, a line saying where its position comes from.
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
   const nextName = next?.name || t.nextStop;
   const at = next && Date.parse(next.time);
-  const dials = [];
+  const tiles = [];
+  if (nextName) {
+    tiles.push(`<div class="ft ft-next"><span class="ft-label">${T("Next stop")}</span><span class="ft-value"><span class="ft-name">${esc(nextName)}</span></span>
+      ${at ? `<span class="ft-sub">${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}</span>` : ""}</div>`);
+  }
   if (t.speedMph != null && !t.estimated) {
     const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
-    dials.push(`<span class="ft-dial" title="${esc(`${T("Speed")}: ${v} ${km ? "km/h" : T("mph")}`)}">${speedometerSvg(t.speedMph, km)}</span>`);
+    tiles.push(`<div class="ft ft-speed"><span class="ft-label">${T("Speed")}</span><span class="ft-value">${v}<small>${km ? "km/h" : T("mph")}</small></span></div>`);
   }
-  const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
-  if (b != null) {
-    const dir = T(HEADINGS[Math.round(b / 45) % 8]);
-    dials.push(`<span class="ft-dial" title="${esc(`${T("Heading")}: ${dir}`)}">${compassSvg(b, dir)}</span>`);
-  }
-  const card = nextName || dials.length ? `<div class="ft live-card">
-      ${nextName ? `<div class="ft-main"><span class="ft-label">${T("Next stop")}</span><span class="ft-value"><span class="ft-name">${esc(nextName)}</span></span>
-        ${at ? `<span class="ft-sub">${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}</span>` : ""}</div>` : '<div class="ft-main"></div>'}
-      ${dials.join("")}
-    </div>` : "";
   const note = t.estimated ? `${T("Estimated from predicted times")} · ${fmtAgo(t.updated)}` : `${T("GPS")} · ${fmtAgo(t.updated)}`;
-  return `<div class="facts">${card}<p class="ft-note">${t.estimated ? "" : SIGNAL_ICON}${esc(note)}</p></div>`;
+  return `<div class="facts">${tiles.length ? `<div class="ft-tiles">${tiles.join("")}</div>` : ""}<p class="ft-note">${t.estimated ? "" : SIGNAL_ICON}${esc(note)}</p></div>`;
 }
-// A small speedometer: a ring that fills up to the speed (full at 125 mph,
-// 200 km/h), the speed in the middle.
-function speedometerSvg(mph, km) {
-  const v = km ? mph * KM_PER_MI : mph, top = km ? 200 : 125, f = Math.max(0, Math.min(1, v / top));
-  const cx = 30, cy = 31, r = 22, at = (deg) => [cx + r * Math.cos((deg * Math.PI) / 180), cy + r * Math.sin((deg * Math.PI) / 180)].map((x) => x.toFixed(2)).join(" ");
-  const end = 135 + 270 * f;
-  return `<svg viewBox="0 0 60 60" aria-hidden="true">
-    <path d="M ${at(135)} A ${r} ${r} 0 1 1 ${at(45)}" class="track"/>
-    ${f > 0.005 ? `<path d="M ${at(135)} A ${r} ${r} 0 ${270 * f > 180 ? 1 : 0} 1 ${at(end)}" class="fill"/>` : ""}
-    <text x="${cx}" y="${cy + 4}" text-anchor="middle" class="value">${Math.round(v)}</text>
-    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="unit">${km ? "km/h" : T("mph")}</text>
-  </svg>`;
-}
-// A small compass: a ring with north marked in red, an arrowhead on the ring
-// pointing the way the train is heading, and the direction in the middle.
-function compassSvg(bearing, dir) {
-  const cx = 30, cy = 30, r = 22;
-  const ticks = Array.from({ length: 8 }, (_, i) => {
-    const a = (i * 45 * Math.PI) / 180, r1 = i % 2 ? r - 2.5 : r - 4;
-    return `<line x1="${(cx + r1 * Math.sin(a)).toFixed(2)}" y1="${(cy - r1 * Math.cos(a)).toFixed(2)}" x2="${(cx + r * Math.sin(a)).toFixed(2)}" y2="${(cy - r * Math.cos(a)).toFixed(2)}"/>`;
-  }).join("");
-  return `<svg viewBox="0 0 60 60" aria-hidden="true">
-    <circle cx="${cx}" cy="${cy}" r="${r}" class="ring"/>${ticks}
-    <path d="M${cx} ${cy - r - 4.5}l2.6 4.2h-5.2z" class="north"/>
-    <g transform="rotate(${Math.round(bearing)} ${cx} ${cy})"><path d="M${cx} ${cy - r + 1}l5 8.5h-10z" class="tip"/></g>
-    <text x="${cx}" y="${cy + 4.5}" text-anchor="middle" class="value">${esc(dir)}</text>
-  </svg>`;
-}
+
 function trainTitle(t) {
   const a = AGENCIES[t.agency];
   return t.route ? `${t.route}` : a.name;
@@ -1507,7 +1473,6 @@ function fmtAgo(ms) {
   return T("{n} h ago", { n: Math.round(s / 3600) });
 }
 
-const HEADINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 const KM_PER_MI = 1.609344;
 
