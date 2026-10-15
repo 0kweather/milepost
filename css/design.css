@@ -650,18 +650,8 @@ kbd {
 :root[data-colorblind] .la-where .status.good { color: #33bbee; }
 :root[data-colorblind] .la-where .status.warn { color: #ee7733; }
 :root[data-colorblind] .la-where .status.bad { color: #ee3377; }
-/* ---------- Where to sit, elevators, track record ----------
+/* ---------- Elevators, track record ----------
  * Lists drawn like the station's amenities: an icon, then the text. */
-.side-tag {
-  flex: none; padding: 2px 7px; white-space: nowrap; border-radius: 6px; text-align: center;
-  background: var(--fill); color: var(--text); font-size: var(--fs-xs); font-weight: 700;
-}
-.sides li > span:not(.side-tag):not(.am-detail) { min-width: 0; }
-.sides svg { color: var(--warn); }
-/* Sun ahead, behind or down: it doesn't matter which side. */
-.side-tag.either { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
-.sides li:has(.side-tag.either) svg { color: var(--muted); }
-.sides li:has(.am-detail) svg { color: var(--accent); }
 
 .lifts { margin-top: 0; }
 .lift { align-items: flex-start !important; }

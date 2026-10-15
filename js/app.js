@@ -7,7 +7,6 @@ import { loadDisruptions, aboutLine } from "./disruptions.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { startTour } from "./tour.js?v=dev";
-import { sunAt, sunSpells, viewsOnRide } from "./sides.js?v=dev";
 import { stationLifts } from "./lifts.js?v=dev";
 import { t as T, tn as Tn, lang, langPref, locale, translatePage } from "./i18n.js?v=dev";
 
@@ -1708,7 +1707,6 @@ function renderDetail() {
     ${crowdSection(t)}
     ${noticesHtml(t)}
     ${tiles}
-    ${sideSection(t, Math.max(0, from), dest >= 0 ? dest : (t.stops?.length || 0) - 1)}
     ${stops}
     ${onBoardFor(t)}
     ${historySection(t)}`;
@@ -1772,119 +1770,6 @@ function onBoard(c) {
     <h3 class="on-board-title">${title}</h3>
     <ul class="chips">${has.map(([id, label]) => `<li class="amenity"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AMENITY_ICON[id]}</svg><span>${T(label)}</span></li>`).join("")}</ul>
   </section>`;
-}
-
-// ---------- Where to sit ----------
-// Which side the sun will be on for the rest of the ride (or the part being
-// tracked), and which side the views are on (js/sides.js, data/views.json).
-// Worked out along the track from each stop's time, at most every few
-// minutes per train.
-
-let viewsData = null;
-function views() {
-  if (!viewsData) {
-    viewsData = [];
-    fetch("data/views.json?v=dev").then((r) => r.json()).then((d) => {
-      viewsData = d.views || [];
-      sideCache.clear();
-      if (state.selected) renderDetail();
-    }).catch((err) => console.warn("views", err));
-  }
-  return viewsData;
-}
-
-const SIDE_STEP_MS = 60 * 1000; // fine enough to catch a short view, like a skyline
-// Points along the ride from stop i0 to stop i1, every few minutes, on the
-// track where it can be routed: [{ at, lat, lon, bearing, tz }].
-function ridePoints(t, i0, i1) {
-  const out = [];
-  for (let i = i0; i < i1; i++) {
-    const a = t.stops[i], b = t.stops[i + 1];
-    const pa = state.stopPos.get(a.key), pb = state.stopPos.get(b.key);
-    const ta = Date.parse(a.dep || a.time), tb = Date.parse(b.arr || b.time);
-    if (!pa || !pb || !(tb > ta)) continue;
-    const straight = meters(pa, pb);
-    let path = null;
-    if (state.rail && straight > 150) {
-      const r = state.rail.route(state.rail.snap([pa.lon, pa.lat], 1500, t.agency), state.rail.snap([pb.lon, pb.lat], 1500, t.agency), t.agency);
-      if (r && r.length < straight * 2.5 + 2000) path = r;
-    }
-    const dy = pb.lat - pa.lat, dx = (pb.lon - pa.lon) * Math.cos((pa.lat * Math.PI) / 180);
-    const flat = (Math.atan2(dx, dy) * 180) / Math.PI;
-    const n = Math.max(1, Math.ceil((tb - ta) / SIDE_STEP_MS));
-    for (let k = 0; k < n; k++) {
-      const f = k / n;
-      const at = path?.at(f * path.length);
-      const [lon, lat] = at?.point || [pa.lon + (pb.lon - pa.lon) * f, pa.lat + (pb.lat - pa.lat) * f];
-      out.push({ at: ta + f * (tb - ta), lat, lon, bearing: at?.bearing ?? (flat + 360) % 360, tz: b.tz || a.tz });
-    }
-  }
-  return out;
-}
-
-const sideCache = new Map(); // train id -> guide
-// The sun and the views for the rest of the ride (or the part tracked).
-// A train without a stop list, or past its last listed stop, still gets
-// where the sun is right now, from its heading; with no heading either,
-// which way the sun is in the sky.
-function sideGuide(t, i0, i1) {
-  const now = Date.now();
-  const ride = t.stops?.length > 1 && i1 > i0;
-  const key = ride ? `${i0}|${i1}|${t.stops[i0].time}|${t.stops[i1].time}|${Boolean(state.rail)}` : "now";
-  const hit = sideCache.get(t.id);
-  if (hit?.key === key && now - hit.at < (ride ? 5 * 60 * 1000 : 60 * 1000)) return hit;
-  let points = ride ? ridePoints(t, i0, i1).filter((p) => p.at >= now) : [];
-  const right = points.length < 2;
-  if (right) {
-    const pos = state.display.get(t.id) || targetOf(t);
-    const bearing = t.bearing ?? state.est.get(t.id)?.bearing ?? null;
-    points = pos?.lat != null ? [{ at: now, lat: pos.lat, lon: pos.lon, bearing, tz: t.stops?.[i1]?.tz }] : [];
-  }
-  if (!points.length) return null;
-  const zoneAt = (ms) => points.find((p) => p.at >= ms)?.tz || t.stops?.[i1]?.tz;
-  const sky = sunAt(now, points[0].lat, points[0].lon);
-  const guide = { key, at: now, now: right, sky, sun: sunSpells(points), views: right ? [] : viewsOnRide(points, views()), zoneAt };
-  if (sideCache.size > 20) sideCache.clear();
-  sideCache.set(t.id, guide);
-  return guide;
-}
-
-const SUN_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>';
-const MOON_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10Z"/></svg>';
-const VIEW_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l5-7 3 4 3-5 7 8M3 21h18"/></svg>';
-const SUN_WORDS = { left: "Sun", right: "Sun", ahead: "Sun ahead", behind: "Sun behind", down: "No sun" };
-function sideSection(t, i0, i1) {
-  const g = sideGuide(t, i0, i1);
-  if (!g) return "";
-  // Times on a later day (long-distance trains) carry the weekday.
-  const clock = (ms) => {
-    const tz = g.zoneAt(ms), zone = (state.timeZone === "station" ? tz : state.timeZone) || undefined;
-    const day = (x) => { try { return new Date(x).toLocaleDateString(locale, { weekday: "short", timeZone: zone }); } catch { return ""; } };
-    const time = fmtTime(new Date(ms).toISOString(), tz);
-    return day(ms) === day(Date.now()) ? time : `${day(ms)} ${time}`;
-  };
-  const soon = Date.now() + 5 * 60 * 1000;
-  const sideTag = (side) => `<span class="side-tag${side === "left" || side === "right" ? "" : " either"}">${T(side === "left" ? "Left side" : side === "right" ? "Right side" : "Either side")}</span>`;
-  // When each spell of sun is: right now, the whole way (one spell for the
-  // whole ride), until a time, from a time to the end, or between two.
-  const when = (s, i) => g.now ? T("right now")
-    : g.sun.length === 1 ? T("the whole way")
-    : s.from <= soon ? T("until {time}", { time: clock(s.to) })
-    : i === g.sun.length - 1 ? T("from {time}", { time: clock(s.from) })
-    : T("from {from} to {to}", { from: clock(s.from), to: clock(s.to) });
-  const sunRows = g.sun.map((s, i) => ({ from: s.from, html: `<li>${s.place === "down" ? MOON_ICON : SUN_ICON}${sideTag(s.place)}<span>${esc(`${T(SUN_WORDS[s.place])} ${when(s, i)}`)}</span></li>` }));
-  // No heading to go by: which way the sun is in the sky.
-  if (!sunRows.length) {
-    const up = g.sky.alt > 2;
-    sunRows.push({ from: g.at, html: `<li>${up ? SUN_ICON : MOON_ICON}${sideTag("either")}<span>${esc(up
-      ? T("Sun in the {dir} right now", { dir: T(HEADINGS[Math.round(g.sky.az / 45) % 8]) }) : `${T("No sun")} ${T("right now")}`)}</span></li>` });
-  }
-  const rows = [
-    ...sunRows,
-    ...g.views.map((v) => ({ from: v.from, html: `<li>${VIEW_ICON}${sideTag(v.side)}<span>${esc(v.name)}</span><span class="am-detail">${esc(v.dark ? T("after dark") : v.from <= soon ? T("until {time}", { time: clock(v.to) }) : clock(v.from))}</span></li>` })),
-  ].sort((a, b) => a.from - b.from);
-  return rrSection("sit", T("Where to sit"), null, `<ul class="amenities sides">${rows.map((r) => r.html).join("")}</ul>
-    <p class="estimate-note">${T(g.now ? "Facing the way the train is going right now." : "Facing the way the train is going.")}</p>`);
 }
 
 // ---------- Track record ----------
