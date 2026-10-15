@@ -1174,62 +1174,59 @@ function statusClass(t) {
 // which way it's heading (a compass), when it left, and how fresh its
 // position is.
 function factTiles(t) {
-  const tiles = [];
+  // The first row: the next stop, then speed and heading as small square
+  // dials the same height.
+  const top = [];
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
   const nextName = next?.name || t.nextStop;
   if (nextName) {
     const at = next && Date.parse(next.time);
-    tiles.push(tile(T("Next stop"), `<span class="ft-name">${esc(nextName)}</span>`,
-      at ? `${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}` : "", "wide"));
+    top.push(tile(T("Next stop"), `<span class="ft-name">${esc(nextName)}</span>`,
+      at ? `${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}` : "", "grow"));
   }
-  // Speed and heading: square dials side by side.
   if (t.speedMph != null && !t.estimated) {
-    const km = state.units === "km";
-    tiles.push(`<div class="ft square"><span class="ft-head"><span class="ft-label">${T("Speed")}</span></span>${speedometerSvg(t.speedMph, km)}</div>`);
+    const km = state.units === "km", v = Math.round(km ? t.speedMph * KM_PER_MI : t.speedMph);
+    top.push(`<div class="ft dial" title="${esc(`${T("Speed")}: ${v} ${km ? "km/h" : T("mph")}`)}">${speedometerSvg(t.speedMph, km)}</div>`);
   }
   const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
   if (b != null) {
     const inferred = t.bearing == null && est?.inferred;
-    tiles.push(`<div class="ft square"><span class="ft-head"><span class="ft-label">${T("Heading")}</span><strong${inferred ? ` class="inferred" title="${T("Worked out from the train's next stop; its railroad doesn't report a heading")}"` : ""}>${T(HEADINGS[Math.round(b / 45) % 8])}</strong></span>${compassSvg(b)}</div>`);
+    const dir = T(HEADINGS[Math.round(b / 45) % 8]);
+    top.push(`<div class="ft dial${inferred ? " inferred" : ""}" title="${esc(`${T("Heading")}: ${dir}${inferred ? ` (${T("Worked out from the train's next stop; its railroad doesn't report a heading")})` : ""}`)}">${compassSvg(b, dir)}</div>`);
   }
-  if (t.departedOn) tiles.push(tile(T("Left"), `<span class="ft-name">${esc(t.departedOn)}</span>`));
-  tiles.push(t.estimated
+  const rest = [];
+  if (t.departedOn) rest.push(tile(T("Left"), `<span class="ft-name">${esc(t.departedOn)}</span>`));
+  rest.push(t.estimated
     ? tile(T("Position"), `<span class="ft-name">${T("Estimated")}</span>`, `${T("from predicted times")} · ${esc(fmtAgo(t.updated))}`)
     : tile(T("GPS"), `<span class="ft-name ft-gps">${SIGNAL_ICON}${esc(fmtAgo(t.updated))}</span>`));
-  return `<div class="facts">${tiles.join("")}</div>`;
+  return `<div class="facts">${top.length ? `<div class="facts-top">${top.join("")}</div>` : ""}${rest.join("")}</div>`;
 }
-// A speedometer: an arc that fills up to the speed (top at 125 mph, 200
-// km/h), a needle, and the speed under it.
+// A small speedometer: a ring that fills up to the speed (full at 125 mph,
+// 200 km/h), the speed in the middle.
 function speedometerSvg(mph, km) {
   const v = km ? mph * KM_PER_MI : mph, top = km ? 200 : 125, f = Math.max(0, Math.min(1, v / top));
-  const cx = 50, cy = 50, r = 36, at = (deg, rad = r) => [cx + rad * Math.cos((deg * Math.PI) / 180), cy + rad * Math.sin((deg * Math.PI) / 180)].map((x) => x.toFixed(2)).join(" ");
+  const cx = 30, cy = 31, r = 22, at = (deg) => [cx + r * Math.cos((deg * Math.PI) / 180), cy + r * Math.sin((deg * Math.PI) / 180)].map((x) => x.toFixed(2)).join(" ");
   const end = 135 + 270 * f;
-  const ticks = Array.from({ length: 11 }, (_, i) => `<line x1="${at(135 + 27 * i, r - 9).split(" ")[0]}" y1="${at(135 + 27 * i, r - 9).split(" ")[1]}" x2="${at(135 + 27 * i, r - (i % 5 ? 6 : 4)).split(" ")[0]}" y2="${at(135 + 27 * i, r - (i % 5 ? 6 : 4)).split(" ")[1]}" class="${i % 5 ? "" : "major"}"/>`).join("");
-  return `<svg class="ft-dial" viewBox="0 0 100 100" aria-hidden="true">
+  return `<svg viewBox="0 0 60 60" aria-hidden="true">
     <path d="M ${at(135)} A ${r} ${r} 0 1 1 ${at(45)}" class="track"/>
     ${f > 0.005 ? `<path d="M ${at(135)} A ${r} ${r} 0 ${270 * f > 180 ? 1 : 0} 1 ${at(end)}" class="fill"/>` : ""}
-    ${ticks}
-    <line x1="${cx}" y1="${cy}" x2="${at(end, r - 12).split(" ")[0]}" y2="${at(end, r - 12).split(" ")[1]}" class="needle"/>
-    <circle cx="${cx}" cy="${cy}" r="3.5" class="hub"/>
-    <text x="${cx}" y="88" text-anchor="middle" class="value">${Math.round(v)}<tspan class="unit" dx="2">${km ? "km/h" : T("mph")}</tspan></text>
+    <text x="${cx}" y="${cy + 4}" text-anchor="middle" class="value">${Math.round(v)}</text>
+    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="unit">${km ? "km/h" : T("mph")}</text>
   </svg>`;
 }
-// A compass: ticks around a dial, the four points marked (north in red), and
-// a needle pointing the way the train is heading.
-function compassSvg(bearing) {
-  const cx = 50, cy = 52, r = 38;
-  const ticks = Array.from({ length: 24 }, (_, i) => {
-    const a = (i * 15 * Math.PI) / 180, major = i % 6 === 0, r1 = major ? r - 7 : r - 4;
-    return `<line x1="${(cx + r1 * Math.sin(a)).toFixed(2)}" y1="${(cy - r1 * Math.cos(a)).toFixed(2)}" x2="${(cx + (r - 1) * Math.sin(a)).toFixed(2)}" y2="${(cy - (r - 1) * Math.cos(a)).toFixed(2)}" class="${major ? "major" : ""}"/>`;
+// A small compass: a ring with north marked in red, an arrowhead on the ring
+// pointing the way the train is heading, and the direction in the middle.
+function compassSvg(bearing, dir) {
+  const cx = 30, cy = 30, r = 22;
+  const ticks = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * 45 * Math.PI) / 180, r1 = i % 2 ? r - 2.5 : r - 4;
+    return `<line x1="${(cx + r1 * Math.sin(a)).toFixed(2)}" y1="${(cy - r1 * Math.cos(a)).toFixed(2)}" x2="${(cx + r * Math.sin(a)).toFixed(2)}" y2="${(cy - r * Math.cos(a)).toFixed(2)}"/>`;
   }).join("");
-  const points = [["N", 0], ["E", 90], ["S", 180], ["W", 270]].map(([p, d]) => {
-    const a = (d * Math.PI) / 180, rr = r - 15;
-    return `<text x="${(cx + rr * Math.sin(a)).toFixed(2)}" y="${(cy - rr * Math.cos(a) + 3.5).toFixed(2)}" text-anchor="middle" class="${p === "N" ? "north" : ""}">${T(p)}</text>`;
-  }).join("");
-  return `<svg class="ft-dial" viewBox="0 0 100 100" aria-hidden="true">
-    <circle cx="${cx}" cy="${cy}" r="${r}" class="face"/>${ticks}${points}
-    <g transform="rotate(${Math.round(bearing)} ${cx} ${cy})"><path d="M${cx} ${cy - 24}l5 24h-10z" class="tip"/><path d="M${cx} ${cy + 24}l5 -24h-10z" class="tail"/></g>
-    <circle cx="${cx}" cy="${cy}" r="3" class="hub"/>
+  return `<svg viewBox="0 0 60 60" aria-hidden="true">
+    <circle cx="${cx}" cy="${cy}" r="${r}" class="ring"/>${ticks}
+    <path d="M${cx} ${cy - r - 4.5}l2.6 4.2h-5.2z" class="north"/>
+    <g transform="rotate(${Math.round(bearing)} ${cx} ${cy})"><path d="M${cx} ${cy - r + 1}l5 8.5h-10z" class="tip"/></g>
+    <text x="${cx}" y="${cy + 4.5}" text-anchor="middle" class="value">${esc(dir)}</text>
   </svg>`;
 }
 function tile(label, value, sub = "", cls = "", aside = "") {

@@ -550,25 +550,22 @@ kbd {
 .ft-value .ft-name { font-family: var(--font); font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
 .ft-value .inferred { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-thickness: 1.5px; cursor: help; }
 .ft-sub { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Speed and heading: square tiles with a dial filling each. */
-.ft.square { aspect-ratio: 1; flex-direction: column; align-items: stretch; gap: 2px; padding: 10px 12px 8px; }
-.ft-head { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
-.ft-head strong { font-family: var(--font-rounded); font-size: 17px; font-weight: 700; }
-.ft-head strong.inferred { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-thickness: 1.5px; cursor: help; }
-.ft-dial { flex: 1; width: 100%; min-height: 0; }
-.ft-dial .track { fill: none; stroke: var(--fill); stroke-width: 7; stroke-linecap: round; }
-.ft-dial .fill { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; }
-.ft-dial line { stroke: var(--faint); stroke-width: 1; stroke-linecap: round; }
-.ft-dial line.major { stroke: var(--muted); stroke-width: 1.6; }
-.ft-dial .needle { stroke: var(--text); stroke-width: 2.4; }
-.ft-dial .hub { fill: var(--panel-solid); stroke: var(--text); stroke-width: 1.6; }
-.ft-dial .value { font: 700 17px var(--font-rounded); fill: var(--text); letter-spacing: -0.02em; }
-.ft-dial .unit { font: 600 8px var(--font); fill: var(--muted); }
-.ft-dial .face { fill: var(--fill); }
-.ft-dial text:not(.value) { font: 700 9px var(--font); fill: var(--muted); }
-.ft-dial text.north { fill: var(--bad); }
-.ft-dial .tip { fill: var(--accent); }
-.ft-dial .tail { fill: var(--faint); }
+/* The first row: the next stop, then speed and heading as small square
+ * dials the same height. */
+.facts-top { grid-column: 1 / -1; display: flex; gap: 8px; height: 70px; }
+.facts-top .ft { height: 100%; box-sizing: border-box; }
+.facts-top .ft.grow { flex: 1; min-width: 0; }
+.ft.dial { flex: none; width: 70px; padding: 3px; justify-content: center; }
+.ft.dial svg { width: 64px; height: 64px; display: block; }
+.ft.dial .track { fill: none; stroke: var(--fill); stroke-width: 5; stroke-linecap: round; }
+.ft.dial .fill { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
+.ft.dial .ring { fill: none; stroke: var(--fill); stroke-width: 5; }
+.ft.dial line { stroke: var(--faint); stroke-width: 1.2; stroke-linecap: round; }
+.ft.dial .north { fill: var(--bad); }
+.ft.dial .tip { fill: var(--accent); }
+.ft.dial .value { font: 700 13px var(--font-rounded); fill: var(--text); letter-spacing: -0.02em; }
+.ft.dial .unit { font: 600 6.5px var(--font); fill: var(--muted); }
+.ft.dial.inferred .value { text-decoration: underline dotted; }
 .ft-gps { display: inline-flex; align-items: center; gap: 6px; }
 .ft-gps svg { width: 15px; height: 15px; color: var(--good); flex: none; }
 
