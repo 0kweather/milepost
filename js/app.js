@@ -1175,8 +1175,7 @@ function statusClass(t) {
 // position is.
 function factTiles(t) {
   // One card: the next stop, with speed and heading as small dials on its
-  // right; under it, a line saying when it left and where its position comes
-  // from.
+  // right; under it, a line saying where its position comes from.
   const next = t.stops?.find((s) => s.status === "next") || t.stops?.find((s) => s.status === "future");
   const nextName = next?.name || t.nextStop;
   const at = next && Date.parse(next.time);
@@ -1196,11 +1195,8 @@ function factTiles(t) {
         ${at ? `<span class="ft-sub">${esc(fmtIn(at) === T("now") ? T("Arriving now") : T("in {time}", { time: fmtIn(at) }))} · ${esc(fmtTime(next.time, next.tz))}</span>` : ""}</div>` : '<div class="ft-main"></div>'}
       ${dials.join("")}
     </div>` : "";
-  const note = [
-    t.departedOn ? T("left {day}", { day: t.departedOn }) : "",
-    t.estimated ? `${T("Estimated from predicted times")} · ${fmtAgo(t.updated)}` : `${T("GPS")} · ${fmtAgo(t.updated)}`,
-  ].filter(Boolean).map(esc).join(" · ");
-  return `<div class="facts">${card}<p class="ft-note">${t.estimated ? "" : SIGNAL_ICON}${note.charAt(0).toUpperCase() + note.slice(1)}</p></div>`;
+  const note = t.estimated ? `${T("Estimated from predicted times")} · ${fmtAgo(t.updated)}` : `${T("GPS")} · ${fmtAgo(t.updated)}`;
+  return `<div class="facts">${card}<p class="ft-note">${t.estimated ? "" : SIGNAL_ICON}${esc(note)}</p></div>`;
 }
 // A small speedometer: a ring that fills up to the speed (full at 125 mph,
 // 200 km/h), the speed in the middle.
@@ -1326,7 +1322,7 @@ function renderResults() {
   }
   el.innerHTML = before + (before ? `<div class="group-title">${T("Trains")}</div>` : "") + matches.slice(0, 60).map(({ t }) => {
     const a = AGENCIES[t.agency];
-    const sub = [t.destination && T("to {place}", { place: t.destination }), t.nextStop && !t.destination && T("next {place}", { place: t.nextStop }), t.departedOn && T("left {day}", { day: t.departedOn })]
+    const sub = [t.destination && T("to {place}", { place: t.destination }), t.nextStop && !t.destination && T("next {place}", { place: t.nextStop })]
       .filter(Boolean).join(" · ") || T(a.region);
     return `<button class="result" data-select="${esc(t.id)}">
       ${plate(t.number || a.short, a.color, "sm")}

@@ -599,3 +599,5 @@ kbd {
 
 .line-mark { display: inline-block; flex: none; width: 18px; height: 5px; border-radius: 3px; background: var(--c); vertical-align: middle; }
 .served-name:has(> .line-mark) { align-items: center; }
+.facts { padding-bottom: 2px; }
+.facts + .rr-sec > .section-title, .facts + .notices > .section-title { margin-top: 14px; }

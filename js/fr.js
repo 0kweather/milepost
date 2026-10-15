@@ -95,7 +95,6 @@ export default {
   "to {place}": "vers {place}",
   "from {place}": "de {place}",
   "next {place}": "prochain arrêt {place}",
-  "left {day}": "parti le {day}",
   "to": "vers",
 
   // ----- Regions -----
