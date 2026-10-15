@@ -562,7 +562,6 @@ kbd {
 .ft-dial .tip { fill: var(--accent); }
 .ft-dial .value { font: 700 13px var(--font-rounded); fill: var(--text); letter-spacing: -0.02em; }
 .ft-dial .unit { font: 600 6.5px var(--font); fill: var(--muted); }
-.ft-dial.inferred .value { text-decoration: underline dotted; }
 .ft-note { display: flex; align-items: center; gap: 5px; margin: 8px 4px 0; font-size: var(--fs-xs); color: var(--muted); }
 .ft-note svg { color: var(--good); flex: none; }
 .ft-gps { display: inline-flex; align-items: center; gap: 6px; }

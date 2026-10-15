@@ -1186,9 +1186,8 @@ function factTiles(t) {
   }
   const est = state.est.get(t.id), b = t.bearing ?? est?.bearing;
   if (b != null) {
-    const inferred = t.bearing == null && est?.inferred;
     const dir = T(HEADINGS[Math.round(b / 45) % 8]);
-    dials.push(`<span class="ft-dial${inferred ? " inferred" : ""}" title="${esc(`${T("Heading")}: ${dir}${inferred ? ` (${T("Worked out from the train's next stop; its railroad doesn't report a heading")})` : ""}`)}">${compassSvg(b, dir)}</span>`);
+    dials.push(`<span class="ft-dial" title="${esc(`${T("Heading")}: ${dir}`)}">${compassSvg(b, dir)}</span>`);
   }
   const card = nextName || dials.length ? `<div class="ft live-card">
       ${nextName ? `<div class="ft-main"><span class="ft-label">${T("Next stop")}</span><span class="ft-value"><span class="ft-name">${esc(nextName)}</span></span>
