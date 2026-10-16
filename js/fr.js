@@ -325,4 +325,11 @@ export default {
   "{n} min": "{n} min",
   "How late it reached {place} on each of the last {n} trips": "Retard à l’arrivée à {place} lors de chacun des {n} derniers trajets",
   "How late it reached {place} on its last {n} trips, as recorded by Trainsheet.": "Retard à l’arrivée à {place} lors de ses {n} derniers trajets, enregistré par Trainsheet.",
+  // ----- Search: trains later today -----
+  "Later today": "Plus tard aujourd’hui",
+  "{n} more later today": "{n} autres plus tard aujourd’hui",
+  "leaves {place} at {time}": "part de {place} à {time}",
+  "{line} to {place}": "{line} vers {place}",
+  "Loading its stops…": "Chargement de ses arrêts…",
+  "Its stops aren't available.": "Ses arrêts ne sont pas disponibles.",
 };

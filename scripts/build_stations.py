@@ -100,6 +100,26 @@ def get_raw(url, timeout=180):
         return r.read()
 
 
+# Metrolink files its Arrow trains (San Bernardino-Redlands, 3800-3899) under
+# the San Bernardino Line.
+TRIP_LINE = {"metrolink": lambda t, line: "Metrolink Arrow" if re.fullmatch(r"38\d\d", t.get("trip_short_name") or "") else line}
+
+# MARC lists each station once per direction ("NEW CARROLLTON MARC nb" and
+# "... sb"), with no parent station. Both fold into one station, named in
+# plain words, whose id is that name as a slug ("new-carrollton").
+MARC_NAMES = {"Penn Station": "Baltimore Penn Station", "Union Station": "Washington Union Station",
+              "Camden Station": "Baltimore Camden Station", "Bwi Rail Station": "BWI Airport", "St Denis": "St. Denis",
+              "Brunswick Md": "Brunswick", "Harpers Ferry W Va": "Harpers Ferry", "Duffields W Va": "Duffields",
+              "Martinsburg W Va": "Martinsburg", "Point Of Rocks": "Point of Rocks"}
+
+
+def marc_station(name):
+    """(station id, name) for one of MARC's per-direction stops."""
+    base = re.sub(r"\s+MARC(\s+(nb|sb|eb|wb|Washington))?$", "", name.strip(), flags=re.I).title()
+    base = MARC_NAMES.get(base, base)
+    return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
+
+
 def get(url, timeout=180):
     return current_feed(get_raw(url, timeout))
 
@@ -129,22 +149,6 @@ def official_code(stop):
         if value and re.fullmatch(r"[A-Za-z]{2,4}", value):
             return value.upper()
     return ""
-
-
-# MARC lists each station once per direction ("NEW CARROLLTON MARC nb" and
-# "... sb"), with no parent station. Both fold into one station, named in
-# plain words, whose id is that name as a slug ("new-carrollton").
-MARC_NAMES = {"Penn Station": "Baltimore Penn Station", "Union Station": "Washington Union Station",
-              "Camden Station": "Baltimore Camden Station", "Bwi Rail Station": "BWI Airport", "St Denis": "St. Denis",
-              "Brunswick Md": "Brunswick", "Harpers Ferry W Va": "Harpers Ferry", "Duffields W Va": "Duffields",
-              "Martinsburg W Va": "Martinsburg", "Point Of Rocks": "Point of Rocks"}
-
-
-def marc_station(name):
-    """(station id, name) for one of MARC's per-direction stops."""
-    base = re.sub(r"\s+MARC(\s+(nb|sb|eb|wb|Washington))?$", "", name.strip(), flags=re.I).title()
-    base = MARC_NAMES.get(base, base)
-    return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
 
 
 def weekday_trips(zf, trip_ids):
@@ -334,9 +338,6 @@ NAME_FIX = {"L Enfant": "L'Enfant", "San Jose Station Diridon": "San Jose Dirido
 # Stations a railroad's timetable places wrongly, as (lat, lon): the Alaska
 # Railroad's file puts its Fairbanks depot near Seward.
 POSITION_FIX = {("alaska", "FAIR"): (64.85583, -147.70892)}
-# Metrolink files its Arrow trains (San Bernardino-Redlands, 3800-3899) under
-# the San Bernardino Line.
-TRIP_LINE = {"metrolink": lambda t, line: "Metrolink Arrow" if re.fullmatch(r"38\d\d", t.get("trip_short_name") or "") else line}
 
 # Named railroads only: rebuild just those, keeping the rest of the file.
 only = sys.argv[1:]

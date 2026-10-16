@@ -62,6 +62,37 @@ FEEDS = {
     # The Alaska Railroad's page links its current timetable file (named by date).
     "alaska": ("https://www.alaskarailroad.com/gtfs", lambda r: True, lambda r: ALASKA_LINES.get(r["route_id"], r.get("route_long_name", "")), None),
 }
+# Every other railroad on the map, for search's trains later today: the feed,
+# routes, line names and station folds build_stations.py uses (so stops are
+# the map's stations), each train numbered as its live feed numbers it (None:
+# no public numbers, as the live feed shows none).
+_stations_src = (pathlib.Path(__file__).resolve().parent / "build_stations.py").read_text()
+_stations = {}
+exec(_stations_src[:_stations_src.index("\ndef get(")], _stations)
+short = lambda t: t.get("trip_short_name") or None
+NUMBERS = {
+    "lirr": short, "mnr": short, "mbta": short, "caltrain": short, "metrolink": short, "vre": short, "sounder": short,
+    "njt": lambda t: t.get("block_id") or None,                                             # NJ Transit's train numbers are its blocks
+    "metra": lambda t: re.sub(r"^\D+", "", t["trip_id"].split("_")[1]) if "_" in t["trip_id"] else None,  # "UP-N_UN303_V3_A": 303
+    "marc": lambda t: re.sub(r"^Train\s*", "", t.get("trip_short_name") or "", flags=re.I) or None,  # "Train 446"
+    "go": lambda t: t["trip_id"].rsplit("-", 1)[-1],                                        # "20261028-ST-7420": 7420
+    "ace": lambda t: (re.match(r"ACE0*(\d+)", t["trip_id"]) or [None, None])[1],             # "ACE03H": 3
+    # (Tri-Rail's published timetable ran out in August 2025: left out until there's a current one.)
+    "rtd": None, "frontrunner": None, "capmetro": None, "smart": None,
+}
+for _agency, _number_of in NUMBERS.items():
+    _url, _keep, _line_name, *_group = _stations["GTFS"][_agency]
+    FEEDS[_agency] = (_url, _keep, _line_name, _number_of, *([lambda s, g=_group[0]: g(s["stop_name"])[0]] if _group and _group[0] else []))
+# Amtrak's and VIA's own timetables (Amtrak's stops by id, VIA's by code, as
+# the map's stations are). Amtraker shows VIA's numbers without its "v".
+# Amtrak's own trains (agency 51) and the Maple Leaf (filed under VIA, 157);
+# not the commuter trains its file also carries (Shore Line East, MARC).
+FEEDS["amtrak"] = ("https://content.amtrak.com/content/gtfs/GTFS.zip", lambda r: r.get("route_type") == "2" and r.get("agency_id") in ("51", "157"),
+                   _stations["long_name"], short)
+FEEDS["via"] = ("https://www.viarail.ca/sites/all/files/gtfs/viarail.zip", lambda r: True, _stations["long_name"], short,
+                lambda s: s.get("stop_code") or s["stop_id"])
+# Trains filed under another line (Metrolink's Arrow under the San Bernardino Line).
+TRIP_LINE = _stations.get("TRIP_LINE", {})
 # Live feeds that name a train only by its trip id, or stops only by code, get
 # lookups for them: "ids" {trip id: number}, "codes" {stop code: station id}.
 LOOKUPS = {"exo"}
@@ -146,7 +177,8 @@ def build(agency, url, keep, line_name, number_of, stations, station_by=None):
     for st in rows(zf, "stop_times.txt"):
         if st["trip_id"] in (route_trips if agency in BORROW else trips):
             sid = station_of.get(st["stop_id"], st["stop_id"])
-            if sid in stations:
+            # Stops with no time of their own (VIA's flag stops) are left out.
+            if sid in stations and (st["arrival_time"] or st["departure_time"]):
                 times[st["trip_id"]].append((int(st["stop_sequence"]), sid, minutes(st["arrival_time"] or st["departure_time"]),
                                              minutes(st["departure_time"] or st["arrival_time"])))
     # The Alaska Railroad's file lists each new season's trips (this winter's
@@ -196,10 +228,13 @@ def build(agency, url, keep, line_name, number_of, stations, station_by=None):
         mask = 0
         for d in days[t["service_id"]]:
             mask |= 1 << (d - today).days
-        key = (lines[t["route_id"]], tuple((sid, arr, dep) for _, sid, arr, dep in seq))
+        line = TRIP_LINE[agency](t, lines[t["route_id"]]) if agency in TRIP_LINE else lines[t["route_id"]]
+        key = (line, tuple((sid, arr, dep) for _, sid, arr, dep in seq))
         patterns[n][key] = patterns[n].get(key, 0) | mask
     used = {sid for p in patterns.values() for (_, pat) in p for sid, *_ in pat}
-    tz = next((s[10] for s in stations.values() if s[10]), None)
+    # Times are in the feed's own zone (Amtrak's are all Eastern, whatever the station's).
+    tz = next((a.get("agency_timezone") for a in rows(zf, "agency.txt") if a.get("agency_timezone")), None) \
+        or next((s[10] for s in stations.values() if s[10]), None)
     out = {"start": today.isoformat(), "tz": tz,
            "stops": {sid: stations[sid][1:4] for sid in sorted(used)},
            "trips": {n: [[mask, line, [list(x) for x in pat]] for (line, pat), mask in p.items()] for n, p in sorted(patterns.items())}}
@@ -213,6 +248,30 @@ def build(agency, url, keep, line_name, number_of, stations, station_by=None):
     return out
 
 
+def departures_index():
+    """data/departures.json, for search's "Later today": every railroad's runs
+    without their stops (its first and last stop, departure and days), from
+    all the files in data/schedules/."""
+    out = {}
+    for path in [*sorted((DATA / "schedules").glob("*.json")), DATA / "ctrail.json"]:
+        if not path.exists():
+            continue
+        tt = json.loads(path.read_text())
+        tt.setdefault("tz", "America/New_York")  # CT Rail's file doesn't say
+        runs, ends = [], set()
+        for n, pats in tt["trips"].items():
+            for days, line, stops in pats:
+                runs.append([n, line, stops[0][0], stops[-1][0], stops[0][2] if stops[0][2] is not None else stops[0][1], days])
+                ends |= {stops[0][0], stops[-1][0]}
+        runs.sort(key=lambda r: r[4])
+        out[path.stem] = {"start": tt["start"], "tz": tt["tz"], **({"unnumbered": True} if tt.get("unnumbered") else {}),
+                          **({"file": "ctrail.json"} if path.stem == "ctrail" else {}),
+                          "stops": {sid: tt["stops"][sid][0] for sid in sorted(ends)}, "runs": runs}
+    path = DATA / "departures.json"
+    path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
+    print(f"departures: {sum(len(v['runs']) for v in out.values())} runs ({path.stat().st_size // 1024} KB)")
+
+
 all_stations = json.loads((DATA / "stations.json").read_text())
 (DATA / "schedules").mkdir(exist_ok=True)
 for agency, (url, keep, line_name, number_of, *station_by) in FEEDS.items():
@@ -222,3 +281,5 @@ for agency, (url, keep, line_name, number_of, *station_by) in FEEDS.items():
     path = DATA / "schedules" / f"{agency}.json"
     path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
     print(f"{agency}: {len(out['stops'])} stops, {len(out['trips'])} train numbers ({path.stat().st_size // 1024} KB)")
+
+departures_index()

@@ -538,6 +538,10 @@ a { color: var(--accent); }
 .result .title { font-weight: 600; }
 .result .sub { font-size: var(--fs-xs); color: var(--muted); }
 .empty { padding: var(--s4) var(--s2); color: var(--muted); }
+/* Trains later today in search: a tap opens their stops under them. */
+.upcoming[aria-expanded="true"] { background: var(--hover); }
+.upcoming-stops { margin: 0 var(--s2) var(--s3) calc(var(--s2) + 6px); }
+.upcoming-note, .results-more { margin: 0 var(--s2) var(--s3); font-size: var(--fs-xs); color: var(--muted); }
 
 
 .status { font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }

@@ -1,11 +1,10 @@
 name: Refresh timetables
 
 # The timetable files cover two weeks from the day they're built, so they're
-# rebuilt every Monday (early morning in North America): CT Rail's, the
-# railroads placed or given stops from their timetables (South Shore, SunRail,
-# Rail Runner, exo, SEPTA, Coaster, Sprinter, the Dallas-Fort Worth railroads,
-# WeGo Star, UP Express, the Polar Bear Express, the Alaska Railroad), and each
-# railroad's first trains (quiet hours).
+# rebuilt every Monday (early morning in North America): CT Rail's, every
+# railroad's (data/schedules/: the ones placed or given stops from their
+# timetables, and all the others for search's trains later today, indexed in
+# data/departures.json), and each railroad's first trains (quiet hours).
 # Each build runs on its own, so one railroad's download failing doesn't stop
 # the rest. Run it by hand from the Actions tab too.
 on:
@@ -37,7 +36,8 @@ jobs:
 
       - name: Timetables
         run: |
-          for railroad in southshore sunrail railrunner exo septa coaster sprinter atrain tre silverline texrail star upx ontarionorthland alaska; do
+          for railroad in southshore sunrail railrunner exo septa coaster sprinter atrain tre silverline texrail star upx ontarionorthland alaska \
+                          lirr mnr mbta njt metra rtd frontrunner capmetro caltrain smart metrolink go marc vre sounder ace amtrak via; do
             python3 scripts/build_schedules.py "$railroad" || echo "::warning::$railroad timetable failed; keeping the last one"
           done
 
@@ -51,7 +51,7 @@ jobs:
         run: |
           git config user.name "trainsheet-bot"
           git config user.email "trainsheet-bot@users.noreply.github.com"
-          git add data/ctrail.json data/stations.json data/schedules data/firsts.json
+          git add data/ctrail.json data/stations.json data/schedules data/departures.json data/firsts.json
           if git diff --cached --quiet; then
             echo "Nothing changed."
             exit 0

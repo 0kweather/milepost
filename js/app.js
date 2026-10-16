@@ -103,6 +103,7 @@ const state = {
   stopByName: new Map(), // "agency:normalized name" -> { lat, lon }
   follow: false,
   query: "",
+  upcomingOpen: null,    // a train later today whose stops are shown in search ("railroad|number|day|departure")
   relayFeeds: null,      // feeds the relay can serve (null = no relay)
   // The train a rider pressing locate seems to be on: { id, mph, at }.
   rideGuess: null,
@@ -1576,9 +1577,12 @@ function renderResults() {
       <span></span>
     </button>`;
   }).join("") : "";
+  const later = q.length >= 2 ? laterToday(terms, q) : [];
+  const laterBlock = later.length ? `<div class="group-title">${T("Later today")}</div>` + upcomingHtml(later.slice(0, 12)) +
+    (later.length > 12 ? `<p class="results-more">${esc(T("{n} more later today", { n: later.length - 12 }))}</p>` : "") : "";
   const before = carBlock + railroadBlock + lineBlock + stationBlock;
   if (!matches.length) {
-    el.innerHTML = before || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`;
+    el.innerHTML = before + laterBlock || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`;
     return;
   }
   el.innerHTML = before + (before ? `<div class="group-title">${T("Trains")}</div>` : "") + matches.slice(0, 60).map(({ t }) => {
@@ -1590,7 +1594,109 @@ function renderResults() {
       <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc(a.short)} · ${esc(sub)}</span></span>
       ${statusSpan(t, "status")}
     </button>`;
+  }).join("") + laterBlock;
+}
+
+// ---------- Later today: trains that haven't left yet ----------
+// Every railroad's timetable for the next two weeks (data/schedules/, from
+// scripts/build_schedules.py) and an index of its runs (data/departures.json,
+// {railroad: {start, tz, unnumbered, stops: {id: name}, runs: [[number or run
+// key, line, first stop, last stop, departure, days], ...]}}). Search lists
+// the matching trains still to leave today (each railroad's own today), and
+// a tap shows one's stops and times.
+let departuresData = null;
+function departures() {
+  if (!departuresData) {
+    departuresData = {};
+    fetch("data/departures.json?v=dev").then((r) => r.json()).then((d) => {
+      departuresData = d;
+      if (state.query) renderResults();
+    }).catch((err) => console.warn("departures", err));
+  }
+  return departuresData;
+}
+// A zone's date now, as that date's UTC midnight.
+function zoneDay(tz, ms = Date.now()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" })
+    .formatToParts(ms).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, p.month - 1, +p.day);
+}
+// The moment a service day starts in a zone (day: its date's UTC midnight).
+const serviceStart = (day, tz) => day - zoneOffset(day + 12 * 3600000, tz) * 60000;
+
+function laterToday(terms, q) {
+  const all = departures(), now = Date.now(), out = [];
+  const running = new Set([...state.trains.values()].filter((t) => t.number).map((t) => `${t.agency}|${t.number}`));
+  for (const [id, d] of Object.entries(all)) {
+    const a = AGENCIES[id];
+    if (!a || !agencyShown(id) || !d.runs) continue;
+    const [y, m, day] = d.start.split("-").map(Number), today = zoneDay(d.tz);
+    const first = Math.round((today - Date.UTC(y, m - 1, day)) / 86400000);
+    // Today's service day, and yesterday's trains still to leave after midnight.
+    for (const idx of [first, first - 1]) {
+      if (idx < 0 || idx > 13) continue;
+      const start = serviceStart(today - (first - idx) * 86400000, d.tz);
+      for (const [key, line, from, to, dep, days] of d.runs) {
+        if (!(days & (1 << idx)) || (idx < first && dep < 1440)) continue;
+        const at = start + dep * 60000;
+        const number = d.unnumbered ? null : key;
+        if (at <= now || (number && running.has(`${id}|${number}`))) continue;
+        const origin = d.stops[from] || "", dest = d.stops[to] || "";
+        const hay = `${a.name} ${a.short} ${a.region} ${number || ""} ${line} ${origin} ${dest}`.toLowerCase();
+        if (!terms.every((w) => hay.includes(w))) continue;
+        const exact = Boolean(number) && (String(number).toLowerCase() === q || terms.includes(String(number).toLowerCase()));
+        out.push({ id, key, number, line, origin, dest, at, dep, idx, start, tz: d.tz, exact });
+      }
+    }
+  }
+  return out.sort((x, y) => Number(y.exact) - Number(x.exact) || x.at - y.at);
+}
+
+const upcomingKey = (u) => `${u.id}|${u.key}|${u.idx}|${u.dep}`;
+function upcomingHtml(list) {
+  return list.map((u) => {
+    const a = AGENCIES[u.id], k = upcomingKey(u), open = state.upcomingOpen === k;
+    const leaves = T("leaves {place} at {time}", { place: u.origin, time: fmtTime(new Date(u.at).toISOString(), u.tz) });
+    return `<button type="button" class="result upcoming" data-upcoming="${esc(k)}" aria-expanded="${open}">
+      ${plate(u.number || a.short, a.color, "sm")}
+      <span><span class="title">${esc(u.dest ? T("{line} to {place}", { line: u.line, place: u.dest }) : u.line)}</span><br><span class="sub">${esc(a.short)} · ${esc(leaves)}</span></span>
+      <span class="status neutral">${esc(u.at - Date.now() < 30000 ? T("now") : T("in {time}", { time: fmtIn(u.at) }))}</span>
+    </button>${open ? upcomingStops(u) : ""}`;
   }).join("");
+}
+
+// A railroad's whole timetable, loaded when one of its trains is opened.
+const scheduleCache = {};
+function scheduleOf(id) {
+  if (!scheduleCache[id]) {
+    scheduleCache[id] = { loading: true };
+    fetch(`data/${departures()[id]?.file || `schedules/${id}.json`}?v=dev`).then((r) => r.json()).then((d) => {
+      scheduleCache[id] = d;
+      if (state.query) renderResults();
+    }).catch((err) => {
+      scheduleCache[id] = { failed: true };
+      console.warn("schedule", id, err);
+    });
+  }
+  return scheduleCache[id];
+}
+// A station on the map for one of a railroad's stops.
+function stationFor(agency, sid) {
+  for (const st of state.stations.values()) if (st.members.some((m) => m.agency === agency && m.id === sid)) return st;
+  return null;
+}
+function upcomingStops(u) {
+  const tt = scheduleOf(u.id), a = AGENCIES[u.id];
+  if (tt.loading) return `<p class="upcoming-note">${esc(T("Loading its stops…"))}</p>`;
+  const run = (tt.trips?.[u.key] || []).find(([days, , stops]) => days & (1 << u.idx) && stops[0]?.[2] === u.dep);
+  if (!run) return `<p class="upcoming-note">${esc(T("Its stops aren't available."))}</p>`;
+  const stops = run[2];
+  return `<ol class="stops line-stops upcoming-stops" style="--line-color:${lineColorOf(u.id, run[1]) || a.color}">${stops.map(([sid, arr, dep], i) => {
+    const st = stationFor(u.id, sid), name = tt.stops[sid]?.[0] || st?.name || sid;
+    const min = i === stops.length - 1 ? arr ?? dep : dep ?? arr;
+    const time = fmtTime(new Date(u.start + min * 60000).toISOString(), st?.members.find((m) => m.agency === u.id)?.tz || u.tz);
+    return `<li${st ? ` class="link" data-station="${esc(st.id)}" role="button" tabindex="0"` : ""}><span class="stop-dot" aria-hidden="true"></span><span>${esc(name)}</span><span class="time">${esc(time)}</span></li>`;
+  }).join("")}</ol>`;
 }
 
 // ---------- Rendering: train detail ----------
@@ -3765,6 +3871,12 @@ on("search", "keydown", (e) => {
 });
 
 on("results", "click", (e) => {
+  // A train later today: show or hide its stops.
+  const up = e.target.closest("[data-upcoming]");
+  if (up) {
+    state.upcomingOpen = state.upcomingOpen === up.dataset.upcoming ? null : up.dataset.upcoming;
+    return renderResults();
+  }
   // A car found by its number: its train, with the car's card open.
   const car = e.target.closest("[data-car-train]");
   if (car) {
