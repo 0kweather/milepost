@@ -30,14 +30,15 @@ CODES = {
     "SLE": "ctrail", "NICD": "southshore", "JPBX": "caltrain", "SDRX": "sounder", "ACEX": "ace",
     "SFRC": "trirail", "TRCX": "trirail", "CFCR": "sunrail", "NCTD": "coaster", "SMRT": "smart",
     "DRTD": "rtd", "RTDC": "rtd", "CMRX": "capmetro", "TRE": "tre", "DART": "tre",
-    "NMRX": "railrunner", "WES": "wes", "TEXR": "texrail",
+    "NMRX": "railrunner", "WES": "wes", "TEXR": "texrail", "NRTX": "star",
     # Canada
     "GO": "go", "AMT": "exo", "EXO": "exo", "WCE": "wce", "WCXR": "wce",
 }
 ORDER = ["amtrak", "via", "brightline"]  # intercity first, then commuter networks alphabetically
 COMMUTER_STATIONS = {"mbta", "lirr", "mnr", "njt", "septa", "metra", "rtd", "frontrunner",
                      "capmetro", "trirail", "caltrain", "smart", "metrolink", "ctrail",
-                     "marc", "vre", "sounder", "southshore", "sunrail", "railrunner"}
+                     "marc", "vre", "sounder", "southshore", "sunrail", "railrunner",
+                     "coaster", "sprinter", "atrain", "tre", "silverline", "texrail", "star", "upx"}
 # CTrail's Hartford Line trains run on Amtrak's New Haven-Springfield line,
 # which NTAD files as Amtrak's alone: (south, west, north, east).
 HARTFORD_LINE = (41.30, -72.95, 42.105, -72.585)
@@ -149,6 +150,10 @@ OSM_OPERATORS = {
     "capmetro": "Capital Metro|CapMetro", "trirail": "Tri-Rail|South Florida Regional",
     "caltrain": "Caltrain", "smart": "SMART|Sonoma.Marin", "via": "VIA Rail|Via Rail",
     "go": "GO Transit|Metrolinx", "exo": "^exo$|Réseau de transport métropolitain",
+    "coaster": "COASTER|North County Transit", "sprinter": "SPRINTER|North County Transit",
+    "atrain": "DCTA|Denton County", "tre": "Trinity Railway Express", "silverline": "Silver Line|Dallas Area Rapid Transit|DART",
+    "texrail": "TEXRail|Trinity Metro", "star": "WeGo|Music City Star|Regional Transportation Authority",
+    "upx": "UP Express|Union Pearson", "ontarionorthland": "Ontario Northland",
 }
 # (name, network to tag, Overpass relation filter, bbox south,west,north,east)
 TARGETED_FILLS = [
@@ -460,6 +465,102 @@ out geom;""", f"targeted-{name}")
         print(f"  {name}: +{add_uncovered(segs, net, elements, **(opts[0] if opts else {})) / 1000:.1f} km from OpenStreetMap")
         time.sleep(2)
 
+
+# ---------- Railroads' own route shapes ----------
+# Some lines aren't flagged as passenger track in NTAD (TEXRail, the Silver
+# Line, the SPRINTER, the Polar Bear Express's line to Moosonee, UP
+# Express's spur), and a reporting mark can stand for more than one railroad (DART's
+# track carries the TRE, the A-train and the Silver Line). Each railroad's
+# timetable has the shapes its trains follow: track that runs along a shape
+# is that railroad's, and NTAD track along a shape that isn't drawn yet is
+# added. Shapes are a point every 100-200 m (Ontario Northland's about every
+# kilometer), so "along" allows for the chords they cut across curves.
+SHAPE_ROUTES = {
+    # network: (GTFS url, keep route(route row), meters from the shape that still count as along it)
+    "coaster": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "COASTER", 80),
+    "sprinter": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "SPRINTER", 80),
+    "atrain": ("https://gtfs.remix.com/dcta_denton_tx_us.zip", lambda r: r["route_long_name"] == "A-train", 80),
+    "tre": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "TRE", 80),
+    "silverline": ("https://www.dart.org/transitdata/latest/google_transit.zip", lambda r: r["route_short_name"] == "SILVER", 80),
+    "texrail": ("https://gtfsdata.ridetm.org/gtfs/fwtatransitdata.zip", lambda r: r["route_short_name"] == "TEXRail", 80),
+    "star": ("https://www.wegotransit.com/googleexport/google_transit.zip", lambda r: r["route_id"] == "90", 80),
+    "upx": ("https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/UP-GTFS.zip", lambda r: True, 80),
+    # Ontario Northland files every route as a bus; its train is the Polar Bear Express (Cochrane-Moosonee).
+    # The feed already has the Northlander's proposed trips, but it is not carrying passengers yet
+    # (October 2026): add r["route_long_name"].startswith("Northlander") back when it is.
+    "ontarionorthland": ("https://ontarionorthland.tmix.se/gtfs/gtfs.zip",
+                         lambda r: "Moosonee" in r["route_long_name"], 250),
+}
+
+
+def route_shapes(url, keep):
+    import csv, io, zipfile
+    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
+    zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=240).read()))
+    rows = lambda n: ({k.strip(): (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(io.TextIOWrapper(zf.open(n), "utf-8-sig")))
+    routes = {r["route_id"] for r in rows("routes.txt") if keep(r)}
+    ids = {t["shape_id"] for t in rows("trips.txt") if t["route_id"] in routes and t.get("shape_id")}
+    pts = defaultdict(list)
+    for r in rows("shapes.txt"):
+        if r["shape_id"] in ids:
+            pts[r["shape_id"]].append((int(r["shape_pt_sequence"]), float(r["shape_pt_lon"]), float(r["shape_pt_lat"])))
+    return [[(x, y) for _, x, y in sorted(v)] for v in pts.values()]
+
+
+def query_box(bbox):
+    """Every main-line, siding and lead segment of NTAD in (west, south, east, north)."""
+    out, offset = [], 0
+    while True:
+        params = {"where": "NET IN ('M', 'I', 'S')", "geometry": ",".join(map(str, bbox)), "geometryType": "esriGeometryEnvelope",
+                  "inSR": "4326", "spatialRel": "esriSpatialRelIntersects", "outFields": "PASSNGR", "maxAllowableOffset": "0.0003",
+                  "geometryPrecision": "4", "resultOffset": offset, "resultRecordCount": 2000, "orderByFields": "OBJECTID", "f": "geojson"}
+        with urllib.request.urlopen(f"{URL}?{urllib.parse.urlencode(params)}", timeout=180) as r:
+            page = json.load(r)["features"]
+        out += [f for f in page if f.get("geometry")]
+        offset += len(page)
+        if len(page) < 2000:
+            return out
+
+
+def apply_shapes(segs):
+    for net, (url, keep, tol) in SHAPE_ROUTES.items():
+        try:
+            shapes = route_shapes(url, keep)
+        except Exception as err:
+            print(f"  {net}: shapes unavailable ({err})")
+            continue
+        if not shapes:
+            continue
+        guide = Coverage([((net,), densify(sh, 50)) for sh in shapes])
+        along = lambda line: sum(1 for q in line if guide.nearest(q, tol)) / len(line)
+        # Track already drawn: this railroad's too where it runs along the shape.
+        retagged = 0
+        for k, (nets, line) in enumerate(segs):
+            pts = densify(line, 100)
+            f = along(pts)
+            if f >= 0.7 and net not in nets:
+                keep_nets = [n for n in nets if n != "commuter"][:2]  # up to three, this one included
+                nets = tuple(keep_nets + [net])
+                retagged += 1
+            segs[k] = (tuple(sorted(nets, key=lambda n: (ORDER.index(n) if n in ORDER else len(ORDER), n))), line)
+        # NTAD track along the shape that isn't drawn yet.
+        drawn = Coverage(segs)
+        xs = [x for sh in shapes for x, _ in sh]
+        ys = [y for sh in shapes for _, y in sh]
+        added = 0
+        for f in query_box((min(xs) - 0.02, min(ys) - 0.02, max(xs) + 0.02, max(ys) + 0.02)):
+            for line in parts(f["geometry"]):
+                if len(line) < 2:
+                    continue
+                pts = densify(line, 100)
+                if along(pts) >= 0.8 and sum(1 for q in pts if drawn.nearest(q, 20)) / len(pts) < 0.5:
+                    segs.append(((net,), line))
+                    added += 1
+        print(f"  {net}: {retagged} segments retagged, {added} added along its route shapes")
+
+
+print("railroads' route shapes")
+apply_shapes(segments)
 
 print("filling gaps from OpenStreetMap")
 fill_gaps(segments)

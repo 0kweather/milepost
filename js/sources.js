@@ -45,9 +45,9 @@ export const AGENCIES = {
   tre:        { name: "Trinity Railway Express", short: "TRE",  region: "Dallas–Fort Worth",   color: "#1d3a8a", kind: "commuter" },
   silverline: { name: "DART Silver Line",    short: "Silver Line", region: "Dallas",           color: "#8a9097", kind: "commuter" },
   texrail:    { name: "TEXRail",             short: "TEXRail",  region: "Fort Worth",          color: "#7d2248", kind: "commuter" },
-  star:       { name: "WeGo Star",           short: "Star",     region: "Nashville",           color: "#0a3d7a", kind: "commuter" },
+  star:       { name: "WeGo Star",           short: "Star",     region: "Nashville",           color: "#6a4bb8", kind: "commuter" },
   upx:        { name: "UP Express",          short: "UP Express", region: "Toronto",           color: "#5a6b2f", kind: "commuter" },
-  ontarionorthland: { name: "Ontario Northland", short: "Ontario Northland", region: "Northern Ontario", color: "#0f2d5c", kind: "intercity" },
+  ontarionorthland: { name: "Ontario Northland", short: "Ontario Northland", region: "Northern Ontario", color: "#2c5aa0", kind: "intercity" },
   alaska:     { name: "Alaska Railroad",     short: "Alaska Railroad", region: "Alaska",       color: "#1b4f9c", kind: "intercity" },
 };
 
