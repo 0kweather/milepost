@@ -1915,9 +1915,9 @@ function renderDetail() {
       </div>
       ${consistSection(t)}
     </div>
+    ${tiles}
     ${crowdSection(t)}
     ${noticesHtml(t)}
-    ${tiles}
     ${stops}
     ${onBoardFor(t)}
     ${historySection(t)}`;
