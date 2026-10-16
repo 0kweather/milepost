@@ -72,7 +72,7 @@ exec(_stations_src[:_stations_src.index("\ndef get(")], _stations)
 short = lambda t: t.get("trip_short_name") or None
 NUMBERS = {
     "lirr": short, "mnr": short, "mbta": short, "caltrain": short, "metrolink": short, "vre": short, "sounder": short,
-    "njt": lambda t: t.get("block_id") or None,                                             # NJ Transit's train numbers are its blocks
+    "njt": lambda t: (t.get("block_id") or "").lstrip("0") or None,                        # its blocks, unpadded ("0067": train 67)
     "metra": lambda t: re.sub(r"^\D+", "", t["trip_id"].split("_")[1]) if "_" in t["trip_id"] else None,  # "UP-N_UN303_V3_A": 303
     "marc": lambda t: re.sub(r"^Train\s*", "", t.get("trip_short_name") or "", flags=re.I) or None,  # "Train 446"
     "go": lambda t: t["trip_id"].rsplit("-", 1)[-1],                                        # "20261028-ST-7420": 7420
