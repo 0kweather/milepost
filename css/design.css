@@ -199,6 +199,23 @@ html, body {
 .results .group-title + .result, .results > .result:first-child { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
 .results .result:has(+ .group-title), .results .result:last-child { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
 .results .result + .result::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; height: 0.5px; background: var(--line); }
+/* Near you: the closest trains at the top of the home list, a card like the
+   railroads', each row with a Track button. */
+.near-title { display: flex; align-items: center; justify-content: space-between; }
+.near-refresh { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--faint); }
+.near-refresh:hover { background: var(--group); color: var(--text); }
+.near-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-right: 12px; background: var(--group); }
+.group-title + .near-row { border-top-left-radius: var(--r-card); border-top-right-radius: var(--r-card); }
+.near-row:has(+ .group-title) { border-bottom-left-radius: var(--r-card); border-bottom-right-radius: var(--r-card); }
+.near-row + .near-row::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; height: 0.5px; background: var(--line); }
+.near-row .result { background: transparent; border-radius: inherit; }
+.near-row .result .status { font-size: inherit; }
+.near-btn { grid-column: 1 / -1; }
+.near-btn[disabled] { opacity: 0.7; cursor: progress; }
+.near-pin { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.near-row .track-btn, .near-tracking { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.near-tracking { font-size: var(--fs-xs); font-weight: 600; color: var(--accent); }
+.near-note { grid-column: 1 / -1; margin: 0; padding: 12px 14px; font-size: var(--fs-sm); color: var(--muted); }
 
 /* Lists on the detail pages: each a card of its own. */
 .rr-trains, .rr-stations, .deps, .rr-lines, .served-by, .rr-cars, .stops-scroll {

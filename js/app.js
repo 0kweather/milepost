@@ -1412,7 +1412,7 @@ function renderAgencies() {
         </div>`);
     }
   }
-  $("agencies").innerHTML =
+  $("agencies").innerHTML = nearbyHtml() +
     `<div class="group-title">${T("Intercity")}</div>${rows.intercity.join("")}` +
     `<div class="group-title">${T("Commuter & regional")}</div>${rows.commuter.join("")}` +
     (rows.off.length
@@ -1421,6 +1421,109 @@ function renderAgencies() {
       : "");
 }
 
+
+// ---------- Near you ----------
+// The trains closest to the reader, on the home list: each opens its page,
+// and its Track button asks where they're getting off. The position is asked
+// for only when they press "Find trains near me" (and, once they've allowed
+// it, on their next visits), kept in memory for the visit and never sent
+// anywhere; it's checked again every couple of minutes while the list shows.
+const NEAR_COUNT = 5;
+const NEAR_MAX_M = 160934;            // 100 miles
+const NEAR_REFRESH_MS = 2 * 60 * 1000;
+const PIN_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="currentColor"/></svg>';
+const REFRESH_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v4.5H15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let nearFix = null;                   // { lat, lon, at }
+let nearState = "idle";               // idle | locating | ok | denied | unavailable
+let nearAsking = false;
+function locateNear({ quiet = false } = {}) {
+  if (!navigator.geolocation) {
+    nearState = "unavailable";
+    return renderNearby();
+  }
+  if (nearAsking) return;
+  nearAsking = true;
+  if (!quiet) {
+    nearState = "locating";
+    renderNearby();
+  }
+  navigator.geolocation.getCurrentPosition((pos) => {
+    nearAsking = false;
+    nearFix = { lat: pos.coords.latitude, lon: pos.coords.longitude, at: Date.now() };
+    nearState = "ok";
+    store.set("tt-near", true);
+    renderNearby();
+  }, (err) => {
+    nearAsking = false;
+    if (quiet && nearFix) return;     // keep the last place
+    nearState = err.code === 1 ? "denied" : "unavailable";
+    if (err.code === 1) store.set("tt-near", false);
+    renderNearby();
+  }, { enableHighAccuracy: false, maximumAge: 60000, timeout: 15000 });
+}
+// Allowed on an earlier visit: find them again without asking.
+if (store.get("tt-near", false)) {
+  navigator.permissions?.query({ name: "geolocation" }).then((p) => { if (p.state === "granted") locateNear(); }).catch(() => {});
+}
+function fmtDist(m) {
+  if (state.units === "km") return m < 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+  const mi = m / 1609.344;
+  return mi < 10 ? `${mi.toFixed(1)} mi` : `${Math.round(mi)} mi`;
+}
+// The nearest trains, nearest first, and whether each is coming toward the
+// reader (its heading within 60° of the way to them).
+function nearestTrains() {
+  const out = [];
+  for (const t of state.trains.values()) {
+    if (!inLists(t)) continue;
+    const p = state.display.get(t.id) || targetOf(t);
+    if (!p) continue;
+    const d = meters(nearFix, p);
+    if (d > NEAR_MAX_M) continue;
+    const b = t.bearing ?? state.est.get(t.id)?.bearing;
+    const toward = b == null || d < 300 ? null : Math.abs(((compassBearing(p, nearFix) - b) % 360 + 540) % 360 - 180) < 60;
+    out.push({ t, d, toward });
+  }
+  return out.sort((x, y) => x.d - y.d).slice(0, NEAR_COUNT);
+}
+// Near you, at the top of the home list (renderAgencies).
+function renderNearby() {
+  if (!state.query.trim()) renderAgencies();
+}
+function nearbyHtml() {
+  if (nearState === "ok" && Date.now() - nearFix.at > NEAR_REFRESH_MS && !document.hidden) locateNear({ quiet: true });
+  const head = `<div class="group-title near-title"><span>${T("Near you")}</span>${nearState === "ok"
+    ? `<button type="button" class="near-refresh" data-near-locate aria-label="${T("Update my location")}" title="${T("Update my location")}">${REFRESH_ICON}</button>` : ""}</div>`;
+  if (nearState !== "ok") {
+    const sub = {
+      locating: T("Finding you…"),
+      denied: T("Location is off for Trainsheet. Allow it in your browser's settings to see trains near you."),
+      unavailable: T("Your location isn't available right now."),
+    }[nearState] || T("The closest trains, ready to track. Your location stays on this device.");
+    return head + `<div class="near-row"><button type="button" class="result near-btn" data-near-locate${nearState === "locating" ? " disabled" : ""}>
+      <span class="near-pin">${PIN_ICON}</span>
+      <span><span class="title">${T("Find trains near me")}</span><br><span class="sub">${esc(sub)}</span></span><span></span>
+    </button></div>`;
+  }
+  const list = nearestTrains();
+  if (!list.length) return head + `<div class="near-row"><p class="near-note">${esc(T("No trains within {d} right now.", { d: fmtDist(NEAR_MAX_M) }))}</p></div>`;
+  return head + list.map(({ t, d, toward }) => {
+    const a = AGENCIES[t.agency], tracked = state.tracked.some((r) => r.id === t.id);
+    const next = t.stops?.find((s) => s.status === "next")?.name || t.nextStop;
+    const away = fmtDist(d) + (toward === true ? ` · ${T("coming your way")}` : toward === false ? ` · ${T("heading away")}` : "");
+    const where = next ? T("next {place}", { place: next }) : t.destination ? T("to {place}", { place: t.destination }) : "";
+    return `<div class="near-row">
+      <button type="button" class="result" data-select="${esc(t.id)}">
+        ${plate(t.number || a.short, a.color, "sm")}
+        <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc([a.short, away].join(" · "))}</span>${where || trainStatus(t).text
+          ? `<br><span class="sub">${esc(where)}${where && trainStatus(t).text ? " · " : ""}${statusSpan(t, "status")}</span>` : ""}</span>
+        <span></span>
+      </button>
+      ${tracked ? `<span class="near-tracking">${BELL_ICON}${T("Tracking")}</span>`
+        : `<button type="button" class="btn primary small track-btn" data-near-track="${esc(t.id)}">${BELL_ICON}${T("Track")}</button>`}
+    </div>`;
+  }).join("");
+}
 
 function renderCredits() {
   const seen = new Map();
@@ -3913,6 +4016,17 @@ on("recents", "click", (e) => {
 });
 
 on("agencies", "click", (e) => {
+  // Near you: find them, track a train, or open one.
+  if (e.target.closest("[data-near-locate]")) return locateNear();
+  const nearTrack = e.target.closest("[data-near-track]");
+  if (nearTrack) {
+    const t = state.trains.get(nearTrack.dataset.nearTrack);
+    if (!t) return;
+    select(t.id);
+    return openTrackSheet(t);
+  }
+  const near = e.target.closest("[data-select]");
+  if (near) return select(near.dataset.select);
   const toggle = e.target.closest("[data-toggle]");
   const info = e.target.closest("[data-railroad]");
   if (toggle) {

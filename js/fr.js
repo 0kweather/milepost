@@ -332,4 +332,15 @@ export default {
   "{line} to {place}": "{line} vers {place}",
   "Loading its stops…": "Chargement de ses arrêts…",
   "Its stops aren't available.": "Ses arrêts ne sont pas disponibles.",
+  // ----- Near you -----
+  "Near you": "Près de vous",
+  "Update my location": "Mettre à jour ma position",
+  "Find trains near me": "Trouver les trains près de moi",
+  "Finding you…": "Recherche de votre position…",
+  "Location is off for Trainsheet. Allow it in your browser's settings to see trains near you.": "La localisation est désactivée pour Trainsheet. Autorisez-la dans les réglages de votre navigateur pour voir les trains près de vous.",
+  "Your location isn't available right now.": "Votre position n’est pas disponible pour le moment.",
+  "The closest trains, ready to track. Your location stays on this device.": "Les trains les plus proches, prêts à suivre. Votre position reste sur cet appareil.",
+  "No trains within {d} right now.": "Aucun train à moins de {d} en ce moment.",
+  "coming your way": "vient vers vous",
+  "heading away": "s’éloigne",
 };
