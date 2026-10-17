@@ -16,6 +16,20 @@ export const lang = pref === "auto" ? (/^fr\b/i.test(navigator.language || "") ?
 export const locale = lang === "fr" ? "fr-CA" : undefined;
 document.documentElement.lang = lang;
 
+// Dates and times are set through Intl.DateTimeFormat, which costs some
+// twenty times more to make than to use, and a page of forty stops has that
+// many times on it, drawn again at every refresh. So each formatter (a
+// locale, a style, a zone) is made once and kept. Given the options a
+// toLocaleTimeString or toLocaleDateString call would get, it gives back
+// the same string that call would.
+const formatters = new Map();
+export function dateFormat(options, loc = locale) {
+  const key = `${loc}|${JSON.stringify(options)}`;
+  let f = formatters.get(key);
+  if (!f) formatters.set(key, (f = new Intl.DateTimeFormat(loc, options)));
+  return f;
+}
+
 export function t(en, vars) {
   let s = lang === "fr" ? FR[en] ?? en : en;
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));

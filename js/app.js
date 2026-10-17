@@ -7,7 +7,7 @@ import { loadDisruptions, aboutLine } from "./disruptions.js?v=dev";
 import { inferDelay, restoreFeed } from "./delays.js?v=dev";
 import { consistOf, consistHtml, carSvg, modelIds, fleetSamples } from "./consist.js?v=dev";
 import { stationLifts } from "./lifts.js?v=dev";
-import { t as T, tn as Tn, lang, langPref, locale, translatePage } from "./i18n.js?v=dev";
+import { t as T, tn as Tn, lang, langPref, locale, dateFormat, translatePage } from "./i18n.js?v=dev";
 
 // localStorage "tt-relay" overrides config.js, handy when testing a relay locally.
 const RELAY = ((() => { try { return localStorage.getItem("tt-relay"); } catch { return null; } })() ||
@@ -1771,7 +1771,7 @@ function departures() {
 }
 // A zone's date now, as that date's UTC midnight.
 function zoneDay(tz, ms = Date.now()) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" })
+  const p = Object.fromEntries(dateFormat({ timeZone: tz, year: "numeric", month: "numeric", day: "numeric" }, "en-US")
     .formatToParts(ms).map((x) => [x.type, x.value]));
   return Date.UTC(+p.year, p.month - 1, +p.day);
 }
@@ -1865,9 +1865,9 @@ function fmtTime(iso, tz) {
   if (Number.isNaN(+d)) return "";
   const zone = state.timeZone === "station" ? tz : state.timeZone;
   try {
-    return d.toLocaleTimeString(locale, { ...clockOptions(), timeZone: zone || undefined });
+    return dateFormat({ ...clockOptions(), timeZone: zone || undefined }).format(d);
   } catch {
-    return d.toLocaleTimeString(locale, clockOptions());
+    return dateFormat(clockOptions()).format(d);
   }
 }
 
@@ -2167,7 +2167,7 @@ function historySection(t) {
   const median = late.length % 2 ? late[(late.length - 1) / 2] : Math.round((late[late.length / 2 - 1] + late[late.length / 2]) / 2);
   const worst = list.reduce((w, r) => (r.delay > w.delay ? r : w), list[0]);
   const onTime = list.filter((r) => r.delay <= ON_TIME_MIN).length;
-  const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString(locale, { month: "short", day: "numeric" });
+  const dayLabel = (day) => dateFormat({ month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
   // Bars to one scale (at least an hour tall, so a quiet fortnight looks quiet).
   const W = 300, H = 92, top = 8, base = 72, max = Math.max(60, ...late);
   const y = (min) => base - ((base - top) * Math.min(min, max)) / max;
@@ -2320,7 +2320,7 @@ const WHEELCHAIR_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hi
 
 // A clock time in a given zone, in the chosen 12- or 24-hour style.
 const clockIn = (ms, tz) => {
-  try { return new Date(ms).toLocaleTimeString(locale, { ...clockOptions(), timeZone: tz }); } catch { return ""; }
+  try { return dateFormat({ ...clockOptions(), timeZone: tz }).format(new Date(ms)); } catch { return ""; }
 };
 // The station's local time, when it isn't what the page's times are shown in.
 function localTimeNote(st) {
@@ -2562,7 +2562,7 @@ function liftsSection(data) {
   const when = (ms) => {
     if (!ms) return "";
     const d = new Date(ms), today = new Date().toDateString() === d.toDateString();
-    return today ? fmtTime(d.toISOString()) : d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+    return today ? fmtTime(d.toISOString()) : dateFormat({ month: "short", day: "numeric" }).format(d);
   };
   const icon = (l) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${l.kind === "escalator" ? ESCALATOR_ICON : AMENITY_ROW_ICON.elevator}</svg>`;
   const what = (l) => T(l.kind === "escalator" ? "Escalator" : "Elevator");
@@ -3003,7 +3003,7 @@ function firsts() {
 }
 // Minutes a zone is ahead of UTC at a moment.
 function zoneOffset(ms, tz) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
+  const p = Object.fromEntries(dateFormat({ timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }, "en-US")
     .formatToParts(ms).map((x) => [x.type, x.value]));
   return (Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute) - Math.floor(ms / 60000) * 60000) / 60000;
 }
@@ -3025,7 +3025,7 @@ function nextFirstTrain(id) {
 function quietCard(id) {
   const a = AGENCIES[id], f = nextFirstTrain(id);
   const when = f && (f.at - Date.now() > 20 * 3600 * 1000
-    ? T("{day} at {time}", { day: new Date(f.at).toLocaleDateString(locale, { weekday: "long", timeZone: (state.timeZone === "station" ? f.tz : state.timeZone) || undefined }), time: fmtTime(new Date(f.at).toISOString(), f.tz) })
+    ? T("{day} at {time}", { day: dateFormat({ weekday: "long", timeZone: (state.timeZone === "station" ? f.tz : state.timeZone) || undefined }).format(new Date(f.at)), time: fmtTime(new Date(f.at).toISOString(), f.tz) })
     : T("at {time}", { time: fmtTime(new Date(f.at).toISOString(), f.tz) }));
   return `<div class="quiet">
     <svg class="quiet-moon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M20.4 14.6A8.5 8.5 0 0 1 9.4 3.6a8.5 8.5 0 1 0 11 11Z"/></svg>
