@@ -3577,9 +3577,25 @@ function ping(on) {
     }
     return;
   }
+  // While none of the pinged markers is on screen (a train tracked from
+  // across the map, the page panned away from it), the ping isn't drawn, so
+  // the repaint it costs the map every frame is skipped until one comes back.
+  const onScreen = () => {
+    const spots = [];
+    for (const id of new Set([state.selected, ...state.tracked.map((r) => r.id)])) {
+      const t = id && state.trains.get(id);
+      if (t) spots.push(state.display.get(id) || targetOf(t));
+    }
+    const st = state.station && state.stations.get(state.station);
+    if (st) spots.push(st);
+    if (!spots.length) return true;
+    const { clientWidth: w, clientHeight: h } = map.getContainer();
+    const reach = disc() * SELECTED_SCALE + 18 + 2; // the ping at its largest
+    return spots.some((s) => { const p = map.project([s.lon, s.lat]); return p.x > -reach && p.x < w + reach && p.y > -reach && p.y < h + reach; });
+  };
   let last = 0;
   const step = (now) => {
-    if (now - last > 33 && !document.hidden) {
+    if (now - last > 33 && !document.hidden && onScreen()) {
       last = now;
       const t = now % (PING_MS + PING_REST_MS);
       const resting = t > PING_MS;

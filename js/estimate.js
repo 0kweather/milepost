@@ -7,6 +7,11 @@ const DEG = Math.PI / 180;
 export const SNAP_M = 1500;        // how far a train may be from track and still snap to it
 const OWN_TRACK_SLACK_M = 150;     // prefer the train's own railroad's track if about as close
 const CELL = 0.02;                 // spatial index cell, degrees
+// A cell's key as one number (its column and row are at most a few thousand
+// either way, so 20,000 apart per column keeps them distinct): numbers hash
+// faster than the strings "gx:gy" did, for the 47,000 cells built at startup
+// and the nine looked up per snap.
+const cellKey = (gx, gy) => gx * 20000 + gy;
 
 function dist(a, b) {
   // Equirectangular is plenty accurate at these distances.
@@ -100,7 +105,7 @@ export class RailIndex {
           const [x0, y0] = coords[i], [x1, y1] = coords[i + 1];
           for (let gx = Math.floor(Math.min(x0, x1) / CELL); gx <= Math.floor(Math.max(x0, x1) / CELL); gx++) {
             for (let gy = Math.floor(Math.min(y0, y1) / CELL); gy <= Math.floor(Math.max(y0, y1) / CELL); gy++) {
-              const k = `${gx}:${gy}`;
+              const k = cellKey(gx, gy);
               if (!this.grid.has(k)) this.grid.set(k, []);
               this.grid.get(k).push([li, i]);
             }
@@ -227,7 +232,7 @@ export class RailIndex {
     let best = null;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        for (const [li, i] of this.grid.get(`${gx + dx}:${gy + dy}`) || []) {
+        for (const [li, i] of this.grid.get(cellKey(gx + dx, gy + dy)) || []) {
           if (this.lines[li].hidden) continue;
           const { coords, cum } = this.lines[li];
           const a = coords[i], b = coords[i + 1];
