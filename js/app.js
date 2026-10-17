@@ -753,8 +753,42 @@ function redraw() {
 // ---------- The selected train's route ----------
 // Its stops joined along the track, split where the train is: behind it
 // faded, ahead solid. Traced once per train (and stop list), split again on
-// every update.
-const routeCache = { key: "", coords: [] };
+// every update. A train far off that line is on a detour its stop list
+// doesn't show (VIA's Hudson Bay train around washouts on the Dauphin line,
+// running the CN main through Melville and Rivers instead), or its fix is
+// stale and it's still short of stops its feed already counts as passed:
+// either way its current leg is traced again through where it is, from the
+// stop behind it and on to the next, so the line follows the track it's
+// really on.
+const DETOUR_M = 2000;
+const routeCache = { key: "", stops: [], legs: [], coords: [] }; // legs[i] joins stops[i] and stops[i + 1]
+const detourCache = { key: "", coords: [] };
+
+// The track from one point to the next, or a straight line where the track
+// doesn't join them within reason.
+function traceLeg(a, b, agency) {
+  const path = state.rail.route(state.rail.snap([a.lon, a.lat], 1500, agency), state.rail.snap([b.lon, b.lat], 1500, agency), agency);
+  return path && path.length < meters(a, b) * 2.5 + 2000 ? path.coords : [[a.lon, a.lat], [b.lon, b.lat]];
+}
+
+const joinLegs = (legs) => legs.flatMap((leg, i) => (i ? leg.slice(1) : leg));
+
+// Meters from a point to the nearest piece of a line, not just its nearest
+// vertex: on the prairies one straight piece can run 30 km.
+function offLine(p, coords) {
+  const kx = Math.cos((p.lat * Math.PI) / 180);
+  let best = Infinity, q = null;
+  for (let i = 1; i < coords.length; i++) {
+    const [ax, ay] = coords[i - 1], [bx, by] = coords[i];
+    const dx = (bx - ax) * kx, dy = by - ay, px = (p.lon - ax) * kx, py = p.lat - ay;
+    const len2 = dx * dx + dy * dy;
+    const u = len2 ? Math.max(0, Math.min(1, (px * dx + py * dy) / len2)) : 0;
+    const d = (px - u * dx) ** 2 + (py - u * dy) ** 2;
+    if (d < best) { best = d; q = { lon: ax + (bx - ax) * u, lat: ay + dy * u }; }
+  }
+  return q ? meters(p, q) : Infinity;
+}
+
 function redrawRoute() {
   const src = map.getSource("route");
   if (!src) return;
@@ -763,22 +797,37 @@ function redrawRoute() {
   if (!t?.stops?.length || !state.rail) return src.setData(empty);
   const key = `${t.id}|${t.stops.length}|${t.stops[0].key}|${t.stops[t.stops.length - 1].key}`;
   if (routeCache.key !== key) {
-    const coords = [];
-    let prev = null;
-    for (const s of t.stops) {
-      const p = state.stopPos.get(s.key);
-      if (!p) continue;
-      if (prev) {
-        const path = state.rail.route(state.rail.snap([prev.lon, prev.lat], 1500, t.agency), state.rail.snap([p.lon, p.lat], 1500, t.agency), t.agency);
-        const leg = path && path.length < meters(prev, p) * 2.5 + 2000 ? path.coords : [[prev.lon, prev.lat], [p.lon, p.lat]];
-        coords.push(...(coords.length ? leg.slice(1) : leg));
-      }
-      prev = p;
-    }
-    Object.assign(routeCache, { key, coords });
+    const stops = t.stops.map((s, i) => ({ i, ...state.stopPos.get(s.key) })).filter((p) => p.lat != null);
+    const legs = stops.slice(1).map((p, j) => traceLeg(stops[j], p, t.agency));
+    Object.assign(routeCache, { key, stops, legs, coords: joinLegs(legs) });
   }
-  const coords = routeCache.coords;
+  let coords = routeCache.coords;
   if (coords.length < 2) return src.setData(empty);
+  // Off the line by more than a detour's worth: trace its leg through it.
+  // The leg is the one into the stop it's heading for, when the feed says
+  // which, else the one it strays least from.
+  const target = targetOf(t);
+  if (offLine(target, coords) > DETOUR_M) {
+    const { stops, legs } = routeCache;
+    const ni = t.stops.findIndex((s) => s.status === "next");
+    let leg = -1;
+    if (ni >= 0) leg = stops.findIndex((p) => p.i >= ni) - 1;
+    else {
+      let strays = Infinity;
+      legs.forEach((_, j) => {
+        const d = meters(stops[j], target) + meters(target, stops[j + 1]) - meters(stops[j], stops[j + 1]);
+        if (d < strays) { strays = d; leg = j; }
+      });
+    }
+    if (leg >= 0 && leg < legs.length) {
+      const dkey = `${key}|${leg}|${target.lon},${target.lat}`;
+      if (detourCache.key !== dkey) {
+        const via = [...traceLeg(stops[leg], target, t.agency), ...traceLeg(target, stops[leg + 1], t.agency).slice(1)];
+        Object.assign(detourCache, { key: dkey, coords: joinLegs(legs.map((l, j) => (j === leg ? via : l))) });
+      }
+      coords = detourCache.coords;
+    }
+  }
   // Where the train is along it: the nearest point.
   const here = state.display.get(t.id) || targetOf(t);
   let at = 0, best = Infinity;
