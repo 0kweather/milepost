@@ -5,7 +5,7 @@ the CSV reader and the clock. Imported by scripts/build_*.py (which used to
 carry their own copies, or read the top of build_stations.py); nothing here
 runs on its own.
 """
-import csv, io, pathlib, re, time, unicodedata, urllib.parse, urllib.request, zipfile
+import csv, io, pathlib, re, ssl, time, unicodedata, urllib.parse, urllib.request, zipfile
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 # Amtrak's and VIA's own timetables (Amtrak's also carries Shore Line East
@@ -64,6 +64,7 @@ GTFS = {
     "exo": (EXO_GTFS, rail, lambda r: exo_line(r), lambda s: (slug(s), s.strip())),
     # NCTD: COASTER (commuter rail, two route ids) and SPRINTER (diesel railcars, filed as light rail).
     # Each station is listed once per direction ("... Platform 3"), with no parent: folded by name.
+    # Its server negotiates only the plain-RSA cipher suites, which get_raw's TLS context offers (below).
     "coaster": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "COASTER", lambda r: "Coaster",
                 lambda s: (slug(nctd_name(s)), nctd_name(s))),
     "sprinter": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "SPRINTER", lambda r: "Sprinter",
@@ -85,13 +86,27 @@ GTFS = {
 }
 
 
+# Every download checks the server's certificate as Python does by default
+# but offers OpenSSL's own cipher list, as curl does, rather than Python's
+# shorter one: since 3.10 Python's default context leaves out the suites
+# without forward secrecy (plain RSA key exchange), and NCTD's server (IIS,
+# Coaster's and Sprinter's timetable) negotiates nothing else, so it reset
+# every handshake of the Python the weekly runs install (eight tries over two
+# runs) while answering curl, Ubuntu's Python (built to use OpenSSL's list)
+# and the older Python on a Mac at once. Found with a throwaway probe
+# workflow in October 2026, after the Mobility Database's copy of the feed,
+# whose fetcher surely meets the same reset, had sat a year stale.
+TLS = ssl.create_default_context()
+TLS.set_ciphers("DEFAULT")
+
+
 def get_raw(url, timeout=180, attempts=1):
     """The bytes at url, trying again on a dropped download (a connection
     reset, a timeout) as many times as attempts allows."""
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with urllib.request.urlopen(req, timeout=timeout, context=TLS) as r:
                 return r.read()
         except Exception as err:
             if attempt == attempts - 1:
