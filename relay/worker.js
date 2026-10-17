@@ -23,7 +23,7 @@
 const CACHE_SECONDS = 15;
 const feedMem = new Map(); // feed -> { at, bytes, type }: its last good copy
 const STALE_MS = 5 * 60 * 1000; // how old a copy may be served when the railroad refuses
-const RELAY_VERSION = "2026-10-15 (usual tracks, track record, septa elevators)";
+const RELAY_VERSION = "2026-10-17 (FrontRunner-only UTA feed, protobuf typed for compression)";
 
 const FEEDS = {
   septa: () => ({ url: "https://www3.septa.org/api/TrainView/index.php" }),
@@ -35,7 +35,9 @@ const FEEDS = {
   }),
   // UTA refuses requests from Cloudflare's servers, so with a Transitland
   // API key the relay reads Transitland's copies of UTA's feeds (below).
-  uta: (env) => (env.TRANSITLAND_API_KEY ? { transitland: "f-9x0-uta~rt" } : { url: "https://apps.rideuta.com/tms/gtfs/Vehicle" }),
+  // The feeds cover TRAX and every bus; only FrontRunner's trains (vehicles
+  // L1, L2, ...) and their trips' predicted stop times are passed on.
+  uta: (env) => ({ ...(env.TRANSITLAND_API_KEY ? { transitland: "f-9x0-uta~rt" } : { url: "https://apps.rideuta.com/tms/gtfs/Vehicle" }), vehicles: /^L\d+$/ }),
   capmetro: () => ({
     url: "https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream",
     also: ["https://data.texas.gov/download/rmk2-acnw/application%2Foctet-stream"],
@@ -132,6 +134,35 @@ function keepRoutes(b, routes) {
   const parts = [];
   for (const x of fieldsOf(b)) {
     if (x.f !== 2 || routes.includes(routeOf(b, x))) parts.push(b.subarray(x.s, x.e));
+  }
+  return new Blob(parts);
+}
+// The same, for a feed whose trains are told apart by their vehicle ids
+// rather than a route (UTA's trip descriptors name no route): keeps the
+// vehicles whose id matches, the trip updates of those vehicles' trips, and
+// whatever isn't a vehicle or a trip update.
+const text = (b, x) => (x ? new TextDecoder().decode(b.subarray(x.vs, x.ve)) : null);
+function keepVehicles(b, idPattern) {
+  const entities = [...fieldsOf(b)];
+  const trips = new Set();
+  const keptVehicle = (ent) => {
+    const v = child(b, ent.vs, ent.ve, 4); // vehicle
+    if (!v) return false;
+    const desc = child(b, v.vs, v.ve, 8); // its VehicleDescriptor
+    if (!idPattern.test(text(b, desc && child(b, desc.vs, desc.ve, 1)) || "")) return false;
+    const trip = child(b, v.vs, v.ve, 1);
+    const id = text(b, trip && child(b, trip.vs, trip.ve, 1));
+    if (id) trips.add(id);
+    return true;
+  };
+  const vehicles = new Set(entities.filter((x) => x.f === 2 && keptVehicle(x)));
+  const parts = [];
+  for (const x of entities) {
+    if (x.f !== 2 || vehicles.has(x)) { parts.push(b.subarray(x.s, x.e)); continue; }
+    const u = child(b, x.vs, x.ve, 3); // trip_update
+    if (!u) { if (!child(b, x.vs, x.ve, 4)) parts.push(b.subarray(x.s, x.e)); continue; }
+    const trip = child(b, u.vs, u.ve, 1);
+    if (trips.has(text(b, trip && child(b, trip.vs, trip.ve, 1)))) parts.push(b.subarray(x.s, x.e));
   }
   return new Blob(parts);
 }
@@ -915,10 +946,16 @@ export default {
       const first = new Uint8Array(await upstream.arrayBuffer());
       const extra = await firstOk(spec.also, headers);
       body = extra ? new Blob([first, extra]) : first;
-      if (spec.routes) body = keepRoutes(new Uint8Array(await new Response(body).arrayBuffer()), spec.routes);
     }
+    // Feeds that cover a whole network: only the trains' entities go on.
+    if (spec.routes) body = keepRoutes(new Uint8Array(await new Response(body).arrayBuffer()), spec.routes);
+    if (spec.vehicles) body = keepVehicles(new Uint8Array(await new Response(body).arrayBuffer()), spec.vehicles);
 
-    const type = upstream.headers.get("Content-Type") || "application/octet-stream";
+    // GTFS-realtime goes out as application/x-protobuf, which Cloudflare
+    // compresses on the way to the browser (octet-stream it leaves as is);
+    // the JSON feeds keep their type.
+    const upstreamType = upstream.headers.get("Content-Type") || "";
+    const type = /json/i.test(upstreamType) ? upstreamType : "application/x-protobuf";
     body = new Uint8Array(await new Response(body).arrayBuffer());
     feedMem.set(match[1], { at: Date.now(), bytes: body, type });
     const response = new Response(body, {
