@@ -2,10 +2,11 @@ name: NCTD probe (throwaway)
 
 # A one-off diagnostic, dispatched by hand and removed again: NCTD's server
 # (lfportal.nctd.org, which holds Coaster's and Sprinter's timetable) resets
-# every connection from GitHub's machines while answering at once from
-# elsewhere. Each step below tries the download a different way, so the log
-# shows which layer refuses the runner: the address itself (a TCP connect
-# fails), the TLS handshake, or the request's headers.
+# every connection from the weekly runs while answering at once from
+# elsewhere. The first probe found curl and Ubuntu's own Python both served
+# from a runner; the runs download with the Python actions/setup-python
+# installs. So this one compares the two Pythons' OpenSSL builds and
+# handshakes, with a packet capture to show where the reset lands.
 on:
   workflow_dispatch:
 
@@ -15,82 +16,63 @@ jobs:
     timeout-minutes: 15
     env:
       URL: https://lfportal.nctd.org/staticGTFS/google_transit.zip
-      BROWSER_UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
     steps:
-      - name: Where the runner is
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The two Pythons
         run: |
-          set +e
           echo "runner address: $(curl -sS -4 --max-time 15 https://api.ipify.org)"
-          echo "lfportal.nctd.org resolves to: $(getent hosts lfportal.nctd.org)"
-          echo "gonctd.com resolves to: $(getent hosts gonctd.com)"
-          echo "www.gonctd.com resolves to: $(getent hosts www.gonctd.com)"
+          echo "system:       $(/usr/bin/python3 -c 'import ssl, sys; print(sys.version.split()[0], ssl.OPENSSL_VERSION)')"
+          echo "setup-python: $(python3 -c 'import ssl, sys; print(sys.version.split()[0], ssl.OPENSSL_VERSION, sys.executable)')"
+          echo "curl:         $(curl --version | head -1)"
 
-      - name: TCP connect (address block shows here)
+      - name: Download with each, under a packet capture
         run: |
           set +e
-          for port in 443 80; do
-            timeout 15 bash -c "cat < /dev/null > /dev/tcp/216.102.19.245/$port" 2>&1 && echo "tcp $port: connected" || echo "tcp $port: failed (exit $?)"
-          done
-          nc -vz -w 10 lfportal.nctd.org 443 2>&1
-          nc -vz -w 10 lfportal.nctd.org 80 2>&1
-          echo "--- traceroute (last hops answering)"
-          timeout 60 traceroute -n -m 20 -w 2 216.102.19.245 2>&1 | tail -25
-
-      - name: TLS handshake
-        run: |
-          set +e
-          echo "--- TLS 1.2"
-          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -tls1_2 2>&1 | grep -E 'Protocol|Cipher|subject=|issuer=|Verify|error|errno|closed|read:' | head
-          echo "--- TLS 1.3"
-          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -tls1_3 2>&1 | grep -E 'Protocol|Cipher|subject=|issuer=|Verify|error|errno|closed|read:' | head
-          echo "--- no SNI"
-          echo | timeout 20 openssl s_client -connect 216.102.19.245:443 -noservername 2>&1 | grep -E 'Protocol|Cipher|subject=|issuer=|Verify|error|errno|closed|read:' | head
-
-      - name: curl, each way
-        run: |
-          set +e
-          try() { echo "--- $1"; shift; curl -sS -o /dev/null --max-time 60 -w 'http=%{http_code} ver=%{http_version} ip=%{remote_ip} size=%{size_download} t=%{time_total}\n' "$@" 2>&1; }
-          try "curl's own User-Agent, HTTP/1.1, first byte"   --http1.1 -r 0-0 "$URL"
-          try "trainsheet-build, HTTP/1.1, first byte"        --http1.1 -r 0-0 -A trainsheet-build "$URL"
-          try "browser User-Agent, HTTP/1.1, first byte"      --http1.1 -r 0-0 -A "$BROWSER_UA" -H 'Accept: text/html,application/xhtml+xml,*/*;q=0.8' -H 'Accept-Language: en-US,en;q=0.9' "$URL"
-          try "HTTP/2 offered"                                --http2 -r 0-0 -A trainsheet-build "$URL"
-          try "TLS 1.2 only"                                  --tlsv1.2 --tls-max 1.2 -r 0-0 -A trainsheet-build "$URL"
-          try "TLS 1.3 only"                                  --tlsv1.3 -r 0-0 -A trainsheet-build "$URL"
-          try "HEAD"                                          -I -A trainsheet-build "$URL"
-          try "plain http (port 80)"                          -r 0-0 -A trainsheet-build "http://lfportal.nctd.org/staticGTFS/google_transit.zip"
-          try "the server's front page"                       -A trainsheet-build "https://lfportal.nctd.org/"
-          try "gonctd.com (NCTD's main site)"                 -A trainsheet-build "https://gonctd.com/"
-          try "www.gonctd.com"                                -A trainsheet-build "https://www.gonctd.com/"
-          echo "--- verbose, trainsheet-build (where the reset lands)"
-          curl -sS -o /dev/null -v --max-time 60 --http1.1 -r 0-0 -A trainsheet-build "$URL" 2>&1 | grep -vE '^\{|^\}|^\*  (CA|subject|start|expire|issuer|SSL cert)' | head -40
-
-      - name: Python urllib, each way
-        run: |
-          set +e
-          python3 - <<'PY'
-          import os, socket, ssl, urllib.request, http.client
+          cat > "$RUNNER_TEMP/try.py" <<'PY'
+          import os, ssl, sys, urllib.request
           url = os.environ["URL"]
-          def attempt(label, headers):
-              req = urllib.request.Request(url, headers=headers)
-              try:
-                  with urllib.request.urlopen(req, timeout=60) as r:
-                      data = r.read(16)
-                      print(f"--- {label}: HTTP {r.status}, first bytes {data[:4]!r}, Last-Modified {r.headers.get('Last-Modified')}")
-              except Exception as err:
-                  print(f"--- {label}: {type(err).__name__}: {err}")
-          attempt("Python's own User-Agent", {})
-          attempt("trainsheet-build", {"User-Agent": "trainsheet-build"})
-          attempt("browser User-Agent", {"User-Agent": os.environ["BROWSER_UA"], "Accept": "*/*", "Accept-Language": "en-US,en;q=0.9"})
-          attempt("Range header, trainsheet-build", {"User-Agent": "trainsheet-build", "Range": "bytes=0-0"})
-          # Step by step: where does the connection die?
+          mode = sys.argv[1]
+          ctx = ssl.create_default_context()
+          if mode == "x25519-only":
+              ctx.set_ecdh_curve("X25519")       # one small key share, no post-quantum one
+          elif mode == "tls1.2":
+              ctx.maximum_version = ssl.TLSVersion.TLSv1_2   # no key_share extension at all
+          elif mode == "groups":
+              try: ctx.set_groups("X25519:P-256:X448:P-521:P-384")   # OpenSSL's pre-3.5 default list
+              except AttributeError as err: print("   (no set_groups:", err, ")")
+          req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
           try:
-              s = socket.create_connection(("lfportal.nctd.org", 443), timeout=30)
-              print("--- socket connected:", s.getpeername())
-              ctx = ssl.create_default_context()
-              t = ctx.wrap_socket(s, server_hostname="lfportal.nctd.org")
-              print("--- TLS up:", t.version(), t.cipher())
-              t.sendall(b"HEAD /staticGTFS/google_transit.zip HTTP/1.1\r\nHost: lfportal.nctd.org\r\nUser-Agent: trainsheet-build\r\nConnection: close\r\n\r\n")
-              print("--- reply:", t.recv(300))
+              with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
+                  print(f"   {mode}: HTTP {r.status}, {len(r.read())} bytes, TLS {r.fp.raw._sock.version() if hasattr(r.fp.raw, '_sock') else '?'}")
           except Exception as err:
-              print("--- stepwise:", type(err).__name__, err)
+              print(f"   {mode}: {type(err).__name__}: {err}")
           PY
+          sudo tcpdump -i any -nn -s 200 -w "$RUNNER_TEMP/cap.pcap" host 216.102.19.245 2>/dev/null &
+          sleep 2
+          for py in /usr/bin/python3 python3; do
+            for mode in default x25519-only tls1.2 groups; do
+              echo "--- $py $mode"; "$py" "$RUNNER_TEMP/try.py" "$mode"; sleep 1
+            done
+          done
+          echo "--- setup-python, the build's own downloader (feeds.get_raw, one try)"
+          python3 -c "
+          import sys; sys.path.insert(0, 'scripts'); import feeds
+          try: print('   ', len(feeds.get_raw('$URL')), 'bytes')
+          except Exception as err: print('   ', type(err).__name__, err)"
+          sleep 2; sudo pkill tcpdump; sleep 1
+          echo "--- packets (client hello sizes and where the resets land)"
+          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn 2>/dev/null | grep -vE 'length 0$' | awk '{print $1, $3, $4, $5, $NF, $0 ~ /\[R/ ? "RST" : ""}' | cut -c1-120 | head -120
+
+      - name: TLS 1.3-only handshake with each OpenSSL (does the server reset or alert?)
+        run: |
+          set +e
+          echo "--- system openssl $(openssl version)"
+          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -tls1_3 2>&1 | grep -E 'errno|alert|Protocol' | head -3
+          echo "--- system openssl, default groups, TLS 1.2+1.3 offered"
+          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org 2>&1 | grep -E 'errno|alert|Protocol|Cipher ' | head -3
+          echo "--- system openssl, groups X25519MLKEM768:X25519 (post-quantum key share first)"
+          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -groups X25519MLKEM768:X25519 2>&1 | grep -E 'errno|alert|Protocol|Cipher |unknown|Error' | head -3
