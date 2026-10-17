@@ -64,7 +64,7 @@ GTFS = {
     "exo": (EXO_GTFS, rail, lambda r: exo_line(r), lambda s: (slug(s), s.strip())),
     # NCTD: COASTER (commuter rail, two route ids) and SPRINTER (diesel railcars, filed as light rail).
     # Each station is listed once per direction ("... Platform 3"), with no parent: folded by name.
-    # Its server negotiates only the plain-RSA cipher suites, which get_raw's TLS context offers (below).
+    # Its server negotiates only the plain-RSA cipher suites: RSA_ONLY_HOSTS, below.
     "coaster": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "COASTER", lambda r: "Coaster",
                 lambda s: (slug(nctd_name(s)), nctd_name(s))),
     "sprinter": ("https://lfportal.nctd.org/staticGTFS/google_transit.zip", lambda r: r["route_long_name"] == "SPRINTER", lambda r: "Sprinter",
@@ -86,27 +86,31 @@ GTFS = {
 }
 
 
-# Every download checks the server's certificate as Python does by default
-# but offers OpenSSL's own cipher list, as curl does, rather than Python's
-# shorter one: since 3.10 Python's default context leaves out the suites
-# without forward secrecy (plain RSA key exchange), and NCTD's server (IIS,
-# Coaster's and Sprinter's timetable) negotiates nothing else, so it reset
-# every handshake of the Python the weekly runs install (eight tries over two
-# runs) while answering curl, Ubuntu's Python (built to use OpenSSL's list)
-# and the older Python on a Mac at once. Found with a throwaway probe
-# workflow in October 2026, after the Mobility Database's copy of the feed,
-# whose fetcher surely meets the same reset, had sat a year stale.
-TLS = ssl.create_default_context()
-TLS.set_ciphers("DEFAULT")
+# NCTD's server (IIS, Coaster's and Sprinter's timetable) negotiates only
+# the cipher suites without forward secrecy (plain RSA key exchange), which
+# Python's default context has left out since 3.10, so with nothing in
+# common it reset every handshake of the Python the weekly runs install
+# (eight tries over two runs) while answering curl, Ubuntu's own Python
+# (built to use OpenSSL's list) and the older Python on a Mac at once; the
+# Mobility Database's copy of the feed, a year stale, surely meets the same
+# reset. Downloads from that host alone offer OpenSSL's own cipher list, as
+# curl does, with the certificate checked as before. Only that host: a wider
+# list changes the TLS fingerprint, and SunRail's Cloudflare front answered
+# the first run that offered it to every feed with 403. Found with a
+# throwaway probe workflow, October 2026.
+RSA_ONLY_HOSTS = {"lfportal.nctd.org"}
+TLS_RSA = ssl.create_default_context()
+TLS_RSA.set_ciphers("DEFAULT")
 
 
 def get_raw(url, timeout=180, attempts=1):
     """The bytes at url, trying again on a dropped download (a connection
     reset, a timeout) as many times as attempts allows."""
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
+    context = TLS_RSA if urllib.parse.urlsplit(url).hostname in RSA_ONLY_HOSTS else None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=timeout, context=TLS) as r:
+            with urllib.request.urlopen(req, timeout=timeout, context=context) as r:
                 return r.read()
         except Exception as err:
             if attempt == attempts - 1:
