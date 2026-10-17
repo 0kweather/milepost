@@ -158,8 +158,8 @@ def intercity_stations():
     ntad = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Amtrak_Stations/"
             "FeatureServer/0/query?" + urllib.parse.urlencode(
                 {"where": "1=1", "outFields": "Code,StnType", "returnGeometry": "false", "f": "json"}))
-    types = {f["attributes"]["Code"]: f["attributes"]["StnType"] for f in json.loads(get(ntad))["features"]}
-    amtraker = json.loads(get("https://api-v3.amtraker.com/v3/stations"))
+    types = {f["attributes"]["Code"]: f["attributes"]["StnType"] for f in json.loads(get_raw(ntad))["features"]}
+    amtraker = json.loads(get_raw("https://api-v3.amtraker.com/v3/stations"))
     timetables = intercity_timetables()
     out = defaultdict(list)
     for code, s in amtraker.items():
