@@ -7,11 +7,11 @@ name: Refresh stations
 # because an intercity station's busyness, which decides whose label wins
 # the space, counts the trains tracked at that moment, and at four in the
 # morning that's a handful of overnight trains. Rebuilt weekly, a broken
-# download gets noticed (the build failed unseen for two days in October
-# 2026). The script keeps going past a feed that fails, leaving that railroad
-# out of the file, so a run where any feed failed keeps last week's file and
-# ends red: run it again by hand from the Actions tab. Shares the timetable
-# refresh's concurrency group, since both commit this file.
+# build gets noticed (it failed unseen for two days in October 2026): a feed
+# that fails keeps that railroad's stations from the last build and shows as
+# a warning, and a script that fails ends the run red with nothing committed.
+# Run it by hand from the Actions tab too. Shares the timetable refresh's
+# concurrency group, since both commit this file.
 on:
   schedule:
     - cron: "17 20 * * 1"
@@ -39,11 +39,8 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/build_stations.py 2>&1 | tee "$RUNNER_TEMP/stations.log"
-          # "<railroad>: FAILED ..." means that railroad is missing from the file.
-          if grep -q FAILED "$RUNNER_TEMP/stations.log"; then
-            echo "::error::A feed failed; keeping last week's stations."
-            exit 1
-          fi
+          # A feed that failed kept that railroad's stations from the last build.
+          grep FAILED "$RUNNER_TEMP/stations.log" | sed 's/^/::warning::/' || true
 
       - name: Commit and deploy
         env:

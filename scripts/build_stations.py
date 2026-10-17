@@ -17,6 +17,9 @@ Output: {agency: [[id, name, lat, lon, [lines...], place, code, busy, daily, acc
 
     python3 scripts/build_stations.py
     python3 scripts/build_stations.py vre sounder   # just these, into the existing file
+
+A feed that fails keeps that railroad's stations from the last build (Amtrak,
+VIA and Brightline as one set), so the file never loses a railroad.
 """
 import datetime, json, pathlib, re, sys, urllib.parse, urllib.request
 from collections import defaultdict
@@ -118,29 +121,26 @@ def intercity_timetables():
     VIA's own timetables (Amtrak's by stop id, VIA's by stop code)."""
     info = {}
     for url, code_field in ((AMTRAK_GTFS, "stop_id"), (VIA_GTFS, "stop_code")):
-        try:
-            zf = get_zip(url)
-            stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
-            today = weekday_trips(zf, {t["trip_id"] for t in rows(zf, "trips.txt")})
-            agencies = {a.get("agency_id", ""): a.get("agency_name", "") for a in rows(zf, "agency.txt")}
-            routes = {r["route_id"]: long_name(r) for r in rows(zf, "routes.txt")
-                      if r.get("route_type") == "2" and re.search(r"amtrak|via", agencies.get(r.get("agency_id", ""), "amtrak"), re.I)}
-            trip_route = {t["trip_id"]: routes[t["route_id"]] for t in rows(zf, "trips.txt") if t["route_id"] in routes}
-            daily, lines = defaultdict(set), defaultdict(set)
-            for st in rows(zf, "stop_times.txt"):
-                if st["stop_id"] not in stops:
-                    continue
-                code = stops[st["stop_id"]][code_field]
-                if st["trip_id"] in today:
-                    daily[code].add(st["trip_id"])
-                if st["trip_id"] in trip_route:
-                    lines[code].add(trip_route[st["trip_id"]])
-            for s in stops.values():
-                code = s[code_field]
-                if code and code not in info:
-                    info[code] = (len(daily[code]) or None, access_of(s, []), s.get("stop_timezone") or None, sorted(lines[code]))
-        except Exception as err:
-            print(f"{url}: FAILED {err}")
+        zf = get_zip(url)
+        stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
+        today = weekday_trips(zf, {t["trip_id"] for t in rows(zf, "trips.txt")})
+        agencies = {a.get("agency_id", ""): a.get("agency_name", "") for a in rows(zf, "agency.txt")}
+        routes = {r["route_id"]: long_name(r) for r in rows(zf, "routes.txt")
+                  if r.get("route_type") == "2" and re.search(r"amtrak|via", agencies.get(r.get("agency_id", ""), "amtrak"), re.I)}
+        trip_route = {t["trip_id"]: routes[t["route_id"]] for t in rows(zf, "trips.txt") if t["route_id"] in routes}
+        daily, lines = defaultdict(set), defaultdict(set)
+        for st in rows(zf, "stop_times.txt"):
+            if st["stop_id"] not in stops:
+                continue
+            code = stops[st["stop_id"]][code_field]
+            if st["trip_id"] in today:
+                daily[code].add(st["trip_id"])
+            if st["trip_id"] in trip_route:
+                lines[code].add(trip_route[st["trip_id"]])
+        for s in stops.values():
+            code = s[code_field]
+            if code and code not in info:
+                info[code] = (len(daily[code]) or None, access_of(s, []), s.get("stop_timezone") or None, sorted(lines[code]))
     return info
 
 
@@ -221,7 +221,15 @@ POSITION_FIX = {("alaska", "FAIR"): (64.85583, -147.70892)}
 # Named railroads only: rebuild just those, keeping the rest of the file.
 only = sys.argv[1:]
 path = pathlib.Path(__file__).resolve().parent.parent / "data" / "stations.json"
-result = json.loads(path.read_text()) if only else dict(intercity_stations())
+previous = json.loads(path.read_text()) if path.exists() else {}
+if only:
+    result = previous
+else:
+    try:
+        result = dict(intercity_stations())
+    except Exception as err:  # keep the last build's Amtrak, VIA and Brightline
+        result = {a: previous[a] for a in ("amtrak", "via", "brightline") if a in previous}
+        print(f"intercity: FAILED {err}; keeping the last build's stations")
 for agency, (url, keep, line_name, *group) in GTFS.items():
     if only and agency not in only:
         continue
@@ -234,8 +242,10 @@ for agency, (url, keep, line_name, *group) in GTFS.items():
             if (agency, row[0]) in POSITION_FIX:
                 row[2], row[3] = POSITION_FIX[(agency, row[0])]
         print(f"{agency}: {len(result[agency])} stations")
-    except Exception as err:  # keep going; one broken feed shouldn't block the rest
-        print(f"{agency}: FAILED {err}")
+    except Exception as err:  # keep going, with the last build's stations for this one
+        if agency in previous:
+            result[agency] = previous[agency]
+        print(f"{agency}: FAILED {err}; {len(previous.get(agency, []))} stations kept from the last build")
 try:
     dv = njt_departurevision() if not only or "njt" in only else {}
     for row in result.get("njt", []):
