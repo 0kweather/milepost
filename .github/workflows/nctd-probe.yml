@@ -3,10 +3,13 @@ name: NCTD probe (throwaway)
 # A one-off diagnostic, dispatched by hand and removed again: NCTD's server
 # (lfportal.nctd.org, which holds Coaster's and Sprinter's timetable) resets
 # every connection from the weekly runs while answering at once from
-# elsewhere. The first probe found curl and Ubuntu's own Python both served
-# from a runner; the runs download with the Python actions/setup-python
-# installs. So this one compares the two Pythons' OpenSSL builds and
-# handshakes, with a packet capture to show where the reset lands.
+# elsewhere. The first two probes found a runner is served at once by curl
+# and by Ubuntu's own Python, and reset every time by the Python
+# actions/setup-python installs, though both report OpenSSL 3.0.13, with
+# TLS 1.2 as the ceiling or a single key share too. So the two Pythons
+# differ in what their client hello says: this one prints each one's libssl,
+# OpenSSL directory and cipher list, captures just the handshake packets,
+# and tries the toolcache Python with other cipher strings.
 on:
   workflow_dispatch:
 
@@ -22,57 +25,53 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: The two Pythons
-        run: |
-          echo "runner address: $(curl -sS -4 --max-time 15 https://api.ipify.org)"
-          echo "system:       $(/usr/bin/python3 -c 'import ssl, sys; print(sys.version.split()[0], ssl.OPENSSL_VERSION)')"
-          echo "setup-python: $(python3 -c 'import ssl, sys; print(sys.version.split()[0], ssl.OPENSSL_VERSION, sys.executable)')"
-          echo "curl:         $(curl --version | head -1)"
-
-      - name: Download with each, under a packet capture
+      - name: How the two Pythons' ssl modules differ
         run: |
           set +e
+          cat > "$RUNNER_TEMP/show.py" <<'PY'
+          import ssl, sys, _ssl
+          ctx = ssl.create_default_context()
+          print("python", sys.version.split()[0], sys.executable)
+          print("openssl", ssl.OPENSSL_VERSION, "_ssl module at", _ssl.__file__)
+          print("verify paths", ssl.get_default_verify_paths())
+          print("options", ctx.options, "min", ctx.minimum_version, "max", ctx.maximum_version)
+          print("ciphers", len(ctx.get_ciphers()), ":".join(c["name"] for c in ctx.get_ciphers()))
+          PY
+          for py in /usr/bin/python3 python3; do echo "--- $py"; "$py" "$RUNNER_TEMP/show.py"; echo "ldd:"; "$py" -c 'import _ssl; print(_ssl.__file__)' | xargs ldd | grep -iE 'ssl|crypto'; done
+          echo "--- system openssl.cnf's defaults"
+          openssl version -d
+          grep -vE '^\s*#|^\s*$' /etc/ssl/openssl.cnf | grep -iE -B1 -A6 'system_default|CipherString|MinProtocol|Groups' | head -30
+
+      - name: Download with the toolcache Python, each cipher string, under a capture
+        run: |
+          set +e
+          SYSTEM_CIPHERS=$(/usr/bin/python3 -c 'import ssl; print(":".join(c["name"] for c in ssl.create_default_context().get_ciphers()))')
           cat > "$RUNNER_TEMP/try.py" <<'PY'
           import os, ssl, sys, urllib.request
           url = os.environ["URL"]
-          mode = sys.argv[1]
+          label, ciphers = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None
           ctx = ssl.create_default_context()
-          if mode == "x25519-only":
-              ctx.set_ecdh_curve("X25519")       # one small key share, no post-quantum one
-          elif mode == "tls1.2":
-              ctx.maximum_version = ssl.TLSVersion.TLSv1_2   # no key_share extension at all
-          elif mode == "groups":
-              try: ctx.set_groups("X25519:P-256:X448:P-521:P-384")   # OpenSSL's pre-3.5 default list
-              except AttributeError as err: print("   (no set_groups:", err, ")")
+          if ciphers:
+              ctx.set_ciphers(ciphers)
           req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
           try:
               with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
-                  print(f"   {mode}: HTTP {r.status}, {len(r.read())} bytes, TLS {r.fp.raw._sock.version() if hasattr(r.fp.raw, '_sock') else '?'}")
+                  print(f"   {label}: HTTP {r.status}, {len(r.read(4096))} bytes read, {len(ctx.get_ciphers())} ciphers offered")
           except Exception as err:
-              print(f"   {mode}: {type(err).__name__}: {err}")
+              print(f"   {label}: {type(err).__name__}: {err}")
           PY
-          sudo tcpdump -i any -nn -s 200 -w "$RUNNER_TEMP/cap.pcap" host 216.102.19.245 2>/dev/null &
+          sudo tcpdump -i any -nn -s 0 -w "$RUNNER_TEMP/cap.pcap" host 216.102.19.245 2>/dev/null &
           sleep 2
-          for py in /usr/bin/python3 python3; do
-            for mode in default x25519-only tls1.2 groups; do
-              echo "--- $py $mode"; "$py" "$RUNNER_TEMP/try.py" "$mode"; sleep 1
-            done
-          done
-          echo "--- setup-python, the build's own downloader (feeds.get_raw, one try)"
-          python3 -c "
-          import sys; sys.path.insert(0, 'scripts'); import feeds
-          try: print('   ', len(feeds.get_raw('$URL')), 'bytes')
-          except Exception as err: print('   ', type(err).__name__, err)"
+          echo "--- /usr/bin/python3 default"; /usr/bin/python3 "$RUNNER_TEMP/try.py" "system python, default"; sleep 1
+          echo "--- toolcache python3 default"; python3 "$RUNNER_TEMP/try.py" "toolcache, default"; sleep 1
+          echo "--- toolcache python3, OpenSSL's DEFAULT"; python3 "$RUNNER_TEMP/try.py" "toolcache, DEFAULT" "DEFAULT"; sleep 1
+          echo "--- toolcache python3, DEFAULT:@SECLEVEL=2"; python3 "$RUNNER_TEMP/try.py" "toolcache, DEFAULT:@SECLEVEL=2" "DEFAULT:@SECLEVEL=2"; sleep 1
+          echo "--- toolcache python3, the system Python's list"; python3 "$RUNNER_TEMP/try.py" "toolcache, system list" "$SYSTEM_CIPHERS"; sleep 1
+          echo "--- toolcache python3, HIGH:!aNULL:!kRSA (no plain RSA key exchange)"; python3 "$RUNNER_TEMP/try.py" "toolcache, no kRSA" "HIGH:!aNULL:!kRSA"; sleep 1
+          echo "--- toolcache python3, ECDHE+AESGCM only"; python3 "$RUNNER_TEMP/try.py" "toolcache, ECDHE+AESGCM" "ECDHE+AESGCM"; sleep 1
+          echo "--- toolcache python3, AES256-GCM-SHA384 only (what the server picks)"; python3 "$RUNNER_TEMP/try.py" "toolcache, AES256-GCM-SHA384" "AES256-GCM-SHA384"; sleep 1
           sleep 2; sudo pkill tcpdump; sleep 1
-          echo "--- packets (client hello sizes and where the resets land)"
-          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn 2>/dev/null | grep -vE 'length 0$' | awk '{print $1, $3, $4, $5, $NF, $0 ~ /\[R/ ? "RST" : ""}' | cut -c1-120 | head -120
-
-      - name: TLS 1.3-only handshake with each OpenSSL (does the server reset or alert?)
-        run: |
-          set +e
-          echo "--- system openssl $(openssl version)"
-          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -tls1_3 2>&1 | grep -E 'errno|alert|Protocol' | head -3
-          echo "--- system openssl, default groups, TLS 1.2+1.3 offered"
-          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org 2>&1 | grep -E 'errno|alert|Protocol|Cipher ' | head -3
-          echo "--- system openssl, groups X25519MLKEM768:X25519 (post-quantum key share first)"
-          echo | timeout 20 openssl s_client -connect lfportal.nctd.org:443 -servername lfportal.nctd.org -groups X25519MLKEM768:X25519 2>&1 | grep -E 'errno|alert|Protocol|Cipher |unknown|Error' | head -3
+          echo "--- handshake packets: SYN, client hellos (0x16 records from us), resets, with lengths"
+          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn 'tcp[tcpflags] & (tcp-syn|tcp-rst|tcp-fin) != 0 or (src host 10.0.0.0/8 and tcp[((tcp[12:1] & 0xf0) >> 2):1] = 0x16)' 2>/dev/null | sed -E 's/, options \[[^]]*\]//' | cut -c1-110
+          echo "--- the first client hello of the system Python and of the toolcache Python, in hex"
+          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn -X -c 400 'src host 10.0.0.0/8 and tcp[((tcp[12:1] & 0xf0) >> 2):1] = 0x16' 2>/dev/null | awk '/^[0-9][0-9]:/{n++} n==1 || n==2' | head -120
