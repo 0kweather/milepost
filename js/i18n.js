@@ -6,12 +6,14 @@
 //
 // The language follows Settings ("tt-lang": "auto", "en" or "fr"); "auto"
 // picks French for browsers set to French (Quebec's, say).
-import FR from "./fr.js?v=dev";
-
 let pref = "auto";
 try { pref = JSON.parse(localStorage.getItem("tt-lang")) || "auto"; } catch {}
 export const langPref = pref;
 export const lang = pref === "auto" ? (/^fr\b/i.test(navigator.language || "") ? "fr" : "en") : pref;
+// The French strings (js/fr.js) are fetched only when they'll be used; the
+// rest of the app waits for them (a module's top-level await holds up its
+// importers), so nothing is ever drawn in English first.
+const FR = lang === "fr" ? (await import("./fr.js?v=dev")).default : {};
 // For dates and times: French as written in Canada.
 export const locale = lang === "fr" ? "fr-CA" : undefined;
 document.documentElement.lang = lang;
