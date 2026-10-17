@@ -251,7 +251,18 @@ def build(agency, url, keep, line_name, number_of, stations, station_by=None):
 def departures_index():
     """data/departures.json, for search's "Later today": every railroad's runs
     without their stops (its first and last stop, departure and days), from
-    all the files in data/schedules/."""
+    all the files in data/schedules/.
+
+    Each railroad's runs are kept as columns rather than a row per run, with
+    the line names ("lines") and the stop ids ("ids") listed once and referred
+    to by position, and each departure as the minutes since the run before it
+    (the runs are in departure order): less than half the bytes of the rows,
+    and app.js puts the rows back together on reading.
+      {"start", "tz", ["unnumbered"], ["file"], "stops": {id: name},
+       "lines": [name, ...], "ids": [stop id, ...],
+       "runs": {"key": [train number, ...], "line": [index into lines, ...],
+                "from": [index into ids, ...], "to": [...], "dep": [minutes
+                after the previous run's departure, ...], "days": [bitmask, ...]}}"""
     out = {}
     for path in [*sorted((DATA / "schedules").glob("*.json")), DATA / "ctrail.json"]:
         if not path.exists():
@@ -264,12 +275,27 @@ def departures_index():
                 runs.append([n, line, stops[0][0], stops[-1][0], stops[0][2] if stops[0][2] is not None else stops[0][1], days])
                 ends |= {stops[0][0], stops[-1][0]}
         runs.sort(key=lambda r: r[4])
+        ids = sorted(ends)
+        lines, line_of, id_of = [], {}, {sid: i for i, sid in enumerate(ids)}
+        cols = {"key": [], "line": [], "from": [], "to": [], "dep": [], "days": []}
+        last = 0
+        for n, line, first, final, dep, days in runs:
+            if line not in line_of:
+                line_of[line] = len(lines)
+                lines.append(line)
+            cols["key"].append(n)
+            cols["line"].append(line_of[line])
+            cols["from"].append(id_of[first])
+            cols["to"].append(id_of[final])
+            cols["dep"].append(dep - last)
+            cols["days"].append(days)
+            last = dep
         out[path.stem] = {"start": tt["start"], "tz": tt["tz"], **({"unnumbered": True} if tt.get("unnumbered") else {}),
                           **({"file": "ctrail.json"} if path.stem == "ctrail" else {}),
-                          "stops": {sid: tt["stops"][sid][0] for sid in sorted(ends)}, "runs": runs}
+                          "stops": {sid: tt["stops"][sid][0] for sid in ids}, "lines": lines, "ids": ids, "runs": cols}
     path = DATA / "departures.json"
     path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
-    print(f"departures: {sum(len(v['runs']) for v in out.values())} runs ({path.stat().st_size // 1024} KB)")
+    print(f"departures: {sum(len(v['runs']['key']) for v in out.values())} runs ({path.stat().st_size // 1024} KB)")
 
 
 all_stations = json.loads((DATA / "stations.json").read_text())

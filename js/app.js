@@ -1763,11 +1763,25 @@ function departures() {
   if (!departuresData) {
     departuresData = {};
     fetch("data/departures.json?v=dev").then((r) => r.json()).then((d) => {
-      departuresData = d;
+      departuresData = decodeDepartures(d);
       if (state.query) renderResults();
     }).catch((err) => console.warn("departures", err));
   }
   return departuresData;
+}
+// The file keeps each railroad's runs as columns, with the line names and
+// stop ids listed once and each departure as minutes after the run before
+// (scripts/build_schedules.py); here they become a row per run again:
+// [train number, line, first stop, last stop, departure, days].
+function decodeDepartures(d) {
+  for (const a of Object.values(d)) {
+    const { lines, ids, runs: c } = a;
+    let dep = 0;
+    a.runs = c.key.map((key, i) => [key, lines[c.line[i]], ids[c.from[i]], ids[c.to[i]], (dep += c.dep[i]), c.days[i]]);
+    delete a.lines;
+    delete a.ids;
+  }
+  return d;
 }
 // A zone's date now, as that date's UTC midnight.
 function zoneDay(tz, ms = Date.now()) {
