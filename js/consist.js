@@ -549,8 +549,21 @@ export function consistOf(t) {
 const art = (key) => MODELS[key] || MODELS.coach;
 
 // Markup for the consist strip: one drawing per car, with its number under it
-// when the railroad reported one.
+// when the railroad reported one. uid: the strip's own id, which every id in
+// it starts with; made up here unless the caller has one to keep.
 let renderSeq = 0;
+// The drawings' own ids (clip paths, gradients, masks; carmodels.js) are
+// numbered as they're drawn, so the same train drawn twice gives two
+// different strings. Renumbered under the strip's id, in order, the same
+// consist always gives the same markup, which lets a page redrawn keep its
+// drawing, and two strips on one page never share an id.
+function stableIds(html, uid) {
+  const ids = new Map();
+  return html.replace(/ts-(clip|tri|njt|metra|disco)-\d+/g, (m, kind) => {
+    if (!ids.has(m)) ids.set(m, `${uid}-${kind}${ids.size}`);
+    return ids.get(m);
+  });
+}
 // How each car of a consist is drawn: its type and model, its length, and
 // the drawing context (which way it faces, its cabs, its neighbors).
 function carsOf(c, color) {
@@ -599,10 +612,10 @@ function drawCar({ t, model, L, ctx, flip }, { couplers = true } = {}) {
   return flip ? `<g transform="matrix(-1 0 0 1 ${L} 0)">${drawing}</g>` : drawing;
 }
 
-export function consistHtml(c, color) {
+export function consistHtml(c, color, uid = `tsc${++renderSeq}`) {
   // Identical cars (same model, same ends) are drawn once and reused.
-  const drawn = new Map(), uid = `tsc${++renderSeq}`;
-  return carsOf(c, color).map((car, i) => {
+  const drawn = new Map();
+  return stableIds(carsOf(c, color).map((car, i) => {
     const { t, model, L, ctx, flip, number } = car;
     const sig = [t.key, flip, ctx.lead, ctx.cabL, ctx.cabR, ctx.pan, ctx.pair, ctx.coupledL, ctx.coupledR, model.variant ? model.variant(ctx) : ""].join();
     let drawing;
@@ -619,16 +632,16 @@ export function consistHtml(c, color) {
       <svg viewBox="0 0 ${L} ${HEIGHT_FT}" width="${Math.round(L * PX_PER_FT)}" height="${HEIGHT_FT * PX_PER_FT}" role="img" aria-label="${label}"><g transform="matrix(1 0 0 -1 0 ${HEIGHT_FT})">${drawing}</g></svg>
       ${number ? `<figcaption>${esc(number)}</figcaption>` : ""}
     </figure>`;
-  }).join("");
+  }).join(""), uid);
 }
 
 // A single car of a consist, drawn on its own (no couplers to its
-// neighbors), `width` px wide.
-export function carSvg(c, i, color, width) {
+// neighbors), `width` px wide; uid as for consistHtml.
+export function carSvg(c, i, color, width, uid = `tsp${++renderSeq}`) {
   const car = carsOf(c, color)[i];
   if (!car) return "";
   const { L, t } = car;
-  return `<svg class="car-portrait" viewBox="0 0 ${L} ${HEIGHT_FT}" width="${width}" height="${Math.round((width * HEIGHT_FT) / L)}" role="img" aria-label="${esc(t.name)}"><g transform="matrix(1 0 0 -1 0 ${HEIGHT_FT})">${drawCar(car, { couplers: false })}</g></svg>`;
+  return `<svg class="car-portrait" viewBox="0 0 ${L} ${HEIGHT_FT}" width="${width}" height="${Math.round((width * HEIGHT_FT) / L)}" role="img" aria-label="${esc(t.name)}"><g transform="matrix(1 0 0 -1 0 ${HEIGHT_FT})">${stableIds(drawCar(car, { couplers: false }), uid)}</g></svg>`;
 }
 
 // Where to look up car i's fact sheet (data/models.json), most specific

@@ -1374,6 +1374,54 @@ setInterval(() => !document.hidden && state.selected && renderDetail(), 10000);
 
 
 
+// ---------- Rendering: only what changed ----------
+// The panes are drawn as HTML strings, and every feed refresh draws them all
+// again (renderAll), though most of the time nothing in them has changed:
+// the home list says the same, and the open page differs in one time at
+// most. So a pane's HTML is set only when it isn't what the pane already
+// shows; and a page is built as a list of top-level pieces (the hero with
+// the cars' drawing, the live card, the stops...), each one element or
+// nothing, of which only the pieces whose HTML changed are put in again.
+// The drawings stay as they are, the strips and lists keep their scroll,
+// and the browser has far less to rebuild.
+const paneHtml = new WeakMap(); // element -> the HTML it was last given
+function setPane(el, html) {
+  if (paneHtml.get(el) === html) return;
+  paneHtml.set(el, html);
+  el.innerHTML = html;
+}
+const pageParts = new WeakMap(); // element -> { key, parts, nodes }: the page it shows, piece by piece
+const elementOf = (html) => {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  return tpl.content.firstElementChild;
+};
+function renderParts(el, key, parts) {
+  const prev = pageParts.get(el);
+  // The same page as before, its pieces still where they were put: swap
+  // just the ones that changed. Anything else (another page, or something
+  // drawn over this one since) starts over.
+  if (prev?.key === key && el.children.length === prev.nodes.filter(Boolean).length && prev.nodes.every((n) => !n || n.parentNode === el)) {
+    const nodes = prev.nodes.slice();
+    parts.forEach((html, i) => {
+      if (html === prev.parts[i]) return;
+      const node = html ? elementOf(html) : null;
+      if (nodes[i] && node) nodes[i].replaceWith(node);
+      else if (nodes[i]) nodes[i].remove();
+      else if (node) el.insertBefore(node, nodes.slice(i + 1).find(Boolean) || null);
+      nodes[i] = node;
+    });
+    pageParts.set(el, { key, parts, nodes });
+    return;
+  }
+  el.innerHTML = `\n    ${parts.join("\n    ")}`;
+  let k = 0;
+  const nodes = parts.map((html) => (html ? el.children[k++] : null));
+  // (A piece that isn't one element can't be told from its neighbors: then
+  // the page is drawn whole again next time, as before.)
+  pageParts.set(el, k === el.children.length && nodes.every((n, i) => Boolean(n) === Boolean(parts[i])) ? { key, parts, nodes } : null);
+}
+
 // ---------- Rendering: list ----------
 
 const CHECK = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="#fff" d="m9.5 16.2-4.2-4.2-1.4 1.4 5.6 5.6 11-11-1.4-1.4z"/></svg>';
@@ -1415,13 +1463,13 @@ function renderAgencies() {
         </div>`);
     }
   }
-  $("agencies").innerHTML = nearbyHtml() +
+  setPane($("agencies"), nearbyHtml() +
     `<div class="group-title">${T("Intercity")}</div>${rows.intercity.join("")}` +
     `<div class="group-title">${T("Commuter & regional")}</div>${rows.commuter.join("")}` +
     (rows.off.length
       ? `<div class="group-title">${T("Not connected yet")}</div>${rows.off.join("")}
          <p class="note">${T(RELAY ? "These railroads publish live data, but it has to be fetched through a small relay server or with a free developer key. See the README to switch them on." : "These railroads publish live data, but it has to be fetched through a small relay server. See the README to switch them on.")}</p>`
-      : "");
+      : ""));
 }
 
 
@@ -1531,8 +1579,8 @@ function nearbyHtml() {
 function renderCredits() {
   const seen = new Map();
   for (const s of SOURCES) if (sourceAvailability(s).ok) seen.set(s.credit.label, s.credit.href);
-  $("credits").innerHTML = T("Data:") + " " + [...seen].map(([l, h]) => `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(", ") +
-    `. ${T("Map")} © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.`;
+  setPane($("credits"), T("Data:") + " " + [...seen].map(([l, h]) => `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(", ") +
+    `. ${T("Map")} © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.`);
 }
 
 // A train's status, said the same way everywhere (lists, its page, the
@@ -1594,7 +1642,7 @@ function renderRecents() {
     && (r.kind !== "station" || state.stations.has(r.id))).slice(0, MAX_RECENTS);
   el.hidden = !shown.length;
   if (!shown.length) return;
-  el.innerHTML = `<div class="recents-head"><span class="group-title">${T("Recent")}</span><button type="button" class="link-btn" data-recents-clear>${T("Clear")}</button></div>
+  setPane(el, `<div class="recents-head"><span class="group-title">${T("Recent")}</span><button type="button" class="link-btn" data-recents-clear>${T("Clear")}</button></div>
     <div class="recents-row">${shown.map((r) => {
       const a = AGENCIES[r.agency];
       const icon = r.kind === "train" ? plate(r.number || a.short, a.color, "xs")
@@ -1602,7 +1650,7 @@ function renderRecents() {
         : r.kind === "line" ? lineMark(r.agency, r.name)
         : `<span class="rc-rr" style="--c:${a.color}"></span>`;
       return `<button type="button" class="recent" data-recent-kind="${r.kind}" data-recent-id="${esc(r.id)}">${icon}<span>${esc(r.name)}</span></button>`;
-    }).join("")}</div>`;
+    }).join("")}</div>`);
 }
 
 function renderResults() {
@@ -1688,10 +1736,10 @@ function renderResults() {
     (later.length > 12 ? `<p class="results-more">${esc(T("{n} more later today", { n: later.length - 12 }))}</p>` : "") : "";
   const before = carBlock + railroadBlock + lineBlock + stationBlock;
   if (!matches.length) {
-    el.innerHTML = before + laterBlock || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`;
+    setPane(el, before + laterBlock || `<div class="empty">${esc(T("Nothing matches “{q}”.", { q: state.query }))}</div>`);
     return;
   }
-  el.innerHTML = before + (before ? `<div class="group-title">${T("Trains")}</div>` : "") + matches.slice(0, 60).map(({ t }) => {
+  setPane(el, before + (before ? `<div class="group-title">${T("Trains")}</div>` : "") + matches.slice(0, 60).map(({ t }) => {
     const a = AGENCIES[t.agency];
     const sub = [t.destination && T("to {place}", { place: t.destination }), t.nextStop && !t.destination && T("next {place}", { place: t.nextStop })]
       .filter(Boolean).join(" · ") || T(a.region);
@@ -1700,7 +1748,7 @@ function renderResults() {
       <span><span class="title">${esc(trainTitle(t))}</span><br><span class="sub">${esc(a.short)} · ${esc(sub)}</span></span>
       ${statusSpan(t, "status")}
     </button>`;
-  }).join("") + laterBlock;
+  }).join("") + laterBlock);
 }
 
 // ---------- Later today: trains that haven't left yet ----------
@@ -2006,8 +2054,7 @@ function renderDetail() {
   const keepScroll = el.scrollTop;
   const keepStops = same ? el.querySelector(".stops-scroll")?.scrollTop || 0 : 0;
   el.dataset.train = t.id;
-  el.innerHTML = `
-    <div class="hero">
+  const hero = `<div class="hero">
       <button type="button" class="agency-name hero-link" data-railroad="${t.agency}" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>
       <div class="hero-title">${t.number ? plate(t.number, a.color) : ""}<h2>${t.route && !singleLine(t.agency)
         // The title is the train's line: it opens the line's page (or, with
@@ -2020,13 +2067,8 @@ function renderDetail() {
         ${trackButton(t)}
       </div>
       ${consistSection(t)}
-    </div>
-    ${tiles}
-    ${crowdSection(t)}
-    ${noticesHtml(t)}
-    ${stops}
-    ${onBoardFor(t)}
-    ${historySection(t)}`;
+    </div>`;
+  renderParts(el, `train:${t.id}`, [hero, tiles, crowdSection(t), noticesHtml(t), stops, onBoardFor(t), historySection(t)]);
   el.scrollTop = keepScroll;
   const strip = el.querySelector(".consist-strip"), list = el.querySelector(".stops-scroll");
   if (strip) strip.scrollLeft = stripScroll.get(t.id) || 0;
@@ -2040,16 +2082,20 @@ const CLOSE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden=
 
 const INFERRED_TITLE = T("Worked out by Trainsheet from GPS; not yet reported by the railroad");
 
+// An id token from a train's or a type's id, for the ids in its drawing.
+const idToken = (s) => String(s).replace(/[^A-Za-z0-9]/g, "x");
+
 // The train's cars, drawn right under its status: live where the railroad
 // reports them, otherwise what typically runs on the route. Tapping a car
 // opens a card about its model under the drawing; the card leads to the
-// model's full page.
+// model's full page. The drawing's ids come from the train's, so the same
+// train drawn again gives the same markup (and the page keeps the drawing).
 function consistSection(t) {
   const c = consistOf(t);
   if (!c) return "";
   const a = AGENCIES[t.agency];
   const open = state.car?.id === t.id ? state.car.i : null;
-  let strip = consistHtml(c, a.color);
+  let strip = consistHtml(c, a.color, `tsc_${idToken(t.id)}`);
   if (open != null) strip = strip.replace(`data-car="${open}" `, `data-car="${open}" aria-pressed="true" `);
   return `<div class="consist">
     <div class="consist-strip${open != null ? " has-open" : ""}">${strip}</div>
@@ -2211,7 +2257,7 @@ function renderModelPage(t, el) {
   el.innerHTML = `
     <button type="button" class="link-btn back-link" data-model-back>‹ ${esc(t.backLabel || (t.number ? T("Train {n}", { n: t.number }) : trainTitle(t)))}</button>
     <div class="model-page">
-      <div class="model-art">${carSvg(c, i, a.color, width)}</div>
+      <div class="model-art">${carSvg(c, i, a.color, width, "tsc_m")}</div>
       <h2>${esc(m?.model || car.type?.name || T("This car"))}</h2>
       <p class="model-sub">${esc([m?.type, m?.builder].filter(Boolean).join(" · ") || car.type?.name || "")}${car.number && !t.fleet ? ` · ${T("No.")} ${esc(car.number)}` : ""}</p>
       ${m ? `<dl class="facts wide">${facts(m, ["built", "fleet", "topSpeedMph", "powerHp", "seats", "lengthFt"])}</dl>` : ""}
@@ -2375,8 +2421,7 @@ function renderStation() {
 
   const liftsOut = extras?.lifts?.lifts.some((l) => l.out);
   const liftsHtml = liftsSection(extras?.lifts);
-  el.innerHTML = `
-    <div class="hero">
+  const hero = `<div class="hero">
       <div class="agency-name" style="color:var(--muted)">
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2c4 0 8 .5 8 4v9.5a3.5 3.5 0 0 1-3.5 3.5l1.5 1.5v.5h-2l-2-2h-4l-2 2H6v-.5L7.5 19A3.5 3.5 0 0 1 4 15.5V6c0-3.5 4-4 8-4Zm0 2c-3.5 0-5.5.5-6 1.5V10h12V5.5C17.5 4.5 15.5 4 12 4ZM7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
         ${T("Station")}${st.place ? ` · ${esc(st.place)}` : ""}
@@ -2385,13 +2430,14 @@ function renderStation() {
       ${local || access ? `<p class="station-facts">${local ? `<span>${esc(local)}</span>` : ""}${access}</p>` : ""}
       ${outHere.map((d) => `<div class="oos-note" style="--c:${AGENCIES[d.agency].color}">${d.buses ? BUS_ICON : NO_SERVICE_ICON}
         <span><strong>${esc(T("No {railroad} trains here right now", { railroad: AGENCIES[d.agency].short }))}</strong><span>${esc(d.header)}</span></span></div>`).join("")}
-    </div>
-    ${rrSection("served", T("Served by"), st.members.length, `<ul class="served-by">${servedBy}</ul>`)}
-    ${noticesBlock(extras?.notices || [], null, T("Station notices"))}
-    ${liftsOut ? liftsHtml : ""}
-    ${nextTrainsSection(rows, arrivals, loading)}
-    ${atStation(st, extras)}
-    ${liftsOut ? "" : liftsHtml}`;
+    </div>`;
+  renderParts(el, `station:${st.id}`, [hero,
+    rrSection("served", T("Served by"), st.members.length, `<ul class="served-by">${servedBy}</ul>`),
+    noticesBlock(extras?.notices || [], null, T("Station notices")),
+    liftsOut ? liftsHtml : "",
+    nextTrainsSection(rows, arrivals, loading),
+    atStation(st, extras),
+    liftsOut ? "" : liftsHtml]);
 }
 
 // Where an arriving train is now: standing at a station, or its next stop.
@@ -2849,7 +2895,7 @@ function equipmentList(id, lineNames, trains, roster) {
     const m = modelOf(c, i), car = c.cars[i];
     const sub = [m?.type, m?.fleet].filter(Boolean).join(" · ");
     return `<button class="rr-car" data-fleet-car data-route="${esc(route || "")}" data-number="${esc(number || "")}" data-train="${esc(trainId || "")}" data-i="${i}">
-      ${carSvg(c, i, a.color, 128)}
+      ${carSvg(c, i, a.color, 128, `tsc_f${idToken(k)}`)}
       <span><span class="title">${esc(m?.model || car.type?.name || T("Car"))}</span>${sub ? `<br><span class="sub">${esc(sub)}</span>` : ""}</span>
     </button>`;
   }).join("");
@@ -2928,18 +2974,18 @@ function renderRailroad() {
     : trains.length ? T("Live GPS positions") : T("No trains reporting right now");
   const updated = status?.at ? ` · ${T("updated {ago}", { ago: fmtAgo(status.at) })}` : "";
 
-  el.innerHTML = `
-    <div class="hero">
+  const hero = `<div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${T(a.kind === "intercity" ? "Intercity" : "Commuter rail")} · ${esc(T(a.region))}</div>
       <h2>${esc(a.name)}</h2>
       <p class="station-facts"><span>${esc(source)}${esc(updated)}</span></p>
-    </div>
-    ${!trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : ""}
-    ${trainStats(trains)}
-    ${lineList.length > 1 ? plainSection(T("Lines"), lineList.length,
-      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span class="served-name">${lineMark(id, l.name)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : ""}
-    ${fleet.count ? rrSection("fleet", T("Fleet"), fleet.count, `<p class="rr-hint">${T("Tap one to read about it.")}</p><div class="rr-cars">${fleet.html}</div>`) : ""}
-    ${src ? `<p class="estimate-note">${T("Data:")} <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""}`;
+    </div>`;
+  renderParts(el, `railroad:${id}`, [hero,
+    !trains.length && avail.ok && status?.status === "ok" ? quietCard(id) : "",
+    trainStats(trains),
+    lineList.length > 1 ? plainSection(T("Lines"), lineList.length,
+      `<ul class="rr-lines">${lineList.map((l) => `<li><button type="button" class="rr-line" data-line="${esc(l.name)}"><span class="served-name">${lineMark(id, l.name)}<span>${esc(l.name)}</span></span><span class="sub">${l.running ? T("{n} running", { n: l.running }) : T("none running")} ›</span></button></li>`).join("")}</ul>`) : "",
+    fleet.count ? rrSection("fleet", T("Fleet"), fleet.count, `<p class="rr-hint">${T("Tap one to read about it.")}</p><div class="rr-cars">${fleet.html}</div>`) : "",
+    src ? `<p class="estimate-note">${T("Data:")} <a href="${esc(src.credit.href)}" target="_blank" rel="noopener">${esc(src.credit.label)}</a></p>` : ""]);
 }
 
 // Quiet hours: nothing of a railroad's is running, so its page says when
@@ -3002,16 +3048,15 @@ function renderLine() {
   // (Not "data-line": that marks a tappable line row.)
   const keepStrip = el.dataset.stripOf === typical.id ? strip?.scrollLeft || 0 : 0;
   el.dataset.stripOf = typical.id;
-  el.innerHTML = `
-    <div class="hero">
+  const hero = `<div class="hero">
       <div class="agency-name" style="color:${a.color}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</div>
       <h2>${escTitle(name)}</h2>
       ${stations.length ? `<p class="station-facts"><span>${esc(T("{n} stations", { n: stations.length }))} · ${esc(stations[0].name)} – ${esc(stations[stations.length - 1].name)}</span></p>` : ""}
       ${consistSection(typical)}
-    </div>
-    ${trainStats(trains)}
-    ${rrSection("running", T("Running now"), trains.length, runningList(a, trains))}
-    ${stations.length ? rrSection("line-stations", T("Stations"), stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""}`;
+    </div>`;
+  renderParts(el, `line:${id}|${name}`, [hero, trainStats(trains),
+    rrSection("running", T("Running now"), trains.length, runningList(a, trains)),
+    stations.length ? rrSection("line-stations", T("Stations"), stations.length, lineDiagram(id, stations, lineColor(id, name))) : ""]);
   const shown = el.querySelector(".consist-strip");
   if (shown) shown.scrollLeft = keepStrip;
 }
