@@ -17,10 +17,9 @@ scripts/build_stations.py first).
 
     python3 scripts/build_schedules.py [railroad ...]
 """
-import csv, datetime, io, json, pathlib, re, sys, time, unicodedata, urllib.parse, urllib.request, zipfile
+import datetime, json, re, sys, unicodedata
 from collections import defaultdict
-
-DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
+from feeds import AMTRAK_GTFS, VIA_GTFS, ALASKA_LINES, DATA, GTFS, TRIP_LINE, get_zip, long_name, minutes, nctd_name, rows as csv_rows, slug
 # railroad: (GTFS url, keep route(row), line name(route row), train number(trip row))
 FEEDS = {
     # Trip ids are train numbers ("22", "1001").
@@ -66,9 +65,6 @@ FEEDS = {
 # routes, line names and station folds build_stations.py uses (so stops are
 # the map's stations), each train numbered as its live feed numbers it (None:
 # no public numbers, as the live feed shows none).
-_stations_src = (pathlib.Path(__file__).resolve().parent / "build_stations.py").read_text()
-_stations = {}
-exec(_stations_src[:_stations_src.index("\ndef get(")], _stations)
 short = lambda t: t.get("trip_short_name") or None
 NUMBERS = {
     "lirr": short, "mnr": short, "mbta": short, "caltrain": short, "metrolink": short, "vre": short, "sounder": short,
@@ -81,18 +77,14 @@ NUMBERS = {
     "rtd": None, "frontrunner": None, "capmetro": None, "smart": None,
 }
 for _agency, _number_of in NUMBERS.items():
-    _url, _keep, _line_name, *_group = _stations["GTFS"][_agency]
+    _url, _keep, _line_name, *_group = GTFS[_agency]
     FEEDS[_agency] = (_url, _keep, _line_name, _number_of, *([lambda s, g=_group[0]: g(s["stop_name"])[0]] if _group and _group[0] else []))
 # Amtrak's and VIA's own timetables (Amtrak's stops by id, VIA's by code, as
 # the map's stations are). Amtraker shows VIA's numbers without its "v".
 # Amtrak's own trains (agency 51) and the Maple Leaf (filed under VIA, 157);
 # not the commuter trains its file also carries (Shore Line East, MARC).
-FEEDS["amtrak"] = ("https://content.amtrak.com/content/gtfs/GTFS.zip", lambda r: r.get("route_type") == "2" and r.get("agency_id") in ("51", "157"),
-                   _stations["long_name"], short)
-FEEDS["via"] = ("https://www.viarail.ca/sites/all/files/gtfs/viarail.zip", lambda r: True, _stations["long_name"], short,
-                lambda s: s.get("stop_code") or s["stop_id"])
-# Trains filed under another line (Metrolink's Arrow under the San Bernardino Line).
-TRIP_LINE = _stations.get("TRIP_LINE", {})
+FEEDS["amtrak"] = (AMTRAK_GTFS, lambda r: r.get("route_type") == "2" and r.get("agency_id") in ("51", "157"), long_name, short)
+FEEDS["via"] = (VIA_GTFS, lambda r: True, long_name, short, lambda s: s.get("stop_code") or s["stop_id"])
 # Live feeds that name a train only by its trip id, or stops only by code, get
 # lookups for them: "ids" {trip id: number}, "codes" {stop code: station id}.
 LOOKUPS = {"exo"}
@@ -101,43 +93,12 @@ JOIN = {"septa"}
 # Railroads whose new season's trips come without stop times.
 BORROW = {"alaska"}
 # NCTD lists each station once per direction: folded by name, as in build_stations.py.
-NCTD_WORDS = {"Rd": "Road", "Dr": "Drive", "Blvd": "Boulevard", "St": "Street", "Hwy": "Highway"}
-nctd_station = lambda s: re.sub(r"[^a-z0-9]+", "-", re.sub(r"\b(Rd|Dr|Blvd|St|Hwy)$", lambda m: NCTD_WORDS[m.group(1)],
-    re.sub(r"\s+(Platform\s+\d+|Station)$", "", s["stop_name"].strip()).replace("San Diego - ", "San Diego ").replace("Civic Center - Vista", "Vista Civic Center")).lower()).strip("-")
-# The Alaska Railroad's trains by route: one line for both directions.
-ALASKA_LINES = {"DenaliNB": "Denali Star", "DenaliSB": "Denali Star", "AuroraNB": "Aurora Winter Train", "AuroraSB": "Aurora Winter Train",
-                "CoastalNB": "Coastal Classic", "CoastalSB": "Coastal Classic", "Glacier": "Glacier Discovery", "Hurricane": "Hurricane Turn"}
+nctd_station = lambda s: slug(nctd_name(s["stop_name"]))
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
-def get(url, attempts=4):
-    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-    for attempt in range(attempts):
-        try:
-            data = urllib.request.urlopen(req, timeout=180).read()
-            # A page that links the current file (the Alaska Railroad's, named by date).
-            if data[:2] != b"PK":
-                href = re.search(rb'href="([^"]+\.zip)"', data, re.I).group(1).decode()
-                return get(urllib.parse.urljoin(url, href))
-            return zipfile.ZipFile(io.BytesIO(data))
-        except Exception as err:
-            if attempt == attempts - 1:
-                raise
-            print(f"  {url}: retry {attempt + 1} ({err})")
-            time.sleep(10)
-
-
-def rows(zf, name):
-    if name not in zf.namelist():
-        return
-    with zf.open(name) as f:
-        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"), skipinitialspace=True):
-            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
-
-
-def minutes(hms):
-    h, m, *_ = (int(x) for x in hms.split(":"))
-    return h * 60 + m
+get = get_zip
+rows = lambda zf, name: csv_rows(zf, name, optional=True, spaces=True)
 
 
 def build(agency, url, keep, line_name, number_of, stations, station_by=None):

@@ -7,38 +7,12 @@ no color of their own (none, or the same one for every line) are left out.
 
     python3 scripts/build_linecolors.py
 """
-import collections, csv, io, json, pathlib, re, sys, time, urllib.parse, urllib.request, zipfile
+import collections, json, pathlib, sys
+from feeds import GTFS, get_zip, rows as csv_rows
 
 ROOT = pathlib.Path(__file__).resolve().parent
-# The feed table and line names, exactly as scripts/build_stations.py has them
-# (the top of that file, up to where its work starts).
-source = (ROOT / "build_stations.py").read_text()
-exec(source[:source.index("\ndef get(")])
-
-
-def get(url, attempts=4):
-    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-    for attempt in range(attempts):
-        try:
-            data = urllib.request.urlopen(req, timeout=240).read()
-            # A page linking the current file (the Alaska Railroad's): follow it.
-            m = None if data[:2] == b"PK" else re.search(rb'href="([^"]+\.zip)"', data, re.I)
-            if m:
-                return get(urllib.parse.urljoin(url, m.group(1).decode()), attempts)
-            return zipfile.ZipFile(io.BytesIO(data))
-        except Exception as err:
-            if attempt == attempts - 1:
-                raise
-            print(f"  {url}: retry {attempt + 1} ({err})")
-            time.sleep(10)
-
-
-def rows(zf, name):
-    if name not in zf.namelist():
-        return
-    with zf.open(name) as f:
-        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"), skipinitialspace=True):
-            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
+get = lambda url: get_zip(url, timeout=240)
+rows = lambda zf, name: csv_rows(zf, name, optional=True, spaces=True)
 
 
 out = {}

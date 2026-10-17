@@ -16,13 +16,13 @@ Stop codes are Amtrak's station codes.
 
     python3 scripts/build_ct.py
 """
-import csv, datetime, io, json, pathlib, time, urllib.request, zipfile
+import datetime, json
 from collections import defaultdict
+from feeds import AMTRAK_GTFS, DATA, get_zip, minutes, rows as csv_rows
 
 HL_URL = "https://ctrides.com/hlgtfs.zip"  # CTrail's own Hartford Line trains only
-AMTRAK_URL = "https://content.amtrak.com/content/gtfs/GTFS.zip"  # carries Shore Line East
+AMTRAK_URL = AMTRAK_GTFS  # carries Shore Line East
 SLE_ROUTE = "42948"
-DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 
 # Hartford Line stop ids -> Amtrak codes; Shore Line East already uses them.
 HL_CODES = {"1": "NHV", "2": "STS", "3": "WFD", "4": "MDN", "5": "BER", "6": "HFD", "7": "WND", "8": "WNL", "9": "SPG"}
@@ -32,29 +32,8 @@ NAMES = {"NHV": "New Haven Union Station", "STS": "State Street", "WFD": "Wallin
          "BNF": "Branford", "BRP": "Bridgeport", "STM": "Stamford", "NLC": "New London"}
 
 
-def get(url, attempts=4):
-    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-    for attempt in range(attempts):
-        try:
-            return zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=180).read()))
-        except Exception as err:  # Amtrak's 18 MB download sometimes drops
-            if attempt == attempts - 1:
-                raise
-            print(f"  {url}: retry {attempt + 1} ({err})")
-            time.sleep(10)
-
-
-def rows(zf, name):
-    if name not in zf.namelist():
-        return
-    with zf.open(name) as f:
-        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig")):
-            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
-
-
-def minutes(hms):
-    h, m, *_ = (int(x) for x in hms.split(":"))
-    return h * 60 + m
+get = lambda url: get_zip(url, page_link=False)
+rows = lambda zf, name: csv_rows(zf, name, optional=True)
 
 
 today = datetime.date.today()

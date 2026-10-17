@@ -5,21 +5,16 @@ names, coordinates and colors from the static GTFS. Run occasionally:
 
     python3 scripts/build_static.py
 """
-import csv, io, json, pathlib, urllib.request, zipfile
+import json
+from feeds import DATA, GTFS, get_zip, rows as csv_rows
 
-FEEDS = {
-    "lirr": "https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip",
-    "mnr": "https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip",
-}
-
-
-def rows(zf, name):
-    with zf.open(name) as f:
-        yield from csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"))
+FEEDS = {agency: GTFS[agency][0] for agency in ("lirr", "mnr")}
+# Read as the feed has them, without trimming.
+rows = lambda zf, name: csv_rows(zf, name, strip=False)
 
 
 def build(url):
-    zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(url, timeout=60).read()))
+    zf = get_zip(url, timeout=60, attempts=1, page_link=False)
     stops = {
         r["stop_id"]: [r["stop_name"].strip(), round(float(r["stop_lat"]), 5), round(float(r["stop_lon"]), 5)]
         for r in rows(zf, "stops.txt")
@@ -33,6 +28,6 @@ def build(url):
 
 
 out = {k: build(u) for k, u in FEEDS.items()}
-path = pathlib.Path(__file__).resolve().parent.parent / "data" / "mta.json"
+path = DATA / "mta.json"
 path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
 print(f"wrote {path} ({path.stat().st_size // 1024} KB)")

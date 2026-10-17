@@ -14,26 +14,13 @@ picks a live train's pattern by its first and last times, then by date.
 
     python3 scripts/build_go.py
 """
-import csv, datetime, io, json, pathlib, urllib.request, zipfile
+import datetime, json
 from collections import defaultdict
+from feeds import DATA, GTFS, get_zip, minutes, rows
 
-URL = "https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/GO-GTFS.zip"
-DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
+URL = GTFS["go"][0]
 
-
-def rows(zf, name):
-    with zf.open(name) as f:
-        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig")):
-            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
-
-
-def minutes(hms):
-    h, m, *_ = (int(x) for x in hms.split(":"))
-    return h * 60 + m
-
-
-req = urllib.request.Request(URL, headers={"User-Agent": "trainsheet-build"})
-zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=180).read()))
+zf = get_zip(URL, attempts=1, page_link=False)
 
 rail = {r["route_id"] for r in rows(zf, "routes.txt") if r["route_type"] == "2"}
 today = datetime.date.today()

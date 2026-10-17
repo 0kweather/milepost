@@ -11,51 +11,31 @@ occasionally (timetables change a few times a year):
     python3 scripts/build_trips.py
     python3 scripts/build_trips.py vre sounder   # just these, into the existing file
 """
-import csv, io, json, pathlib, re, sys, urllib.request, zipfile
+import json, re, sys
+from feeds import DATA, GTFS, MDB, get_zip, marc_station, rows as csv_rows
 
-DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 # The station IDs the map uses (data/stations.json), per railroad: some use
 # parent stations, others platforms.
 STATIONS = {a: {r[0] for r in rows} for a, rows in json.loads((DATA / "stations.json").read_text()).items()}
 
-MDB = "https://files.mobilitydatabase.org/{}/latest.zip"
-# URL, and the routes to keep for agencies whose feed also covers buses.
+# Each railroad's timetable (build_stations.py's, but Metra's own file), and
+# the routes to keep for agencies whose feed also covers buses.
+url_of = lambda agency: GTFS[agency][0]
 FEEDS = {
-    "caltrain": ("https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip", None),
-    "smart": ("https://data.trilliumtransit.com/gtfs/smart-ca-us/smart-ca-us.zip", None),
-    "metrolink": (MDB.format("mdb-96"), None),
-    "rtd": (MDB.format("mdb-178"), {"A", "113B", "113G", "117N"}),
-    "capmetro": (MDB.format("mdb-150"), {"550"}),
+    "caltrain": (url_of("caltrain"), None),
+    "smart": (url_of("smart"), None),
+    "metrolink": (url_of("metrolink"), None),
+    "rtd": (url_of("rtd"), {"A", "113B", "113G", "117N"}),
+    "capmetro": (url_of("capmetro"), {"550"}),
     "metra": ("https://schedules.metrarail.com/gtfs/schedule.zip", None),
-    "marc": ("https://feeds.mta.maryland.gov/gtfs/marc", None),
-    "frontrunner": (MDB.format("mdb-170"), {"41065"}),  # UTA's feed also covers TRAX and buses
-    "vre": ("https://gtfs.vre.org/containercdngtfsupload/google_transit.zip", None),
-    "sounder": ("https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", {"SNDR_EV", "SNDR_TL"}),  # not Link
-    "ace": (MDB.format("mdb-2684"), None),  # 511's copy of ACE's timetable
+    "marc": (url_of("marc"), None),
+    "frontrunner": (url_of("frontrunner"), {"41065"}),  # UTA's feed also covers TRAX and buses
+    "vre": (url_of("vre"), None),
+    "sounder": (url_of("sounder"), {"SNDR_EV", "SNDR_TL"}),  # not Link
+    "ace": (url_of("ace"), None),  # 511's copy of ACE's timetable
 }
-
-
-def rows(zf, name):
-    # Some feeds (Metra) put a space after every comma.
-    with zf.open(name) as f:
-        for r in csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"), skipinitialspace=True):
-            yield {k.strip(): (v or "").strip() for k, v in r.items() if k}
-
-
-# MARC lists each station once per direction ("NEW CARROLLTON MARC nb" and
-# "... sb"), with no parent station. Both fold into one station, named in
-# plain words, whose id is that name as a slug ("new-carrollton").
-MARC_NAMES = {"Penn Station": "Baltimore Penn Station", "Union Station": "Washington Union Station",
-              "Camden Station": "Baltimore Camden Station", "Bwi Rail Station": "BWI Airport", "St Denis": "St. Denis",
-              "Brunswick Md": "Brunswick", "Harpers Ferry W Va": "Harpers Ferry", "Duffields W Va": "Duffields",
-              "Martinsburg W Va": "Martinsburg", "Point Of Rocks": "Point of Rocks"}
-
-
-def marc_station(name):
-    """(station id, name) for one of MARC's per-direction stops."""
-    base = re.sub(r"\s+MARC(\s+(nb|sb|eb|wb|Washington))?$", "", name.strip(), flags=re.I).title()
-    base = MARC_NAMES.get(base, base)
-    return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
+# Some feeds (Metra) put a space after every comma.
+rows = lambda zf, name: csv_rows(zf, name, spaces=True)
 
 
 def headsign(h):
@@ -64,8 +44,7 @@ def headsign(h):
 
 
 def build(agency, url, routes):
-    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-    zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(req, timeout=120).read()))
+    zf = get_zip(url, timeout=120, attempts=1, page_link=False)
     # MARC's headsigns are bare city names in capitals ("BALTIMORE"),
     # FrontRunner's read "To Ogden"; their trains' last stops name their
     # destinations better.
