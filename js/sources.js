@@ -84,6 +84,11 @@ function train(fields) {
            routeColor: null, updated: Date.now(), ...fields };
 }
 
+// data/stations.json, read once for everyone who needs it: the station list
+// (stations.js) and NJ Transit's station lookup below.
+let stationsRaw = null;
+export const loadStationsData = () => (stationsRaw ??= fetch("data/stations.json?v=dev").then((r) => r.json()));
+
 // ---------- Amtrak, VIA, Brightline (Amtraker) ----------
 
 function departureDay(first) {
@@ -301,7 +306,7 @@ function parseMbta(json, trips = new Map(), timetables = new Map()) {
 // ---------- MTA (LIRR + Metro-North) ----------
 
 let mtaStatic = null;
-async function loadMtaStatic() {
+export async function loadMtaStatic() {
   mtaStatic ??= fetch("data/mta.json?v=dev").then((r) => r.json());
   return mtaStatic;
 }
@@ -451,7 +456,7 @@ const NJT_ALIASES = { broadwayfairlawn: "25", radburnfairlawn: "126", montclairs
   princetonjunction: "125", ramseymain: "128", secaucuslowerlvl: "38174", secaucusupperlvl: "38187", trenton: "148", wayneroute23: "39635" };
 const nameKey = (s) => String(s || "").toLowerCase().replace(/\b(station|sta|st|street|ave|avenue)\b/g, "").replace(/[^a-z0-9]/g, "");
 let njtLookup = null;
-const loadNjtStations = () => (njtLookup ??= fetch("data/stations.json?v=dev").then((r) => r.json()).then((d) => {
+const loadNjtStations = () => (njtLookup ??= loadStationsData().then((d) => {
   const byId = {}, byName = {};
   for (const [id, name, lat, lon] of d.njt || []) { byId[id] = [name, lat, lon]; byName[nameKey(name)] = id; }
   return { byId, idOf: (name) => NJT_ALIASES[nameKey(name)] || byName[nameKey(name)] || null };

@@ -10,6 +10,8 @@
 //            between: [name, name] | null, line: "Needham" | null,
 //            routes: [line names it's about, as stations list their lines] }].
 
+import { loadMtaStatic } from "./sources.js?v=dev";
+
 const CACHE_MS = 2 * 60 * 1000;
 const cache = new Map(); // url -> { at, data }
 async function getJson(url) {
@@ -37,9 +39,9 @@ export function betweenNames(text) {
 
 const MTA_TYPES = /suspended|substitute bus/i;
 
-let mtaRoutes = null; // "lirr:6" -> "Long Beach Branch" (data/mta.json)
+let mtaRoutes = null; // "lirr:6" -> "Long Beach Branch" (data/mta.json, read once with sources.js)
 async function mtaRouteName(agency, id) {
-  mtaRoutes ??= getJson("data/mta.json?v=dev").catch(() => ({}));
+  mtaRoutes ??= loadMtaStatic().catch(() => ({}));
   return (await mtaRoutes)?.[agency]?.routes?.[id]?.[0] || null;
 }
 
