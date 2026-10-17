@@ -1,0 +1,62 @@
+name: Refresh stations
+
+# The station list (data/stations.json) is rebuilt every Monday afternoon
+# (North American time): each commuter railroad's stations from its
+# timetable, Amtrak's, VIA's and Brightline's from USDOT's NTAD list and
+# Amtraker. Afternoon rather than with the timetables' early-morning run
+# because an intercity station's busyness, which decides whose label wins
+# the space, counts the trains tracked at that moment, and at four in the
+# morning that's a handful of overnight trains. Rebuilt weekly, a broken
+# download gets noticed (the build failed unseen for two days in October
+# 2026). The script keeps going past a feed that fails, leaving that railroad
+# out of the file, so a run where any feed failed keeps last week's file and
+# ends red: run it again by hand from the Actions tab. Shares the timetable
+# refresh's concurrency group, since both commit this file.
+on:
+  schedule:
+    - cron: "17 20 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit the new file
+  actions: write    # start the site's deploy afterwards
+
+concurrency:
+  group: timetables   # never alongside the timetable refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Stations
+        run: |
+          set -o pipefail
+          python3 scripts/build_stations.py 2>&1 | tee "$RUNNER_TEMP/stations.log"
+          # "<railroad>: FAILED ..." means that railroad is missing from the file.
+          if grep -q FAILED "$RUNNER_TEMP/stations.log"; then
+            echo "::error::A feed failed; keeping last week's stations."
+            exit 1
+          fi
+
+      - name: Commit and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "trainsheet-bot"
+          git config user.email "trainsheet-bot@users.noreply.github.com"
+          git add data/stations.json
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git commit -m "Stations refreshed ($(date -u +%F))"
+          git push
+          # A push from a workflow doesn't start other workflows, so start the deploy.
+          gh workflow run pages.yml --ref main

@@ -6,7 +6,8 @@ name: Refresh timetables
 # timetables, and all the others for search's trains later today, indexed in
 # data/departures.json), and each railroad's first trains (quiet hours).
 # Each build runs on its own, so one railroad's download failing doesn't stop
-# the rest. Run it by hand from the Actions tab too.
+# the rest. The stations themselves have their own Monday-afternoon run
+# (stations.yml). Run it by hand from the Actions tab too.
 on:
   schedule:
     - cron: "17 8 * * 1"
