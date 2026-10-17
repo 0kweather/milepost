@@ -1835,9 +1835,18 @@ function scheduleOf(id) {
   return scheduleCache[id];
 }
 // A station on the map for one of a railroad's stops.
+// A station by one of its railroads' ids for it, from an index over every
+// station's members made the first time it's needed (the station list is
+// loaded once; should it be replaced, the index is made again).
+let stationIndex = null, stationIndexOf = null;
 function stationFor(agency, sid) {
-  for (const st of state.stations.values()) if (st.members.some((m) => m.agency === agency && m.id === sid)) return st;
-  return null;
+  if (stationIndexOf !== state.stations || stationIndex.size === 0 && state.stations.size) {
+    stationIndex = new Map();
+    // The first station listing a member keeps it, as the scan this replaces did.
+    for (const st of state.stations.values()) for (const m of st.members) if (!stationIndex.has(`${m.agency}|${m.id}`)) stationIndex.set(`${m.agency}|${m.id}`, st);
+    stationIndexOf = state.stations;
+  }
+  return stationIndex.get(`${agency}|${sid}`) || null;
 }
 function upcomingStops(u) {
   const tt = scheduleOf(u.id), a = AGENCIES[u.id];
@@ -2624,8 +2633,15 @@ const onLine = (t, name) => Boolean(t.route) && lineKey(t.route) === lineKey(nam
 // Every railroad's lines, for search: from its stations' timetables and the
 // routes its trains report (a timetable's longer name for a running line
 // folds into it), with how many trains are on each.
+// The catalog is worked out from every train and every station, so it's
+// kept from one feed refresh to the next (the trains are a new Map each
+// refresh) and until the stations arrive.
+let linesCatalog = null, linesCatalogOf = null, linesCatalogStations = null;
 function allLines() {
-  const out = [];
+  if (linesCatalog && linesCatalogOf === state.trains && linesCatalogStations === state.stations) return linesCatalog;
+  linesCatalogOf = state.trains;
+  linesCatalogStations = state.stations;
+  const out = linesCatalog = [];
   for (const id of Object.keys(AGENCIES)) {
     const lines = new Map(); // key -> { name, running }
     for (const t of state.trains.values()) {
@@ -2679,11 +2695,21 @@ function lineColors() {
   }
   return lineColorsData;
 }
+// Each line's color is looked up once per feed refresh: the answer holds
+// until the trains or the timetable colors change.
+let lineColorCache = null;
 function lineColorOf(agency, name) {
-  const own = lineColors()[agency] || {}, k = lineKey(name);
+  const colors = lineColors();
+  if (lineColorCache?.trains !== state.trains || lineColorCache.colors !== colors) lineColorCache = { trains: state.trains, colors, of: new Map() };
+  const key = `${agency}|${name}`;
+  let color = lineColorCache.of.get(key);
+  if (color !== undefined) return color;
+  const own = colors[agency] || {}, k = lineKey(name);
   const hit = own[name] || Object.entries(own).find(([n]) => sameLine(lineKey(n), k))?.[1];
-  return hit || [...state.trains.values()].find((t) => t.agency === agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor
+  color = hit || [...state.trains.values()].find((t) => t.agency === agency && t.routeColor && t.route && sameLine(lineKey(t.route), k))?.routeColor
     || AGENCIES[agency]?.color || "#8d95a3";
+  lineColorCache.of.set(key, color);
+  return color;
 }
 // The mark beside a line's name: a short stretch of line in its color.
 const lineMark = (agency, name) => `<span class="line-mark" style="--c:${lineColorOf(agency, name)}" aria-hidden="true"></span>`;
