@@ -705,6 +705,9 @@ const inLists = (t) => !state.hidden.has(t.agency);
 
 // Trains drawn on the map.
 function visible(t) {
+  // A train's page (opened from the map, a list or a tracked train) shows
+  // that train alone; closing it brings the others back.
+  if (state.selected) return t.id === state.selected;
   if (state.hidden.has(t.agency)) return false;
   // A railroad's page (and its lines') shows only its trains.
   if (state.railroad && t.agency !== state.railroad) return false;
@@ -3447,6 +3450,7 @@ function applySelectionFilter() {
   const highlighted = ["in", ["get", "id"], ["literal", ids]];
   const selected = ["==", ["get", "id"], id];
   map.setFilter("tt-ping", highlighted);
+  redraw(); // the selected train alone while one is open (visible())
   redrawRoute();
   map.setLayoutProperty("tt-labels", "text-variable-anchor-offset", plateOffset(selected));
   map.setFilter("tt-labels", state.labels === "none" ? highlighted : ["any", highlighted, [">=", ["zoom"], 8]]);
