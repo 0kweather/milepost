@@ -1,77 +1,50 @@
 name: NCTD probe (throwaway)
 
-# A one-off diagnostic, dispatched by hand and removed again: NCTD's server
-# (lfportal.nctd.org, which holds Coaster's and Sprinter's timetable) resets
-# every connection from the weekly runs while answering at once from
-# elsewhere. The first two probes found a runner is served at once by curl
-# and by Ubuntu's own Python, and reset every time by the Python
-# actions/setup-python installs, though both report OpenSSL 3.0.13, with
-# TLS 1.2 as the ceiling or a single key share too. So the two Pythons
-# differ in what their client hello says: this one prints each one's libssl,
-# OpenSSL directory and cipher list, captures just the handshake packets,
-# and tries the toolcache Python with other cipher strings.
+# A one-off diagnostic, dispatched by hand and removed again. The first
+# three probes found NCTD's server resets the TLS handshake of the Python
+# actions/setup-python installs because its default context offers no
+# plain-RSA cipher suite, and feeds.get_raw now offers OpenSSL's own list.
+# The first stations run with that list downloaded NCTD's feed and got a 403
+# from SunRail's server, which the run before had served: this one fetches
+# every feed in the table with both contexts, and with curl, to see whether
+# the wider list changes any other server's answer.
 on:
   workflow_dispatch:
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      URL: https://lfportal.nctd.org/staticGTFS/google_transit.zip
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: How the two Pythons' ssl modules differ
+      - name: Every feed, with Python's default context, with OpenSSL's list, and with curl
         run: |
           set +e
-          cat > "$RUNNER_TEMP/show.py" <<'PY'
-          import ssl, sys, _ssl
-          ctx = ssl.create_default_context()
-          print("python", sys.version.split()[0], sys.executable)
-          print("openssl", ssl.OPENSSL_VERSION, "_ssl module at", _ssl.__file__)
-          print("verify paths", ssl.get_default_verify_paths())
-          print("options", ctx.options, "min", ctx.minimum_version, "max", ctx.maximum_version)
-          print("ciphers", len(ctx.get_ciphers()), ":".join(c["name"] for c in ctx.get_ciphers()))
+          echo "runner address: $(curl -sS -4 --max-time 15 https://api.ipify.org)"
+          python3 - <<'PY'
+          import ssl, subprocess, sys, urllib.request
+          sys.path.insert(0, "scripts"); import feeds
+          urls = {}
+          for agency, (url, *_) in feeds.GTFS.items():
+              urls.setdefault(url, []).append(agency)
+          urls.setdefault(feeds.AMTRAK_GTFS, []).append("amtrak"); urls.setdefault(feeds.VIA_GTFS, []).append("via")
+          narrow = ssl.create_default_context()
+          wide = ssl.create_default_context(); wide.set_ciphers("DEFAULT")
+          def py(url, ctx):
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"}), timeout=60, context=ctx) as r:
+                      return f"{r.status} {r.read(2)!r}"
+              except Exception as err:
+                  return f"{type(err).__name__}: {str(err)[:60]}"
+          def curl(url):
+              p = subprocess.run(["curl", "-sS", "-o", "/dev/null", "--max-time", "60", "-A", "trainsheet-build", "-w", "%{http_code}", url], capture_output=True, text=True)
+              return p.stdout.strip() + (" " + p.stderr.strip()[:50] if p.stderr.strip() else "")
+          for url, agencies in urls.items():
+              a, b, c = py(url, narrow), py(url, wide), curl(url)
+              flag = "" if a == b else "   <-- differs"
+              print(f"{'/'.join(agencies):>18}: default {a:<28} DEFAULT {b:<28} curl {c}{flag}")
           PY
-          for py in /usr/bin/python3 python3; do echo "--- $py"; "$py" "$RUNNER_TEMP/show.py"; echo "ldd:"; "$py" -c 'import _ssl; print(_ssl.__file__)' | xargs ldd | grep -iE 'ssl|crypto'; done
-          echo "--- system openssl.cnf's defaults"
-          openssl version -d
-          grep -vE '^\s*#|^\s*$' /etc/ssl/openssl.cnf | grep -iE -B1 -A6 'system_default|CipherString|MinProtocol|Groups' | head -30
-
-      - name: Download with the toolcache Python, each cipher string, under a capture
-        run: |
-          set +e
-          SYSTEM_CIPHERS=$(/usr/bin/python3 -c 'import ssl; print(":".join(c["name"] for c in ssl.create_default_context().get_ciphers()))')
-          cat > "$RUNNER_TEMP/try.py" <<'PY'
-          import os, ssl, sys, urllib.request
-          url = os.environ["URL"]
-          label, ciphers = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None
-          ctx = ssl.create_default_context()
-          if ciphers:
-              ctx.set_ciphers(ciphers)
-          req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-          try:
-              with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
-                  print(f"   {label}: HTTP {r.status}, {len(r.read(4096))} bytes read, {len(ctx.get_ciphers())} ciphers offered")
-          except Exception as err:
-              print(f"   {label}: {type(err).__name__}: {err}")
-          PY
-          sudo tcpdump -i any -nn -s 0 -w "$RUNNER_TEMP/cap.pcap" host 216.102.19.245 2>/dev/null &
-          sleep 2
-          echo "--- /usr/bin/python3 default"; /usr/bin/python3 "$RUNNER_TEMP/try.py" "system python, default"; sleep 1
-          echo "--- toolcache python3 default"; python3 "$RUNNER_TEMP/try.py" "toolcache, default"; sleep 1
-          echo "--- toolcache python3, OpenSSL's DEFAULT"; python3 "$RUNNER_TEMP/try.py" "toolcache, DEFAULT" "DEFAULT"; sleep 1
-          echo "--- toolcache python3, DEFAULT:@SECLEVEL=2"; python3 "$RUNNER_TEMP/try.py" "toolcache, DEFAULT:@SECLEVEL=2" "DEFAULT:@SECLEVEL=2"; sleep 1
-          echo "--- toolcache python3, the system Python's list"; python3 "$RUNNER_TEMP/try.py" "toolcache, system list" "$SYSTEM_CIPHERS"; sleep 1
-          echo "--- toolcache python3, HIGH:!aNULL:!kRSA (no plain RSA key exchange)"; python3 "$RUNNER_TEMP/try.py" "toolcache, no kRSA" "HIGH:!aNULL:!kRSA"; sleep 1
-          echo "--- toolcache python3, ECDHE+AESGCM only"; python3 "$RUNNER_TEMP/try.py" "toolcache, ECDHE+AESGCM" "ECDHE+AESGCM"; sleep 1
-          echo "--- toolcache python3, AES256-GCM-SHA384 only (what the server picks)"; python3 "$RUNNER_TEMP/try.py" "toolcache, AES256-GCM-SHA384" "AES256-GCM-SHA384"; sleep 1
-          sleep 2; sudo pkill tcpdump; sleep 1
-          echo "--- handshake packets: SYN, client hellos (0x16 records from us), resets, with lengths"
-          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn 'tcp[tcpflags] & (tcp-syn|tcp-rst|tcp-fin) != 0 or (src host 10.0.0.0/8 and tcp[((tcp[12:1] & 0xf0) >> 2):1] = 0x16)' 2>/dev/null | sed -E 's/, options \[[^]]*\]//' | cut -c1-110
-          echo "--- the first client hello of the system Python and of the toolcache Python, in hex"
-          sudo tcpdump -r "$RUNNER_TEMP/cap.pcap" -nn -X -c 400 'src host 10.0.0.0/8 and tcp[((tcp[12:1] & 0xf0) >> 2):1] = 0x16' 2>/dev/null | awk '/^[0-9][0-9]:/{n++} n==1 || n==2' | head -120
