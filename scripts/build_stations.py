@@ -18,14 +18,10 @@ Output: {agency: [[id, name, lat, lon, [lines...], place, code, busy, daily, acc
     python3 scripts/build_stations.py
     python3 scripts/build_stations.py vre sounder   # just these, into the existing file
 """
-import datetime, io, json, pathlib, re, sys, urllib.parse, urllib.request, zipfile
+import datetime, json, pathlib, re, sys, urllib.parse, urllib.request
 from collections import defaultdict
 
-from feeds import (AMTRAK_GTFS, VIA_GTFS, GTFS, TRIP_LINE, long_name, current_feed, get_raw, rows)
-
-
-def get(url, timeout=180):
-    return current_feed(get_raw(url, timeout))
+from feeds import (AMTRAK_GTFS, VIA_GTFS, GTFS, TRIP_LINE, long_name, get_raw, get_zip, rows)
 
 
 def official_code(stop):
@@ -71,7 +67,7 @@ def gtfs_stations(url, keep, line_name, group=None, trip_line=None):
     """group(stop) -> (station id, name): folds stops into stations where a
     feed has no parent stations (MARC). trip_line(trip, line): a trip's line
     where it isn't its route's."""
-    zf = zipfile.ZipFile(io.BytesIO(get(url)))
+    zf = get_zip(url)
     agency_tz = next((a.get("agency_timezone") for a in rows(zf, "agency.txt")), None) or None
     routes = {r["route_id"]: line_name(r) for r in rows(zf, "routes.txt") if keep(r)}
     trip_line = {t["trip_id"]: (trip_line or (lambda t, line: line))(t, routes[t["route_id"]]) for t in rows(zf, "trips.txt") if t["route_id"] in routes}
@@ -123,7 +119,7 @@ def intercity_timetables():
     info = {}
     for url, code_field in ((AMTRAK_GTFS, "stop_id"), (VIA_GTFS, "stop_code")):
         try:
-            zf = zipfile.ZipFile(io.BytesIO(get(url)))
+            zf = get_zip(url)
             stops = {s["stop_id"]: s for s in rows(zf, "stops.txt")}
             today = weekday_trips(zf, {t["trip_id"] for t in rows(zf, "trips.txt")})
             agencies = {a.get("agency_id", ""): a.get("agency_name", "") for a in rows(zf, "agency.txt")}
@@ -158,8 +154,8 @@ def intercity_stations():
     ntad = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Amtrak_Stations/"
             "FeatureServer/0/query?" + urllib.parse.urlencode(
                 {"where": "1=1", "outFields": "Code,StnType", "returnGeometry": "false", "f": "json"}))
-    types = {f["attributes"]["Code"]: f["attributes"]["StnType"] for f in json.loads(get_raw(ntad))["features"]}
-    amtraker = json.loads(get_raw("https://api-v3.amtraker.com/v3/stations"))
+    types = {f["attributes"]["Code"]: f["attributes"]["StnType"] for f in json.loads(get_raw(ntad, attempts=4))["features"]}
+    amtraker = json.loads(get_raw("https://api-v3.amtraker.com/v3/stations", attempts=4))
     timetables = intercity_timetables()
     out = defaultdict(list)
     for code, s in amtraker.items():

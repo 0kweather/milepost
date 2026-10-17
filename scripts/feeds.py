@@ -85,10 +85,19 @@ GTFS = {
 }
 
 
-def get_raw(url, timeout=180):
+def get_raw(url, timeout=180, attempts=1):
+    """The bytes at url, trying again on a dropped download (a connection
+    reset, a timeout) as many times as attempts allows."""
     req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except Exception as err:
+            if attempt == attempts - 1:
+                raise
+            print(f"  {url}: retry {attempt + 1} ({err})")
+            time.sleep(10)
 
 
 # Metrolink files its Arrow trains (San Bernardino-Redlands, 3800-3899) under
@@ -111,26 +120,13 @@ def marc_station(name):
     return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-"), base
 
 
-def current_feed(data):
-    """A railroad's page that links its current timetable file (named by date,
-    as the Alaska Railroad's is): the zip it links, else the data as is."""
-    if data[:2] == b"PK":
-        return data
-    m = re.search(rb'href="([^"]+\.zip)"', data, re.I)
-    if not m:
-        raise ValueError("no timetable file linked")
-    href = m.group(1).decode()
-    return get_raw(urllib.parse.urljoin("https://www.alaskarailroad.com/", href))
-
-
 def get_zip(url, timeout=180, attempts=4, page_link=True):
     """A railroad's timetable as a ZipFile, trying again on a dropped download
     (Amtrak's 18 MB sometimes drops). page_link: follow a page that links the
     current file (the Alaska Railroad's, named by date)."""
-    req = urllib.request.Request(url, headers={"User-Agent": "trainsheet-build"})
     for attempt in range(attempts):
         try:
-            data = urllib.request.urlopen(req, timeout=timeout).read()
+            data = get_raw(url, timeout)
             if page_link and data[:2] != b"PK":
                 href = re.search(rb'href="([^"]+\.zip)"', data, re.I).group(1).decode()
                 return get_zip(urllib.parse.urljoin(url, href), timeout, attempts, page_link)
