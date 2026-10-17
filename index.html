@@ -27,6 +27,30 @@
   <link rel="stylesheet" href="css/design.css?v=dev">
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="config.js?v=dev"></script>
+  <!-- Fetched all at once, ahead of being asked for: the app's modules (which
+       the browser would otherwise find level by level as each one is read:
+       app.js, then its ten imports, then the car drawings) and the two data
+       files everything starts with, so they come in while the modules are
+       still being read; and the map's tile server is connected to early. -->
+  <link rel="preconnect" href="https://tiles.openfreemap.org">
+  <link rel="modulepreload" href="js/app.js?v=dev">
+  <link rel="modulepreload" href="js/sources.js?v=dev">
+  <link rel="modulepreload" href="js/stations.js?v=dev">
+  <link rel="modulepreload" href="js/estimate.js?v=dev">
+  <link rel="modulepreload" href="js/networks.js?v=dev">
+  <link rel="modulepreload" href="js/notices.js?v=dev">
+  <link rel="modulepreload" href="js/disruptions.js?v=dev">
+  <link rel="modulepreload" href="js/delays.js?v=dev">
+  <link rel="modulepreload" href="js/consist.js?v=dev">
+  <link rel="modulepreload" href="js/lifts.js?v=dev">
+  <link rel="modulepreload" href="js/i18n.js?v=dev">
+  <link rel="modulepreload" href="js/fr.js?v=dev">
+  <link rel="modulepreload" href="js/gtfsrt.js?v=dev">
+  <link rel="modulepreload" href="js/carmodels.js?v=dev">
+  <link rel="modulepreload" href="js/carart.js?v=dev">
+  <link rel="modulepreload" href="js/emblems.js?v=dev">
+  <link rel="preload" href="data/rail.geojson?v=dev" as="fetch" crossorigin>
+  <link rel="preload" href="data/stations.json?v=dev" as="fetch" crossorigin>
 </head>
 <body>
   <div id="loading" class="loading" role="status" aria-label="Loading Trainsheet" data-i18n-aria="Loading Trainsheet">
